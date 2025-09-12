@@ -25,7 +25,7 @@ export default function Payment() {
     },
     {
       type: "single-payment" as PaymentOptionType,
-      title: "À Vista",
+      title: "Pagamento único",
       description: "Pagamento único com desconto especial",
       amount: "R$ 797,60",
       discount: "Economize R$ 199,40",

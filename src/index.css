@@ -17,19 +17,19 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 213 18% 26%;
 
-    --primary: 217 91% 60%;
+    --primary: 140 100% 45%;
     --primary-foreground: 0 0% 98%;
 
-    --secondary: 214 32% 91%;
-    --secondary-foreground: 213 18% 26%;
+    --secondary: 140 100% 95%;
+    --secondary-foreground: 140 100% 25%;
 
     --muted: 220 13% 95%;
     --muted-foreground: 215 16% 47%;
 
-    --accent: 220 13% 95%;
-    --accent-foreground: 213 18% 26%;
+    --accent: 140 100% 45%;
+    --accent-foreground: 0 0% 98%;
 
-    --success: 142 76% 36%;
+    --success: 140 100% 45%;
     --success-foreground: 0 0% 98%;
 
     --warning: 32 95% 44%;
@@ -40,18 +40,18 @@ All colors MUST be HSL.
 
     --border: 220 13% 91%;
     --input: 220 13% 91%;
-    --ring: 217 91% 60%;
+    --ring: 140 100% 45%;
 
     /* Payment specific colors */
     --payment-card: 0 0% 100%;
-    --payment-selected: 217 91% 60%;
-    --payment-hover: 217 91% 97%;
+    --payment-selected: 140 100% 45%;
+    --payment-hover: 140 100% 97%;
     --payment-border: 220 13% 91%;
     --payment-shadow: 220 43% 11% / 0.05;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(220 91% 55%));
-    --gradient-success: linear-gradient(135deg, hsl(142 76% 36%), hsl(145 76% 32%));
+    --gradient-primary: linear-gradient(135deg, hsl(140 100% 45%), hsl(140 100% 40%));
+    --gradient-success: linear-gradient(135deg, hsl(140 100% 45%), hsl(140 100% 40%));
     --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(220 13% 98%));
 
     --radius: 0.5rem;
