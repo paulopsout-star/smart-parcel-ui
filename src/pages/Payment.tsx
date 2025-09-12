@@ -93,18 +93,17 @@ export default function Payment() {
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
-            <div className="flex flex-col items-center gap-2">
-              <img 
-                src={autonegocie} 
-                alt="Auto Negocie" 
-                className="h-8"
-              />
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-primary" />
-                <h1 className="text-xl font-semibold">Escolha sua forma de pagamento</h1>
-              </div>
+            <div className="flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-primary" />
+              <h1 className="text-xl font-semibold">Escolha sua forma de pagamento</h1>
             </div>
-            <div className="w-20"></div>
+            <img
+              src={autonegocie}
+              alt="Logo da Auto Negocie"
+              className="h-8 w-auto"
+              loading="eager"
+              decoding="async"
+            />
           </div>
         </div>
       </header>
