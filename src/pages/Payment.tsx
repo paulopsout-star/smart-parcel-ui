@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { PaymentOption } from "@/components/PaymentOption";
 import { PaymentSummary } from "@/components/PaymentSummary";
 import { useToast } from "@/hooks/use-toast";
+import autonegocie from "@/assets/autonegocie-logo.jpg";
 
 type PaymentOptionType = "min-installment" | "single-payment" | "popular" | "custom";
 
@@ -87,15 +88,23 @@ export default function Payment() {
       {/* Header */}
       <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between">
             <Button variant="ghost" size="sm" className="gap-2">
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-primary" />
-              <h1 className="text-xl font-semibold">Escolha sua forma de pagamento</h1>
+            <div className="flex flex-col items-center gap-2">
+              <img 
+                src={autonegocie} 
+                alt="Auto Negocie" 
+                className="h-8"
+              />
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-primary" />
+                <h1 className="text-xl font-semibold">Escolha sua forma de pagamento</h1>
+              </div>
             </div>
+            <div className="w-20"></div>
           </div>
         </div>
       </header>
