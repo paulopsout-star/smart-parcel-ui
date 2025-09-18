@@ -1,0 +1,373 @@
+import { useState } from "react";
+import { CreditCard, User, Mail, Phone, Calendar, Lock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { usePayment } from "@/hooks/usePayment";
+import type { PaymentFormData } from "@/types/payment";
+
+interface PaymentFormProps {
+  amount: number;
+  installments: number;
+  productName: string;
+  onSuccess?: (transactionId: string) => void;
+  onCancel?: () => void;
+}
+
+export function PaymentForm({
+  amount,
+  installments,
+  productName,
+  onSuccess,
+  onCancel,
+}: PaymentFormProps) {
+  const { paymentState, processPayment } = usePayment();
+  
+  const [formData, setFormData] = useState<PaymentFormData>({
+    payerName: "",
+    payerDocument: "",
+    payerEmail: "",
+    payerPhoneNumber: "",
+    cardHolderName: "",
+    cardNumber: "",
+    cardExpirationDate: "",
+    cardCvv: "",
+  });
+
+  const [errors, setErrors] = useState<Partial<PaymentFormData>>({});
+
+  const formatCardNumber = (value: string) => {
+    return value
+      .replace(/\s/g, '')
+      .replace(/(\d{4})/g, '$1 ')
+      .trim()
+      .slice(0, 19); // Máximo 16 dígitos + 3 espaços
+  };
+
+  const formatDocument = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    if (numbers.length <= 11) {
+      return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    }
+    return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  };
+
+  const formatPhone = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    return numbers.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+  };
+
+  const formatExpirationDate = (value: string) => {
+    const numbers = value.replace(/\D/g, '');
+    if (numbers.length >= 2) {
+      return numbers.slice(0, 2) + '/' + numbers.slice(2, 4);
+    }
+    return numbers;
+  };
+
+  const handleInputChange = (field: keyof PaymentFormData, value: string) => {
+    let formattedValue = value;
+
+    switch (field) {
+      case 'cardNumber':
+        formattedValue = formatCardNumber(value);
+        break;
+      case 'payerDocument':
+        formattedValue = formatDocument(value);
+        break;
+      case 'payerPhoneNumber':
+        formattedValue = formatPhone(value);
+        break;
+      case 'cardExpirationDate':
+        formattedValue = formatExpirationDate(value);
+        break;
+      case 'cardCvv':
+        formattedValue = value.replace(/\D/g, '').slice(0, 4);
+        break;
+    }
+
+    setFormData(prev => ({ ...prev, [field]: formattedValue }));
+    
+    // Remove erro quando usuário começar a digitar
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors: Partial<PaymentFormData> = {};
+
+    if (!formData.payerName.trim()) newErrors.payerName = "Nome é obrigatório";
+    if (!formData.payerDocument.trim()) newErrors.payerDocument = "CPF/CNPJ é obrigatório";
+    if (!formData.payerEmail.trim()) newErrors.payerEmail = "E-mail é obrigatório";
+    if (!formData.payerPhoneNumber.trim()) newErrors.payerPhoneNumber = "Telefone é obrigatório";
+    if (!formData.cardHolderName.trim()) newErrors.cardHolderName = "Nome no cartão é obrigatório";
+    if (!formData.cardNumber.trim()) newErrors.cardNumber = "Número do cartão é obrigatório";
+    if (!formData.cardExpirationDate.trim()) newErrors.cardExpirationDate = "Data de validade é obrigatória";
+    if (!formData.cardCvv.trim()) newErrors.cardCvv = "CVV é obrigatório";
+
+    // Validações específicas
+    if (formData.payerEmail && !/\S+@\S+\.\S+/.test(formData.payerEmail)) {
+      newErrors.payerEmail = "E-mail inválido";
+    }
+
+    if (formData.cardNumber && formData.cardNumber.replace(/\s/g, '').length < 16) {
+      newErrors.cardNumber = "Número do cartão deve ter 16 dígitos";
+    }
+
+    if (formData.cardExpirationDate && !/^\d{2}\/\d{2}$/.test(formData.cardExpirationDate)) {
+      newErrors.cardExpirationDate = "Formato inválido (MM/AA)";
+    }
+
+    if (formData.cardCvv && (formData.cardCvv.length < 3 || formData.cardCvv.length > 4)) {
+      newErrors.cardCvv = "CVV deve ter 3 ou 4 dígitos";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) return;
+
+    const result = await processPayment(formData, amount, installments);
+    
+    if (result.success && result.transactionId) {
+      onSuccess?.(result.transactionId);
+    }
+  };
+
+  if (paymentState.isSuccess) {
+    return (
+      <Card className="p-8 text-center">
+        <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
+          <CreditCard className="w-8 h-8 text-success" />
+        </div>
+        <h3 className="text-xl font-semibold text-card-foreground mb-2">
+          Pagamento Autorizado!
+        </h3>
+        <p className="text-muted-foreground mb-4">
+          Sua transação foi processada com sucesso.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          ID da transação: {paymentState.transactionId}
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <CreditCard className="w-6 h-6 text-primary" />
+        <h3 className="text-xl font-semibold text-card-foreground">
+          Dados para Pagamento
+        </h3>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Dados do Pagador */}
+        <div>
+          <h4 className="font-medium text-card-foreground mb-4 flex items-center gap-2">
+            <User className="w-4 h-4" />
+            Dados Pessoais
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="payerName">Nome Completo</Label>
+              <Input
+                id="payerName"
+                value={formData.payerName}
+                onChange={(e) => handleInputChange('payerName', e.target.value)}
+                placeholder="Seu nome completo"
+                className={errors.payerName ? "border-destructive" : ""}
+              />
+              {errors.payerName && (
+                <p className="text-sm text-destructive mt-1">{errors.payerName}</p>
+              )}
+            </div>
+            
+            <div>
+              <Label htmlFor="payerDocument">CPF/CNPJ</Label>
+              <Input
+                id="payerDocument"
+                value={formData.payerDocument}
+                onChange={(e) => handleInputChange('payerDocument', e.target.value)}
+                placeholder="000.000.000-00"
+                className={errors.payerDocument ? "border-destructive" : ""}
+              />
+              {errors.payerDocument && (
+                <p className="text-sm text-destructive mt-1">{errors.payerDocument}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="payerEmail">E-mail</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="payerEmail"
+                  type="email"
+                  value={formData.payerEmail}
+                  onChange={(e) => handleInputChange('payerEmail', e.target.value)}
+                  placeholder="seu@email.com"
+                  className={`pl-10 ${errors.payerEmail ? "border-destructive" : ""}`}
+                />
+              </div>
+              {errors.payerEmail && (
+                <p className="text-sm text-destructive mt-1">{errors.payerEmail}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="payerPhoneNumber">Telefone</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="payerPhoneNumber"
+                  value={formData.payerPhoneNumber}
+                  onChange={(e) => handleInputChange('payerPhoneNumber', e.target.value)}
+                  placeholder="(11) 99999-9999"
+                  className={`pl-10 ${errors.payerPhoneNumber ? "border-destructive" : ""}`}
+                />
+              </div>
+              {errors.payerPhoneNumber && (
+                <p className="text-sm text-destructive mt-1">{errors.payerPhoneNumber}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Dados do Cartão */}
+        <div>
+          <h4 className="font-medium text-card-foreground mb-4 flex items-center gap-2">
+            <CreditCard className="w-4 h-4" />
+            Dados do Cartão
+          </h4>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="cardHolderName">Nome no Cartão</Label>
+              <Input
+                id="cardHolderName"
+                value={formData.cardHolderName}
+                onChange={(e) => handleInputChange('cardHolderName', e.target.value)}
+                placeholder="Nome como está no cartão"
+                className={errors.cardHolderName ? "border-destructive" : ""}
+              />
+              {errors.cardHolderName && (
+                <p className="text-sm text-destructive mt-1">{errors.cardHolderName}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="cardNumber">Número do Cartão</Label>
+              <Input
+                id="cardNumber"
+                value={formData.cardNumber}
+                onChange={(e) => handleInputChange('cardNumber', e.target.value)}
+                placeholder="0000 0000 0000 0000"
+                maxLength={19}
+                className={errors.cardNumber ? "border-destructive" : ""}
+              />
+              {errors.cardNumber && (
+                <p className="text-sm text-destructive mt-1">{errors.cardNumber}</p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="cardExpirationDate">Validade</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="cardExpirationDate"
+                    value={formData.cardExpirationDate}
+                    onChange={(e) => handleInputChange('cardExpirationDate', e.target.value)}
+                    placeholder="MM/AA"
+                    maxLength={5}
+                    className={`pl-10 ${errors.cardExpirationDate ? "border-destructive" : ""}`}
+                  />
+                </div>
+                {errors.cardExpirationDate && (
+                  <p className="text-sm text-destructive mt-1">{errors.cardExpirationDate}</p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="cardCvv">CVV</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="cardCvv"
+                    value={formData.cardCvv}
+                    onChange={(e) => handleInputChange('cardCvv', e.target.value)}
+                    placeholder="123"
+                    maxLength={4}
+                    className={`pl-10 ${errors.cardCvv ? "border-destructive" : ""}`}
+                  />
+                </div>
+                {errors.cardCvv && (
+                  <p className="text-sm text-destructive mt-1">{errors.cardCvv}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Resumo e Ações */}
+        <div className="bg-muted/30 p-4 rounded-lg">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-muted-foreground">{productName}</span>
+            <span className="font-medium">R$ {amount.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">
+              {installments}x de R$ {(amount / installments).toFixed(2)}
+            </span>
+            <span className="font-semibold text-primary">
+              Total: R$ {amount.toFixed(2)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          {onCancel && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              disabled={paymentState.isProcessing}
+              className="flex-1"
+            >
+              Cancelar
+            </Button>
+          )}
+          
+          <Button
+            type="submit"
+            disabled={paymentState.isProcessing}
+            className="flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80"
+          >
+            {paymentState.isProcessing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-background border-t-transparent mr-2" />
+                Processando...
+              </>
+            ) : (
+              "Pagar Agora"
+            )}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}

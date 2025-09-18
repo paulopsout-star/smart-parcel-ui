@@ -3,6 +3,7 @@ import { ArrowLeft, CreditCard, Shield, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PaymentOption } from "@/components/PaymentOption";
 import { PaymentSummary } from "@/components/PaymentSummary";
+import { PaymentForm } from "@/components/PaymentForm";
 import { useToast } from "@/hooks/use-toast";
 import autonegocie from "@/assets/autonegocie-logo.jpg";
 
@@ -11,6 +12,7 @@ type PaymentOptionType = "min-installment" | "single-payment" | "popular" | "cus
 export default function Payment() {
   const [selectedOption, setSelectedOption] = useState<PaymentOptionType | null>(null);
   const [customValue, setCustomValue] = useState("");
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
   const { toast } = useToast();
 
   const productName = "Curso de Desenvolvimento Web Completo";
@@ -77,11 +79,85 @@ export default function Payment() {
       return;
     }
 
-    toast({
-      title: "Redirecionando...",
-      description: "Você será direcionado para a página de checkout.",
-    });
+    setShowPaymentForm(true);
   };
+
+  const getPaymentAmount = () => {
+    const option = paymentOptions.find(opt => opt.type === selectedOption);
+    if (!option) return 0;
+    
+    const amountStr = option.type === "custom" ? customValue : option.amount;
+    const amount = parseFloat(amountStr.replace("R$ ", "").replace(".", "").replace(",", "."));
+    
+    if (option.installments && option.installments > 1) {
+      return amount * option.installments;
+    }
+    
+    return amount;
+  };
+
+  const getInstallments = () => {
+    const option = paymentOptions.find(opt => opt.type === selectedOption);
+    return option?.installments || 1;
+  };
+
+  const handlePaymentSuccess = (transactionId: string) => {
+    toast({
+      title: "Pagamento Realizado!",
+      description: `Transação ${transactionId} processada com sucesso.`,
+    });
+    // Aqui você pode redirecionar para uma página de sucesso
+  };
+
+  const handlePaymentCancel = () => {
+    setShowPaymentForm(false);
+  };
+
+  if (showPaymentForm) {
+    return (
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+          <div className="container mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="gap-2"
+                onClick={handlePaymentCancel}
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Voltar
+              </Button>
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-primary" />
+                <h1 className="text-xl font-semibold">Finalizar Pagamento</h1>
+              </div>
+              <img
+                src={autonegocie}
+                alt="Logo da Auto Negocie"
+                className="h-8 w-auto"
+                loading="eager"
+                decoding="async"
+              />
+            </div>
+          </div>
+        </header>
+
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-2xl mx-auto">
+            <PaymentForm
+              amount={getPaymentAmount()}
+              installments={getInstallments()}
+              productName={productName}
+              onSuccess={handlePaymentSuccess}
+              onCancel={handlePaymentCancel}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
