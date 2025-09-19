@@ -14,6 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      payment_links: {
+        Row: {
+          amount: number
+          created_at: string
+          creditor_document: string | null
+          creditor_name: string | null
+          description: string | null
+          expiration_date: string | null
+          guid: string
+          id: string
+          installments: number | null
+          link_id: string
+          link_url: string
+          mask_fee: boolean | null
+          order_id: string | null
+          order_type: string
+          payer_document: string
+          payer_email: string
+          payer_name: string
+          payer_phone_number: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          creditor_document?: string | null
+          creditor_name?: string | null
+          description?: string | null
+          expiration_date?: string | null
+          guid: string
+          id?: string
+          installments?: number | null
+          link_id: string
+          link_url: string
+          mask_fee?: boolean | null
+          order_id?: string | null
+          order_type?: string
+          payer_document: string
+          payer_email: string
+          payer_name: string
+          payer_phone_number?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          creditor_document?: string | null
+          creditor_name?: string | null
+          description?: string | null
+          expiration_date?: string | null
+          guid?: string
+          id?: string
+          installments?: number | null
+          link_id?: string
+          link_url?: string
+          mask_fee?: boolean | null
+          order_id?: string | null
+          order_type?: string
+          payer_document?: string
+          payer_email?: string
+          payer_name?: string
+          payer_phone_number?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount_in_cents: number

@@ -24,12 +24,20 @@ const Index = () => {
               designed para maximizar conversões e satisfação do cliente.
             </p>
             
-            <Link to="/payment">
-              <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 transition-all duration-300 shadow-lg hover:shadow-xl">
-                Ver Demonstração
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link to="/payment">
+                <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 transition-all duration-300 shadow-lg hover:shadow-xl">
+                  Ver Demonstração
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+              <Link to="/admin/checkout/new">
+                <Button size="lg" variant="outline" className="gap-2">
+                  Admin QuitaMais
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
           </div>
 
           {/* Features */}
@@ -71,12 +79,20 @@ const Index = () => {
             <p className="text-muted-foreground mb-6">
               Experimente nosso sistema de pagamentos e veja como pode melhorar sua conversão
             </p>
-            <Link to="/payment">
-              <Button variant="outline" size="lg" className="gap-2">
-                Acessar Página de Pagamento
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link to="/payment">
+                <Button variant="outline" size="lg" className="gap-2">
+                  Acessar Página de Pagamento
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+              <Link to="/admin/checkout/history">
+                <Button variant="outline" size="lg" className="gap-2">
+                  Histórico de Links
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
