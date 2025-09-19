@@ -144,7 +144,7 @@ async function makeProxyRequest(
           // Flatten link fields into OrderDetails, API expects them at this level
           const amount = payload.link?.amount ?? payload.amount ?? 0
           const description = payload.link?.description ?? payload.description ?? 'Payment Link'
-          const orderId = payload.link?.orderId ?? payload.orderId
+          const orderId = payload.link?.orderId ?? payload.orderId ?? `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           const installments = payload.link?.installments ?? payload.installments
           const maskFee = payload.link?.maskFee ?? payload.maskFee
 
