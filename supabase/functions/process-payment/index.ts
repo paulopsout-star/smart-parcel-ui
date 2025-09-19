@@ -90,7 +90,7 @@ serve(async (req) => {
     })
 
     // Use the quitaplus-proxy to make the actual payment call
-    console.log('Calling quitaplus-proxy with payload:', {
+    console.log('Calling quitaplus-proxy for payment processing:', {
       targetPath: 'prepayment',
       httpMethod: 'POST',
       payloadStructure: {
@@ -102,14 +102,14 @@ serve(async (req) => {
         debtor: {
           name: paymentData.payerName,
           email: paymentData.payerEmail,
-          phoneNumber: paymentData.payerPhoneNumber.replace(/\D/g, ''),
-          document: paymentData.payerDocument.replace(/\D/g, ''),
+          phoneNumber: '***masked***',
+          document: '***masked***',
         },
         card: {
           holderName: paymentData.cardHolderName,
-          number: paymentData.cardNumber.replace(/\s/g, ''),
-          expirationDate: formattedExpirationDate,
-          cvv: paymentData.cardCvv,
+          number: '****-****-****-' + paymentData.cardNumber.replace(/\s/g, '').slice(-4),
+          expirationDate: '**/**',
+          cvv: '***',
         }
       }
     })
@@ -154,7 +154,13 @@ serve(async (req) => {
       throw new Error('No response from QuitaPlus API')
     }
 
-    console.log('QuitaPlus payment result:', JSON.stringify(paymentResult, null, 2))
+    console.log('QuitaPlus payment result (sensitive data redacted):', {
+      success: paymentResult.success,
+      status: paymentResult.status,
+      hasTransactionId: !!paymentResult.transactionId,
+      hasAuthCode: !!paymentResult.authorizationCode,
+      message: paymentResult.message
+    })
 
     // Extract response data
     const responseData = {

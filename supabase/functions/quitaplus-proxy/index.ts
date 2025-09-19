@@ -8,6 +8,43 @@ const corsHeaders = {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+// Function to mask sensitive data in logs
+function maskSensitiveData(obj: any): any {
+  if (!obj) return obj
+  
+  const masked = JSON.parse(JSON.stringify(obj))
+  
+  // Mask credit card data
+  if (masked.CardNumber) masked.CardNumber = '****-****-****-' + (masked.CardNumber.slice(-4) || '****')
+  if (masked.CardCvv) masked.CardCvv = '***'
+  if (masked.CardExpirationDate) masked.CardExpirationDate = '**/**'
+  if (masked.DebtorDocument) masked.DebtorDocument = '***masked***'
+  if (masked.DebtorPhoneNumber) masked.DebtorPhoneNumber = '***masked***'
+  
+  // Mask nested card data
+  if (masked.card) {
+    if (masked.card.number) masked.card.number = '****-****-****-' + (masked.card.number.slice(-4) || '****')
+    if (masked.card.cvv) masked.card.cvv = '***'
+    if (masked.card.expirationDate) masked.card.expirationDate = '**/**'
+  }
+  
+  // Mask debtor sensitive data  
+  if (masked.debtor) {
+    if (masked.debtor.document) masked.debtor.document = '***masked***'
+    if (masked.debtor.phoneNumber) masked.debtor.phoneNumber = '***masked***'
+  }
+  
+  // Mask in OrderDetails structure
+  if (masked.OrderDetails) {
+    if (masked.OrderDetails.Debtor) {
+      if (masked.OrderDetails.Debtor.Document) masked.OrderDetails.Debtor.Document = '***masked***'
+      if (masked.OrderDetails.Debtor.PhoneNumber) masked.OrderDetails.Debtor.PhoneNumber = '***masked***'
+    }
+  }
+  
+  return masked
+}
+
 async function getAuthToken(supabase: any, maxRetries = 3): Promise<string> {
   let lastError: any
 
@@ -54,7 +91,11 @@ async function makeProxyRequest(
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log('Request payload:', JSON.stringify(payload, null, 2))
+      console.log(`Making proxy request to ${url}, attempt ${attempt}/${maxRetries}`)
+      
+      // Create masked version of payload for logging (never log sensitive data)
+      const maskedPayload = maskSensitiveData(payload)
+      console.log('Request payload (sensitive data masked):', JSON.stringify(maskedPayload, null, 2))
       
       let bodyPayload = payload
       
@@ -128,7 +169,7 @@ async function makeProxyRequest(
           }
         }
 
-        console.log('Transformed payload:', JSON.stringify(bodyPayload, null, 2))
+        console.log('Transformed payload (sensitive data masked):', JSON.stringify(maskSensitiveData(bodyPayload), null, 2))
       }
       
       const requestOptions: RequestInit = {
