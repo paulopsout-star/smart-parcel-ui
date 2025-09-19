@@ -207,14 +207,14 @@ serve(async (req) => {
 
     // ====== NORMALIZAÇÃO E CONTRATO EXATO QUITA+ ======
     
-    // 1. NORMALIZAR orderType obrigatório
+    // 1. NORMALIZAR orderType obrigatório → NUMÉRICO PARA PATH
     let normalizedOrderType: string
     const rawOrderType = uiData.orderType
     
-    if (rawOrderType === "boleto" || rawOrderType === "1" || rawOrderType === 1) {
-      normalizedOrderType = "boleto" // Tentando valor mais comum em APIs BR
+    if (rawOrderType === "boleto" || rawOrderType === "bankslip" || rawOrderType === "1" || rawOrderType === 1) {
+      normalizedOrderType = "1" // Boleto = tipo 1 (numérico exigido no path)
     } else {
-      throw { status: 400, message: `orderType inválido: ${rawOrderType}. Valores aceitos: "boleto", "1", 1` }
+      throw { status: 400, message: `orderType inválido: ${rawOrderType}. Valores aceitos: "boleto", "bankslip", "1", 1` }
     }
 
     // 2. BUILD REQUEST_BODY - SOMENTE campos aceitos pela API
@@ -305,13 +305,26 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('Error in quitaplus-proxy:', error)
+    
+    // Enhanced error response with debug info for 400/404
+    const errorResponse: any = { 
+      error: 'Proxy request failed', 
+      details: error.message || 'Request failed',
+      status: error.status || 500,
+      lastAttempt: error.attempt || 1
+    }
+    
+    // Add debug info for validation errors (400/404)
+    if (error.status === 400 || error.status === 404) {
+      errorResponse.debug = {
+        url: `${baseUrl}/payment/order/${normalizedOrderType}`,
+        orderTypeNormalizado: normalizedOrderType,
+        hasOrderDetails: REQUEST_BODY && REQUEST_BODY.orderDetails ? true : false
+      }
+    }
+    
     return new Response(
-      JSON.stringify({ 
-        error: 'Proxy request failed', 
-        details: error.message || 'Request failed',
-        status: error.status || 500,
-        lastAttempt: error.attempt || 1
-      }),
+      JSON.stringify(errorResponse),
       { 
         status: error.status || 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
