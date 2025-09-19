@@ -117,10 +117,7 @@ async function makeProxyRequest(
           const creditorDocument = normalizeDigits(payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || undefined)
           const creditorName = payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || undefined
 
-          const partner: any = { MerchantId: merchantId }
-          if (creditorDocument) partner.CreditorDocument = creditorDocument
-          if (creditorName) partner.CreditorName = creditorName
-
+          // Build Debtor/BankSlip/Link
           const debtor = payload.debtor ? {
             Name: payload.debtor.name,
             Email: payload.debtor.email,
@@ -143,22 +140,17 @@ async function makeProxyRequest(
             MaskFee: payload.link.maskFee,
           } : undefined
 
-          // Build payload with both root-level keys and OrderDetails for compatibility
-          const basePayload: any = {
-            MerchantId: partner.MerchantId,
-            ...(partner.CreditorDocument ? { CreditorDocument: partner.CreditorDocument } : {}),
-            ...(partner.CreditorName ? { CreditorName: partner.CreditorName } : {}),
-            ...(bankSlip ? { BankSlip: bankSlip } : {}),
-            ...(debtor ? { Debtor: debtor } : {}),
-            ...(link ? { Link: link } : {}),
-            OrderType: payload.orderType || 1,
-          }
+          // According to API error, MerchantId must be inside OrderDetails root (not inside Partner)
+          const orderDetails: any = { MerchantId: merchantId }
+          if (creditorDocument) orderDetails.CreditorDocument = creditorDocument
+          if (creditorName) orderDetails.CreditorName = creditorName
+          if (bankSlip) orderDetails.BankSlip = bankSlip
+          if (debtor) orderDetails.Debtor = debtor
+          if (link) orderDetails.Link = link
 
-          basePayload.OrderDetails = {
-            Partner: partner,
-            ...(bankSlip ? { BankSlip: bankSlip } : {}),
-            ...(debtor ? { Debtor: debtor } : {}),
-            ...(link ? { Link: link } : {}),
+          const basePayload: any = {
+            OrderDetails: orderDetails,
+            OrderType: payload.orderType || 1,
           }
 
           bodyPayload = basePayload
