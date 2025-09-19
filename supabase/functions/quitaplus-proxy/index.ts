@@ -141,42 +141,53 @@ async function makeProxyRequest(
             CreditorName: payload.bankSlip.creditorName,
           } : undefined
 
-          // Flatten link fields into OrderDetails, API expects them at this level
+          // Format according to API specification
           const amount = payload.link?.amount ?? payload.amount ?? 0
           const description = payload.link?.description ?? payload.description ?? 'Payment Link'
-          // Generate simple numeric OrderId to avoid validation issues
-          const orderId = payload.link?.orderId ?? payload.orderId ?? Date.now().toString()
           const installments = payload.link?.installments ?? payload.installments
           const maskFee = payload.link?.maskFee ?? payload.maskFee
 
-          // Compute required ExpiresAt (ISO8601). Default to +7 days if not provided
+          // Format date as "YYYY-MM-DD HH:mm:ss" 
           const expiresAt: string = (() => {
             const raw = payload.link?.expirationDate
             const date = raw ? new Date(raw) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-            return date.toISOString()
+            return date.toISOString().slice(0, 19).replace('T', ' ')
           })()
 
-          // According to API errors, required fields belong at OrderDetails root
+          // Format payer object with camelCase
+          const formattedPayer = payer ? {
+            document: payer.Document,
+            email: payer.Email,
+            phoneNumber: payer.PhoneNumber,
+            name: payer.Name
+          } : undefined
+
+          // Format bankslip object with camelCase
+          const formattedBankslip = bankSlip ? {
+            number: bankSlip.Number,
+            creditorDocument: bankSlip.CreditorDocument,
+            creditorName: bankSlip.CreditorName
+          } : undefined
+
+          // Build orderDetails with correct structure
           const orderDetails: any = { 
-            MerchantId: merchantId, 
-            ExpiresAt: expiresAt,
-            Description: description,
-            Amount: amount,
+            merchantId: merchantId,
+            expiresAt: expiresAt,
+            description: description,
+            details: payload.link?.details || payload.details || description
           }
-          if (creditorDocument) orderDetails.CreditorDocument = creditorDocument
-          if (creditorName) orderDetails.CreditorName = creditorName
-          if (bankSlip) orderDetails.BankSlip = bankSlip
-          if (payer) orderDetails.Payer = payer
-          // Only add OrderId if explicitly provided (avoid validation issues)
-          if (payload.link?.orderId || payload.orderId) {
-            orderDetails.OrderId = payload.link?.orderId ?? payload.orderId
+
+          if (formattedPayer) orderDetails.payer = formattedPayer
+          if (formattedBankslip) orderDetails.bankslip = formattedBankslip
+          
+          // Add checkout object
+          orderDetails.checkout = {
+            maskFee: maskFee !== undefined ? maskFee : false,
+            installments: installments !== undefined ? installments : null
           }
-          if (installments != null) orderDetails.Installments = installments
-          if (maskFee != null) orderDetails.MaskFee = maskFee
 
           const basePayload: any = {
-            OrderDetails: orderDetails,
-            OrderType: payload.orderType || 1,
+            orderDetails: orderDetails
           }
 
           bodyPayload = basePayload
