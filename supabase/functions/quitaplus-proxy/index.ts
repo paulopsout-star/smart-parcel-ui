@@ -280,30 +280,45 @@ serve(async (req) => {
         }
       }
 
-      // Verificar chaves do payer
-      const expectedPayerKeys = ['document', 'email', 'phoneNumber', 'name']
-      const actualPayerKeys = Object.keys(orderDetails.payer)
-      if (!expectedPayerKeys.every(key => actualPayerKeys.includes(key)) || 
-          actualPayerKeys.length !== expectedPayerKeys.length) {
-        console.error('VALIDATION FAILED: payer keys mismatch')
+      // Verificar chaves do payer (verificar se existe primeiro)
+      if (orderDetails.payer && typeof orderDetails.payer === 'object') {
+        const expectedPayerKeys = ['document', 'email', 'phoneNumber', 'name']
+        const actualPayerKeys = Object.keys(orderDetails.payer)
+        if (!expectedPayerKeys.every(key => actualPayerKeys.includes(key)) || 
+            actualPayerKeys.length !== expectedPayerKeys.length) {
+          console.error('VALIDATION FAILED: payer keys mismatch')
+          return false
+        }
+      } else {
+        console.error('VALIDATION FAILED: payer must be an object')
         return false
       }
 
-      // Verificar chaves do bankslip
-      const expectedBankslipKeys = ['number', 'creditorDocument', 'creditorName']
-      const actualBankslipKeys = Object.keys(orderDetails.bankslip)
-      if (!expectedBankslipKeys.every(key => actualBankslipKeys.includes(key)) || 
-          actualBankslipKeys.length !== expectedBankslipKeys.length) {
-        console.error('VALIDATION FAILED: bankslip keys mismatch')
+      // Verificar chaves do bankslip (verificar se existe primeiro)
+      if (orderDetails.bankslip && typeof orderDetails.bankslip === 'object') {
+        const expectedBankslipKeys = ['number', 'creditorDocument', 'creditorName']
+        const actualBankslipKeys = Object.keys(orderDetails.bankslip)
+        if (!expectedBankslipKeys.every(key => actualBankslipKeys.includes(key)) || 
+            actualBankslipKeys.length !== expectedBankslipKeys.length) {
+          console.error('VALIDATION FAILED: bankslip keys mismatch')
+          return false
+        }
+      } else {
+        console.error('VALIDATION FAILED: bankslip must be an object')
         return false
       }
 
-      // Verificar chaves do checkout
-      const expectedCheckoutKeys = ['maskFee', 'installments']
-      const actualCheckoutKeys = Object.keys(orderDetails.checkout)
-      if (!expectedCheckoutKeys.every(key => actualCheckoutKeys.includes(key)) || 
-          actualCheckoutKeys.length !== expectedCheckoutKeys.length) {
-        console.error('VALIDATION FAILED: checkout keys mismatch')
+      // Verificar chaves do checkout (verificar se existe primeiro)
+      if (orderDetails.checkout && typeof orderDetails.checkout === 'object') {
+        const expectedCheckoutKeys = ['maskFee', 'installments']
+        const actualCheckoutKeys = Object.keys(orderDetails.checkout)
+        if (!expectedCheckoutKeys.every(key => actualCheckoutKeys.includes(key)) || 
+            actualCheckoutKeys.length !== expectedCheckoutKeys.length) {
+          console.error('VALIDATION FAILED: checkout keys mismatch')
+          return false
+        }
+      } else {
+        console.error('VALIDATION FAILED: checkout must be an object')
         return false
       }
 
