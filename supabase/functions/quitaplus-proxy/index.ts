@@ -105,7 +105,7 @@ async function makeProxyRequest(
             },
             OrderType: payload.orderType || 1,
           }
-        } else if (targetPath.startsWith('prepayment/')) {
+        } else if (targetPath.startsWith('prepayment')) {
           // Pre-payment authorization structure  
           if (!merchantId) {
             throw { status: 400, message: 'Missing required MerchantId for prepayment (configure QUITA_MAIS_MERCHANT_ID secret)' }

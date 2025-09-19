@@ -90,9 +90,33 @@ serve(async (req) => {
     })
 
     // Use the quitaplus-proxy to make the actual payment call
+    console.log('Calling quitaplus-proxy with payload:', {
+      targetPath: 'prepayment',
+      httpMethod: 'POST',
+      payloadStructure: {
+        merchantId,
+        creditorDocument,
+        creditorName,
+        amount: paymentData.amountInCents,
+        installments: paymentData.installments,
+        debtor: {
+          name: paymentData.payerName,
+          email: paymentData.payerEmail,
+          phoneNumber: paymentData.payerPhoneNumber.replace(/\D/g, ''),
+          document: paymentData.payerDocument.replace(/\D/g, ''),
+        },
+        card: {
+          holderName: paymentData.cardHolderName,
+          number: paymentData.cardNumber.replace(/\s/g, ''),
+          expirationDate: formattedExpirationDate,
+          cvv: paymentData.cardCvv,
+        }
+      }
+    })
+    
     const { data: paymentResult, error: proxyError } = await supabaseClient.functions.invoke('quitaplus-proxy', {
       body: {
-        targetPath: 'prepayment/authorize', // Endpoint para pré-pagamento
+        targetPath: 'prepayment', // Endpoint para pré-pagamento
         httpMethod: 'POST',
         payload: {
           partner: {
@@ -122,14 +146,15 @@ serve(async (req) => {
 
     if (proxyError) {
       console.error('QuitaPlus API error via proxy:', proxyError)
-      throw new Error(`Payment processing failed: ${proxyError.message}`)
+      console.error('Proxy error details:', JSON.stringify(proxyError, null, 2))
+      throw new Error(`Payment processing failed: ${proxyError.message || 'Proxy request failed'}`)
     }
 
     if (!paymentResult) {
       throw new Error('No response from QuitaPlus API')
     }
 
-    console.log('QuitaPlus payment result:', paymentResult)
+    console.log('QuitaPlus payment result:', JSON.stringify(paymentResult, null, 2))
 
     // Extract response data
     const responseData = {
