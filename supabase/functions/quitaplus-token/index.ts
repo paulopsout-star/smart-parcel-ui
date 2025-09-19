@@ -1,0 +1,177 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+interface TokenCache {
+  accessToken: string
+  expiresAt: number
+}
+
+let tokenCache: TokenCache | null = null
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+async function fetchTokenWithRetry(baseUrl: string, clientId: string, clientSecret: string, maxRetries = 3): Promise<any> {
+  let lastError: any
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Token request attempt ${attempt}/${maxRetries}`)
+      
+      const response = await fetch(`${baseUrl}/connect/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: clientId,
+          client_secret: clientSecret,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Token obtained successfully')
+        return data
+      }
+
+      // Handle rate limiting (429) and server errors (5xx)
+      if (response.status === 429 || response.status >= 500) {
+        const retryAfter = response.headers.get('retry-after')
+        const backoffMs = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000
+        
+        console.log(`Request failed with ${response.status}, retrying in ${backoffMs}ms`)
+        
+        if (attempt < maxRetries) {
+          await sleep(backoffMs)
+          continue
+        }
+      }
+
+      // For other errors, log and prepare to return error
+      const errorText = await response.text()
+      lastError = {
+        status: response.status,
+        message: errorText,
+        attempt
+      }
+      
+      if (response.status < 500) {
+        // Client errors (4xx) - don't retry
+        break
+      }
+
+    } catch (error: any) {
+      console.log(`Network error on attempt ${attempt}:`, error.message)
+      lastError = {
+        error: error.message,
+        attempt
+      }
+      
+      if (attempt < maxRetries) {
+        await sleep(Math.pow(2, attempt) * 1000)
+      }
+    }
+  }
+
+  throw lastError
+}
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders })
+  }
+
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
+  try {
+    // Get environment variables
+    const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    const clientId = Deno.env.get('QUITAPLUS_CLIENT_ID')
+    const clientSecret = Deno.env.get('QUITAPLUS_CLIENT_SECRET')
+
+    console.log('Environment check:', {
+      baseUrl,
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret
+    })
+
+    if (!clientId || !clientSecret) {
+      console.error('Missing QuitaPlus credentials')
+      return new Response(
+        JSON.stringify({ 
+          error: 'Configuration error', 
+          details: 'Missing QUITAPLUS_CLIENT_ID or QUITAPLUS_CLIENT_SECRET' 
+        }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
+
+    // Check if we have a valid cached token
+    const now = Date.now()
+    if (tokenCache && tokenCache.expiresAt > now + 60000) { // 1min buffer
+      console.log('Using cached token')
+      return new Response(
+        JSON.stringify({
+          accessToken: tokenCache.accessToken,
+          fromCache: true
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
+    console.log('Requesting new token from:', `${baseUrl}/connect/token`)
+
+    const tokenData = await fetchTokenWithRetry(baseUrl, clientId, clientSecret)
+    
+    // Cache the token
+    const expiresAt = now + (tokenData.expires_in * 1000)
+    tokenCache = {
+      accessToken: tokenData.access_token,
+      expiresAt
+    }
+
+    return new Response(
+      JSON.stringify({
+        accessToken: tokenData.access_token,
+        tokenType: tokenData.token_type || 'Bearer',
+        expiresIn: tokenData.expires_in,
+        expiresAt,
+        fromCache: false
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+
+  } catch (error: any) {
+    console.error('Error in quitaplus-token:', error)
+    return new Response(
+      JSON.stringify({ 
+        error: 'Authentication failed', 
+        details: error.message || 'Token request failed',
+        status: error.status || 500,
+        lastAttempt: error.attempt || 1
+      }),
+      { 
+        status: error.status || 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    )
+  }
+})
