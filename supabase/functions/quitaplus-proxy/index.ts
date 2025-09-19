@@ -58,49 +58,74 @@ async function makeProxyRequest(
       
       let bodyPayload = payload
       
-      // Transform to Quita+ expected schema (OrderDetails) when creating payment link
-      if (httpMethod === 'POST' && targetPath.startsWith('payment/order/') && payload) {
+      // Transform to Quita+ expected schema based on endpoint
+      if (httpMethod === 'POST' && payload) {
         const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || ''
-        const partner = {
-          MerchantId: merchantId,
-          CreditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
-          CreditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor',
-        }
         
-        if (!partner.MerchantId) {
-          throw { status: 400, message: 'Missing required Partner.MerchantId (configure QUITA_MAIS_MERCHANT_ID secret or pass it in payload)' }
-        }
+        if (targetPath.startsWith('payment/order/')) {
+          // Payment Link creation structure
+          const partner = {
+            MerchantId: merchantId,
+            CreditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
+            CreditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor',
+          }
+          
+          if (!partner.MerchantId) {
+            throw { status: 400, message: 'Missing required Partner.MerchantId (configure QUITA_MAIS_MERCHANT_ID secret or pass it in payload)' }
+          }
 
-        const debtor = payload.debtor ? {
-          Name: payload.debtor.name,
-          Email: payload.debtor.email,
-          PhoneNumber: payload.debtor.phoneNumber,
-          Document: payload.debtor.document,
-        } : undefined
+          const debtor = payload.debtor ? {
+            Name: payload.debtor.name,
+            Email: payload.debtor.email,
+            PhoneNumber: payload.debtor.phoneNumber,
+            Document: payload.debtor.document,
+          } : undefined
 
-        const bankSlip = payload.bankSlip ? {
-          Number: payload.bankSlip.number,
-          CreditorDocument: payload.bankSlip.creditorDocument,
-          CreditorName: payload.bankSlip.creditorName,
-        } : undefined
+          const bankSlip = payload.bankSlip ? {
+            Number: payload.bankSlip.number,
+            CreditorDocument: payload.bankSlip.creditorDocument,
+            CreditorName: payload.bankSlip.creditorName,
+          } : undefined
 
-        const link = payload.link ? {
-          Amount: payload.link.amount,
-          Description: payload.link.description,
-          OrderId: payload.link.orderId,
-          ExpirationDate: payload.link.expirationDate,
-          Installments: payload.link.installments,
-          MaskFee: payload.link.maskFee,
-        } : undefined
+          const link = payload.link ? {
+            Amount: payload.link.amount,
+            Description: payload.link.description,
+            OrderId: payload.link.orderId,
+            ExpirationDate: payload.link.expirationDate,
+            Installments: payload.link.installments,
+            MaskFee: payload.link.maskFee,
+          } : undefined
 
-        bodyPayload = {
-          OrderDetails: {
-            Partner: partner,
-            ...(bankSlip ? { BankSlip: bankSlip } : {}),
-            Debtor: debtor,
-            Link: link,
-          },
-          OrderType: payload.orderType || 1,
+          bodyPayload = {
+            OrderDetails: {
+              Partner: partner,
+              ...(bankSlip ? { BankSlip: bankSlip } : {}),
+              Debtor: debtor,
+              Link: link,
+            },
+            OrderType: payload.orderType || 1,
+          }
+        } else if (targetPath.startsWith('prepayment/')) {
+          // Pre-payment authorization structure  
+          if (!merchantId) {
+            throw { status: 400, message: 'Missing required MerchantId for prepayment (configure QUITA_MAIS_MERCHANT_ID secret)' }
+          }
+
+          bodyPayload = {
+            MerchantId: merchantId,
+            CreditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
+            CreditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor',
+            Amount: payload.transaction?.amount || 0,
+            Installments: payload.transaction?.installments || 1,
+            DebtorDocument: payload.debtor?.document || '',
+            DebtorEmail: payload.debtor?.email || '',
+            DebtorPhoneNumber: payload.debtor?.phoneNumber || '',
+            DebtorName: payload.debtor?.name || '',
+            CardHolderName: payload.card?.holderName || '',
+            CardNumber: payload.card?.number || '',
+            CardExpirationDate: payload.card?.expirationDate || '',
+            CardCvv: payload.card?.cvv || '',
+          }
         }
 
         console.log('Transformed payload:', JSON.stringify(bodyPayload, null, 2))

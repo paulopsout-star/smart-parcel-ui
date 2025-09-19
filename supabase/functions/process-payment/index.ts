@@ -82,47 +82,65 @@ serve(async (req) => {
       cardCvv: paymentData.cardCvv,
     }
 
-    // For testing purposes, simulate QuitaMais API response
-    // TODO: Replace with actual QuitaMais API endpoint when available
-    console.log('Simulating QuitaMais API call with:', {
+    // Process payment via QuitaPlus API using proxy
+    console.log('Processing real payment via QuitaPlus API:', {
       amount: paymentData.amountInCents,
       installments: paymentData.installments,
       payerEmail: paymentData.payerEmail,
     })
 
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    // Simulate successful response
-    const responseData = {
-      success: true,
-      transactionId: `sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      status: 'AUTHORIZED',
-      authorizationCode: `AUTH_${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-      message: 'Pagamento simulado com sucesso'
-    }
-
-    // For production, uncomment and configure the actual API call:
-    /*
-    const response = await fetch(`${apiUrl}/prepayment/authorize`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        // Add authentication headers as required by QuitaMais
-      },
-      body: JSON.stringify(quitaMaisRequest),
+    // Use the quitaplus-proxy to make the actual payment call
+    const { data: paymentResult, error: proxyError } = await supabaseClient.functions.invoke('quitaplus-proxy', {
+      body: {
+        targetPath: 'prepayment/authorize', // Endpoint para pré-pagamento
+        httpMethod: 'POST',
+        payload: {
+          partner: {
+            merchantId,
+            creditorDocument,
+            creditorName,
+          },
+          debtor: {
+            name: paymentData.payerName,
+            email: paymentData.payerEmail,
+            phoneNumber: paymentData.payerPhoneNumber.replace(/\D/g, ''),
+            document: paymentData.payerDocument.replace(/\D/g, ''),
+          },
+          card: {
+            holderName: paymentData.cardHolderName,
+            number: paymentData.cardNumber.replace(/\s/g, ''),
+            expirationDate: formattedExpirationDate,
+            cvv: paymentData.cardCvv,
+          },
+          transaction: {
+            amount: paymentData.amountInCents,
+            installments: paymentData.installments,
+          }
+        }
+      }
     })
 
-    const responseData = await response.json()
-
-    if (!response.ok) {
-      console.error('QuitaMais API error:', responseData)
-      throw new Error(responseData.message || 'Payment processing failed')
+    if (proxyError) {
+      console.error('QuitaPlus API error via proxy:', proxyError)
+      throw new Error(`Payment processing failed: ${proxyError.message}`)
     }
-    */
 
-    // Generate transaction ID (use QuitaMais response or generate one)
+    if (!paymentResult) {
+      throw new Error('No response from QuitaPlus API')
+    }
+
+    console.log('QuitaPlus payment result:', paymentResult)
+
+    // Extract response data
+    const responseData = {
+      success: paymentResult.success !== false,
+      transactionId: paymentResult.transactionId || paymentResult.prePaymentKey || paymentResult.id || `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      status: paymentResult.status || 'AUTHORIZED',
+      authorizationCode: paymentResult.authorizationCode || paymentResult.prePaymentKey || `AUTH_${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+      message: paymentResult.message || 'Pagamento processado com sucesso'
+    }
+
+    // Generate transaction ID (use QuitaPlus response or generate one)
     const transactionId = responseData.transactionId || 
                          responseData.id || 
                          `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
