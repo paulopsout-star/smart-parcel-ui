@@ -32,9 +32,6 @@ const formSchema = z.object({
   // Checkout
   maskFee: z.boolean(),
   installments: z.string(),
-  // Metadata
-  description: z.string().optional(),
-  orderId: z.string().optional(),
   orderType: z.enum(["boleto", "credit_card", "pix", "bank_transfer"]),
 });
 
@@ -50,8 +47,6 @@ interface FormData {
   creditorName?: string;
   maskFee: boolean;
   installments: string;
-  description?: string;
-  orderId?: string;
   orderType: OrderType;
 }
 
@@ -107,9 +102,7 @@ export default function CheckoutNew() {
         checkout: {
           maskFee: data.maskFee,
           installments: data.installments ? parseInt(data.installments) : null
-        },
-        description: data.description || undefined,
-        orderId: data.orderId || undefined
+        }
       };
 
       if (data.useBankslip) {
@@ -532,39 +525,6 @@ export default function CheckoutNew() {
                   </CardContent>
                 </Card>
 
-                {/* Metadados */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Informações Adicionais</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="description">Descrição</Label>
-                      <Textarea
-                        id="description"
-                        placeholder="Descrição do pagamento..."
-                        {...register("description")}
-                        className={errors.description ? "border-destructive" : ""}
-                      />
-                      {errors.description && (
-                        <p className="text-sm text-destructive mt-1">{errors.description.message}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="orderId">ID do Pedido</Label>
-                      <Input
-                        id="orderId"
-                        placeholder="Referência interna"
-                        {...register("orderId")}
-                        className={errors.orderId ? "border-destructive" : ""}
-                      />
-                      {errors.orderId && (
-                        <p className="text-sm text-destructive mt-1">{errors.orderId.message}</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
 
               {/* Sidebar */}
