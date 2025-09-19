@@ -205,7 +205,7 @@ serve(async (req) => {
       throw { status: 400, message: 'Missing required QUITA_MAIS_MERCHANT_ID secret' }
     }
 
-    // ====== NORMALIZAÇÃO E CONTRATO EXATO QUITA+ ======
+    // ====== CONTRATO CANÔNICO QUITA+ ======
     
     // 1. NORMALIZAR orderType obrigatório → NUMÉRICO PARA PATH
     let normalizedOrderType: string
@@ -217,67 +217,105 @@ serve(async (req) => {
       throw { status: 400, message: `orderType inválido: ${rawOrderType}. Valores aceitos: "boleto", "bankslip", "1", 1` }
     }
 
-    // 2. BUILD REQUEST_BODY - SOMENTE campos aceitos pela API
-    const REQUEST_BODY: any = {
-      orderDetails: {
-        merchantId: merchantId
+    // 2. BUILD REQUEST_BODY - JSON CANÔNICO EXATO
+    const REQUEST_BODY = {
+      "orderDetails": {
+        "merchantId": merchantId,
+        "initiatorKey": uiData.initiatorKey || null,
+        "expiresAt": (() => {
+          if (uiData.expirationDate) {
+            const date = new Date(uiData.expirationDate)
+            return date.toISOString().slice(0, 19).replace('T', ' ')
+          } else {
+            // Default: 30 dias
+            const defaultExpiration = new Date()
+            defaultExpiration.setDate(defaultExpiration.getDate() + 30)
+            return defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
+          }
+        })(),
+        "description": uiData.description || null,
+        "details": uiData.details || null,
+        "payer": {
+          "document": uiData.payer?.document?.replace(/\D/g, '') || "",
+          "email": uiData.payer?.email || "",
+          "phoneNumber": uiData.payer?.phoneNumber?.replace(/\D/g, '') || "",
+          "name": uiData.payer?.name || ""
+        },
+        "bankslip": {
+          "number": uiData.bankslip?.number?.replace(/\D/g, '') || "",
+          "creditorDocument": uiData.bankslip?.creditorDocument?.replace(/\D/g, '') || "",
+          "creditorName": uiData.bankslip?.creditorName || ""
+        },
+        "checkout": {
+          "maskFee": uiData.checkout?.maskFee === true,
+          "installments": (uiData.checkout?.installments && uiData.checkout.installments > 0) ? 
+            parseInt(uiData.checkout.installments.toString()) : null
+        }
       }
     }
 
-    // Adicionar campos obrigatórios/opcionais
-    if (uiData.initiatorKey) {
-      REQUEST_BODY.orderDetails.initiatorKey = uiData.initiatorKey
-    } else {
-      REQUEST_BODY.orderDetails.initiatorKey = null
-    }
-
-    // Adicionar expiresAt obrigatório (YYYY-MM-DD HH:mm:ss)
-    if (uiData.expirationDate) {
-      const date = new Date(uiData.expirationDate)
-      REQUEST_BODY.orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
-    } else {
-      // Default: 30 dias
-      const defaultExpiration = new Date()
-      defaultExpiration.setDate(defaultExpiration.getDate() + 30)
-      REQUEST_BODY.orderDetails.expiresAt = defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
-    }
-
-    // Campos opcionais
-    if (uiData.description) {
-      REQUEST_BODY.orderDetails.description = uiData.description.substring(0, 200) // truncar
-    }
-    if (uiData.details) {
-      REQUEST_BODY.orderDetails.details = uiData.details.substring(0, 200) // truncar
-    }
-
-    // Mapear payer (obrigatório)
-    if (uiData.payer) {
-      REQUEST_BODY.orderDetails.payer = {
-        document: uiData.payer.document.replace(/\D/g, ''), // somente dígitos
-        email: uiData.payer.email.substring(0, 50), // máx 50 chars
-        phoneNumber: uiData.payer.phoneNumber.replace(/\D/g, '').substring(0, 11), // máx 11 dígitos
-        name: uiData.payer.name.substring(0, 200) // máx 200 chars
+    // 3. VALIDAÇÃO DO JSON CANÔNICO
+    const validateCanonicalStructure = (body: any): boolean => {
+      // Verificar objeto raiz contém apenas orderDetails
+      const rootKeys = Object.keys(body)
+      if (rootKeys.length !== 1 || rootKeys[0] !== 'orderDetails') {
+        console.error('VALIDATION FAILED: Root object must contain only orderDetails')
+        return false
       }
-    }
 
-    // Mapear bankslip (opcional)
-    if (uiData.bankslip) {
-      REQUEST_BODY.orderDetails.bankslip = {
-        number: uiData.bankslip.number.replace(/\D/g, ''), // somente dígitos
-        creditorDocument: uiData.bankslip.creditorDocument.replace(/\D/g, ''), // somente dígitos
-        creditorName: uiData.bankslip.creditorName.substring(0, 200) // máx 200 chars
+      const orderDetails = body.orderDetails
+      const expectedOrderDetailsKeys = ['merchantId', 'initiatorKey', 'expiresAt', 'description', 'details', 'payer', 'bankslip', 'checkout']
+      const actualOrderDetailsKeys = Object.keys(orderDetails)
+      
+      // Verificar chaves do orderDetails
+      if (actualOrderDetailsKeys.length !== expectedOrderDetailsKeys.length) {
+        console.error('VALIDATION FAILED: orderDetails keys count mismatch')
+        return false
       }
-    }
-
-    // Mapear checkout (obrigatório)
-    if (uiData.checkout) {
-      REQUEST_BODY.orderDetails.checkout = {
-        maskFee: uiData.checkout.maskFee || false,
-        installments: (uiData.checkout.installments && uiData.checkout.installments > 0) ? uiData.checkout.installments : null
+      
+      for (const key of expectedOrderDetailsKeys) {
+        if (!actualOrderDetailsKeys.includes(key)) {
+          console.error(`VALIDATION FAILED: Missing key in orderDetails: ${key}`)
+          return false
+        }
       }
+
+      // Verificar chaves do payer
+      const expectedPayerKeys = ['document', 'email', 'phoneNumber', 'name']
+      const actualPayerKeys = Object.keys(orderDetails.payer)
+      if (!expectedPayerKeys.every(key => actualPayerKeys.includes(key)) || 
+          actualPayerKeys.length !== expectedPayerKeys.length) {
+        console.error('VALIDATION FAILED: payer keys mismatch')
+        return false
+      }
+
+      // Verificar chaves do bankslip
+      const expectedBankslipKeys = ['number', 'creditorDocument', 'creditorName']
+      const actualBankslipKeys = Object.keys(orderDetails.bankslip)
+      if (!expectedBankslipKeys.every(key => actualBankslipKeys.includes(key)) || 
+          actualBankslipKeys.length !== expectedBankslipKeys.length) {
+        console.error('VALIDATION FAILED: bankslip keys mismatch')
+        return false
+      }
+
+      // Verificar chaves do checkout
+      const expectedCheckoutKeys = ['maskFee', 'installments']
+      const actualCheckoutKeys = Object.keys(orderDetails.checkout)
+      if (!expectedCheckoutKeys.every(key => actualCheckoutKeys.includes(key)) || 
+          actualCheckoutKeys.length !== expectedCheckoutKeys.length) {
+        console.error('VALIDATION FAILED: checkout keys mismatch')
+        return false
+      }
+
+      return true
     }
 
-    // 3. BUILD EXTRAS_TO_STORE - dados somente para o banco (NUNCA enviados para API)
+    // Validar estrutura antes de prosseguir
+    if (!validateCanonicalStructure(REQUEST_BODY)) {
+      throw { status: 400, message: 'REQUEST_BODY não conforme ao JSON canônico' }
+    }
+
+    // 4. BUILD EXTRAS_TO_STORE - dados somente para o banco (NUNCA enviados para API)
     const EXTRAS_TO_STORE = {
       amount: uiData.amount || 0,
       order_type_ui: rawOrderType,
