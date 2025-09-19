@@ -1,101 +1,159 @@
-import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { CreditCard, ArrowRight, Shield, Clock, Users } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CreditCard, Shield, Users, Zap, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
-      <div className="container mx-auto px-4 py-16">
-        <div className="max-w-4xl mx-auto text-center">
-          {/* Hero Section */}
-          <div className="mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-full mb-6">
-              <CreditCard className="w-4 h-4" />
-              <span className="text-sm font-medium">Sistema de Pagamentos</span>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                <CreditCard className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <h1 className="text-xl font-bold">Sistema de Cobrança</h1>
             </div>
             
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-              Página de Pagamentos
-              <span className="block text-primary">Inteligente</span>
-            </h1>
-            
-            <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
-              Uma experiência completa de checkout com múltiplas opções de parcelamento, 
-              designed para maximizar conversões e satisfação do cliente.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/payment">
-                <Button size="lg" className="gap-2 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 transition-all duration-300 shadow-lg hover:shadow-xl">
-                  Ver Demonstração
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Link to="/admin/checkout/new">
-                <Button size="lg" variant="outline" className="gap-2">
-                  Admin QuitaMais
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          {/* Features */}
-          <div className="grid md:grid-cols-3 gap-8 mb-16">
-            <div className="p-6 bg-card rounded-xl border shadow-sm hover:shadow-md transition-all duration-300">
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4 mx-auto">
-                <Clock className="w-6 h-6 text-primary" />
-              </div>
-              <h3 className="font-semibold text-lg mb-2">Parcelamento Flexível</h3>
-              <p className="text-muted-foreground text-sm">
-                Múltiplas opções de parcelamento para atender diferentes perfis de cliente
-              </p>
-            </div>
-
-            <div className="p-6 bg-card rounded-xl border shadow-sm hover:shadow-md transition-all duration-300">
-              <div className="w-12 h-12 bg-success/10 rounded-lg flex items-center justify-center mb-4 mx-auto">
-                <Shield className="w-6 h-6 text-success" />
-              </div>
-              <h3 className="font-semibold text-lg mb-2">100% Seguro</h3>
-              <p className="text-muted-foreground text-sm">
-                Pagamentos protegidos com criptografia SSL e validação em tempo real
-              </p>
-            </div>
-
-            <div className="p-6 bg-card rounded-xl border shadow-sm hover:shadow-md transition-all duration-300">
-              <div className="w-12 h-12 bg-warning/10 rounded-lg flex items-center justify-center mb-4 mx-auto">
-                <Users className="w-6 h-6 text-warning" />
-              </div>
-              <h3 className="font-semibold text-lg mb-2">UX Otimizada</h3>
-              <p className="text-muted-foreground text-sm">
-                Interface intuitiva baseada em data-driven decisions e testes A/B
-              </p>
-            </div>
-          </div>
-
-          {/* Call to Action */}
-          <div className="p-8 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 rounded-2xl border">
-            <h2 className="text-2xl font-bold mb-4">Pronto para testar?</h2>
-            <p className="text-muted-foreground mb-6">
-              Experimente nosso sistema de pagamentos e veja como pode melhorar sua conversão
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/payment">
-                <Button variant="outline" size="lg" className="gap-2">
-                  Acessar Página de Pagamento
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-              <Link to="/admin/checkout/history">
-                <Button variant="outline" size="lg" className="gap-2">
-                  Histórico de Links
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
+            <div className="flex items-center gap-4">
+              <Button variant="outline" asChild>
+                <Link to="/login">Login</Link>
+              </Button>
+              <Button asChild>
+                <Link to="/register">Cadastrar</Link>
+              </Button>
             </div>
           </div>
         </div>
-      </div>
+      </header>
+
+      {/* Hero Section */}
+      <section className="container mx-auto px-4 py-16 text-center">
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-4xl font-bold mb-6">
+            Sistema de Cobrança Integrado ao Quita+
+          </h2>
+          <p className="text-xl text-muted-foreground mb-8">
+            Gerencie cobranças pontuais e recorrentes com total segurança e controle.
+            Links de pagamento automáticos com integração completa ao Quita+.
+          </p>
+          <div className="flex justify-center gap-4">
+            <Button size="lg" asChild>
+              <Link to="/register">Começar Agora</Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/login">Fazer Login</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="container mx-auto px-4 py-16">
+        <div className="text-center mb-12">
+          <h3 className="text-3xl font-bold mb-4">Funcionalidades</h3>
+          <p className="text-muted-foreground">
+            Tudo que você precisa para gerenciar suas cobranças
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <Card>
+            <CardHeader>
+              <Zap className="w-12 h-12 text-primary mb-4" />
+              <CardTitle>Cobranças Pontuais</CardTitle>
+              <CardDescription>
+                Crie links de pagamento instantâneos para cobranças únicas
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Links gerados automaticamente</li>
+                <li>• Integração direta com Quita+</li>
+                <li>• Compartilhamento via WhatsApp/Email</li>
+                <li>• Controle de parcelas e taxas</li>
+              </ul>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <Users className="w-12 h-12 text-primary mb-4" />
+              <CardTitle>Cobranças Recorrentes</CardTitle>
+              <CardDescription>
+                Configure cobranças automáticas com diferentes períodos
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Diária, semanal, quinzenal</li>
+                <li>• Mensal, semestral, anual</li>
+                <li>• Processamento automático via cron</li>
+                <li>• Controle de timezone (América/São_Paulo)</li>
+              </ul>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <Shield className="w-12 h-12 text-primary mb-4" />
+              <CardTitle>Segurança e Controle</CardTitle>
+              <CardDescription>
+                Sistema com autenticação segura e controle de acesso
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li>• Autenticação com roles (Admin/Operador)</li>
+                <li>• Logs completos de auditoria</li>
+                <li>• Controle de idempotência</li>
+                <li>• Rate limiting e CSRF protection</li>
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* Demo Section */}
+      <section className="bg-muted/50 py-16">
+        <div className="container mx-auto px-4 text-center">
+          <h3 className="text-3xl font-bold mb-4">Veja como funciona</h3>
+          <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
+            Experimente nossa demonstração de pagamento para clientes.
+          </p>
+          <div className="flex justify-center gap-4">
+            <Button size="lg" variant="outline" asChild>
+              <Link to="/payment">
+                Demo de Pagamento
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="bg-primary/5 py-16">
+        <div className="container mx-auto px-4 text-center">
+          <h3 className="text-3xl font-bold mb-4">Pronto para começar?</h3>
+          <p className="text-muted-foreground mb-8 max-w-2xl mx-auto">
+            Cadastre-se agora e comece a gerenciar suas cobranças de forma profissional.
+            O sistema é seguro, rápido e totalmente integrado ao Quita+.
+          </p>
+          <Button size="lg" asChild>
+            <Link to="/register">Criar Conta Gratuita</Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t py-8">
+        <div className="container mx-auto px-4 text-center text-muted-foreground">
+          <p>&copy; 2024 Sistema de Cobrança. Integrado ao Quita+.</p>
+        </div>
+      </footer>
     </div>
   );
 };
