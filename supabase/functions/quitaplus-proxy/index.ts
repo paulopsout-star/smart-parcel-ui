@@ -167,6 +167,13 @@ async function makeProxyRequest(
             orderDetails.details = payload.link.details
           }
 
+          // Add initiatorKey if provided (per documentation example)
+          if (payload.link?.initiatorKey) {
+            orderDetails.initiatorKey = payload.link.initiatorKey
+          } else if (payload.partner?.initiatorKey) {
+            orderDetails.initiatorKey = payload.partner.initiatorKey
+          }
+
           // Add payer if provided
           if (payload.debtor) {
             orderDetails.payer = {
