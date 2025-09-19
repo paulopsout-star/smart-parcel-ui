@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   PaymentLinkRequest, 
   PaymentLinkResponse, 
@@ -30,40 +31,54 @@ export const useQuitaMais = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // First, get authentication token
-      const tokenResponse = await fetch('/api/quitamais/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!tokenResponse.ok) {
-        throw new Error('Falha na autenticação');
-      }
-
-      // Create payment link
-      const linkResponse = await fetch('/api/quitamais/payment-link', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Create payment link using Supabase Edge Function
+      const { data: paymentLink, error } = await supabase.functions.invoke('quitamais-payment-link', {
+        body: {
           ...request,
           orderType
-        }),
+        }
       });
 
-      if (!linkResponse.ok) {
-        const errorData = await linkResponse.json();
-        throw new Error(errorData.message || 'Erro ao criar link de pagamento');
+      if (error) {
+        throw new Error(error.message || 'Erro ao criar link de pagamento');
       }
 
-      const paymentLink: PaymentLinkResponse = await linkResponse.json();
+      if (!paymentLink) {
+        throw new Error('Resposta inválida do servidor');
+      }
 
-      // Add to local history
+      // Save to database and add to local history
+      const { data: savedLink, error: saveError } = await supabase
+        .from('payment_links')
+        .insert({
+          link_id: paymentLink.linkId,
+          link_url: paymentLink.linkUrl,
+          guid: paymentLink.guid,
+          amount: request.amount,
+          payer_name: request.payer.name,
+          payer_email: request.payer.email,
+          payer_document: request.payer.document,
+          payer_phone_number: request.payer.phoneNumber,
+          order_type: orderType,
+          order_id: request.orderId,
+          description: request.description,
+          installments: request.checkout.installments,
+          mask_fee: request.checkout.maskFee,
+          creditor_name: request.bankslip?.creditorName,
+          creditor_document: request.bankslip?.creditorDocument,
+          expiration_date: request.expirationDate ? new Date(request.expirationDate).toISOString() : null,
+          status: paymentLink.status
+        })
+        .select()
+        .single();
+
+      if (saveError) {
+        console.error('Error saving payment link:', saveError);
+        // Continue anyway, don't fail the whole operation
+      }
+
       const historyItem: PaymentLinkHistory = {
-        id: crypto.randomUUID(),
+        id: savedLink?.id || crypto.randomUUID(),
         linkId: paymentLink.linkId,
         linkUrl: paymentLink.linkUrl,
         amount: request.amount,
@@ -110,13 +125,13 @@ export const useQuitaMais = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const response = await fetch(`/api/quitamais/payment-link/${linkId}`);
+      const { data: linkDetails, error } = await supabase.functions.invoke('quitamais-link-search', {
+        body: { linkId }
+      });
       
-      if (!response.ok) {
-        throw new Error('Erro ao consultar link de pagamento');
+      if (error) {
+        throw new Error(error.message || 'Erro ao consultar link de pagamento');
       }
-
-      const linkDetails: PaymentLinkResponse = await response.json();
       
       setState(prev => ({ ...prev, isLoading: false }));
       
@@ -171,15 +186,50 @@ export const useQuitaMais = () => {
     setState(prev => ({ ...prev, error: null }));
   }, []);
 
-  const loadHistory = useCallback(() => {
-    // Load from localStorage or API
-    const savedHistory = localStorage.getItem('quitamais-history');
-    if (savedHistory) {
-      try {
-        const parsedHistory: PaymentLinkHistory[] = JSON.parse(savedHistory);
-        setState(prev => ({ ...prev, paymentLinks: parsedHistory }));
-      } catch (error) {
-        console.error('Error loading payment link history:', error);
+  const loadHistory = useCallback(async () => {
+    setState(prev => ({ ...prev, isLoading: true }));
+    
+    try {
+      const { data: links, error } = await supabase
+        .from('payment_links')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      const historyItems: PaymentLinkHistory[] = (links || []).map(link => ({
+        id: link.id,
+        linkId: link.link_id,
+        linkUrl: link.link_url,
+        amount: link.amount,
+        payerName: link.payer_name,
+        payerEmail: link.payer_email,
+        status: link.status,
+        createdAt: link.created_at,
+        orderId: link.order_id,
+        description: link.description
+      }));
+
+      setState(prev => ({ 
+        ...prev, 
+        isLoading: false,
+        paymentLinks: historyItems 
+      }));
+    } catch (error) {
+      console.error('Error loading payment link history:', error);
+      setState(prev => ({ ...prev, isLoading: false }));
+      
+      // Fallback to localStorage
+      const savedHistory = localStorage.getItem('quitamais-history');
+      if (savedHistory) {
+        try {
+          const parsedHistory: PaymentLinkHistory[] = JSON.parse(savedHistory);
+          setState(prev => ({ ...prev, paymentLinks: parsedHistory }));
+        } catch (parseError) {
+          console.error('Error parsing localStorage history:', parseError);
+        }
       }
     }
   }, []);
