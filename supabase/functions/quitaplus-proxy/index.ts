@@ -168,6 +168,7 @@ async function makeProxyRequest(
           const basePayload: any = {
             ExpiresAt: expiresAt,
             MerchantId: merchantId,
+            Description: payload.link?.description || 'Payment Link',
             ...(payer ? { Payer: payer } : {}),
             OrderDetails: orderDetails,
             OrderType: payload.orderType || 1,
