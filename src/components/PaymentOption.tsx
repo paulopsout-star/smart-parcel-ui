@@ -83,14 +83,30 @@ export function PaymentOption({
       <div className="space-y-2">
         {type === "custom" ? (
           <div className="space-y-3">
-            <Input
-              type="text"
-              placeholder="R$ 0,00"
-              value={customValue}
-              onChange={(e) => onCustomValueChange?.(e.target.value)}
-              className="text-xl font-bold"
-              onClick={(e) => e.stopPropagation()}
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-xl font-bold text-muted-foreground">
+                R$
+              </span>
+              <Input
+                type="text"
+                placeholder="0,00"
+                value={customValue ? customValue.replace('R$ ', '') : ''}
+                onChange={(e) => {
+                  let value = e.target.value.replace(/\D/g, '');
+                  if (value) {
+                    value = (Number(value) / 100).toLocaleString('pt-BR', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    });
+                    onCustomValueChange?.(`R$ ${value}`);
+                  } else {
+                    onCustomValueChange?.('');
+                  }
+                }}
+                className="text-xl font-bold pl-12"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
             <p className="text-sm text-muted-foreground">
               Digite o valor da parcela desejada
             </p>
