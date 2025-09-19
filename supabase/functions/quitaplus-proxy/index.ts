@@ -284,6 +284,8 @@ serve(async (req) => {
     }
     
     
+    const baseUrl = 'https://api-sandbox.cappta.com.br'
+    
     console.log('REQUEST_BODY (CONTRATO EXATO):', JSON.stringify(maskSensitiveData(REQUEST_BODY), null, 2))
     console.log('EXTRAS_TO_STORE (SOMENTE DB):', JSON.stringify(maskSensitiveData(EXTRAS_TO_STORE), null, 2))
     console.log('URL FINAL COMPLETA:', `${baseUrl}/payment/order/${normalizedOrderType}`)
