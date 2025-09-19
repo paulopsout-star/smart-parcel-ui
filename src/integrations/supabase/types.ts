@@ -35,6 +35,7 @@ export type Database = {
           payer_name: string
           payer_phone_number: string | null
           status: string
+          ui_snapshot: Json | null
           updated_at: string
         }
         Insert: {
@@ -57,6 +58,7 @@ export type Database = {
           payer_name: string
           payer_phone_number?: string | null
           status?: string
+          ui_snapshot?: Json | null
           updated_at?: string
         }
         Update: {
@@ -79,6 +81,7 @@ export type Database = {
           payer_name?: string
           payer_phone_number?: string | null
           status?: string
+          ui_snapshot?: Json | null
           updated_at?: string
         }
         Relationships: []

@@ -88,154 +88,23 @@ async function getAuthToken(supabase: any, maxRetries = 3): Promise<string> {
   throw lastError
 }
 
-async function makeProxyRequest(
+async function makeApiRequest(
   accessToken: string,
-  targetPath: string,
-  httpMethod: string,
-  payload?: any,
+  endpoint: string,
+  method: string,
+  payload: any,
   maxRetries = 3
 ): Promise<any> {
   const baseUrl = 'https://api-sandbox.cappta.com.br'
-  const url = `${baseUrl}/${targetPath}`
+  const url = `${baseUrl}/${endpoint}`
   let lastError: any
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`Making proxy request to ${url}, attempt ${attempt}/${maxRetries}`)
-      
-      // Create masked version of payload for logging (never log sensitive data)
-      const maskedPayload = maskSensitiveData(payload)
-      console.log('Request payload (sensitive data masked):', JSON.stringify(maskedPayload, null, 2))
-      
-      let bodyPayload = payload
-      
-      // Transform to Quita+ expected schema based on endpoint
-      if (httpMethod === 'POST' && payload) {
-        const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || ''
-        
-        if (targetPath.startsWith('payment/order')) {
-          // Payment Link creation structure
-          // Normalize and validate inputs to avoid empty or invalid values
-          const normalizeDigits = (v?: string) => v ? v.replace(/\D/g, '') : undefined
-
-          const merchantIdRaw = Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || payload.MerchantId
-          const merchantId = normalizeDigits(merchantIdRaw)
-          if (!merchantId) {
-            throw { status: 400, message: 'Missing required MerchantId (configure QUITA_MAIS_MERCHANT_ID secret or pass it in payload.partner.merchantId)' }
-          }
-
-          const creditorDocument = normalizeDigits(payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || undefined)
-          const creditorName = payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || undefined
-
-          // Build Debtor/BankSlip/Link
-          const payer = (payload.payer || payload.debtor) ? {
-            Name: (payload.payer || payload.debtor).name,
-            Email: (payload.payer || payload.debtor).email,
-            PhoneNumber: normalizeDigits((payload.payer || payload.debtor).phoneNumber),
-            Document: normalizeDigits((payload.payer || payload.debtor).document),
-          } : undefined
-
-          const bankSlip = payload.bankSlip ? {
-            Number: payload.bankSlip.number,
-            CreditorDocument: normalizeDigits(payload.bankSlip.creditorDocument),
-            CreditorName: payload.bankSlip.creditorName,
-          } : undefined
-
-          // Build orderDetails following the exact API documentation format
-          const orderDetails: any = { 
-            merchantId: merchantId
-          }
-
-          // Add required ExpiresAt field - default to 30 days from now if not provided
-          if (payload.link?.expirationDate) {
-            const date = new Date(payload.link.expirationDate)
-            orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
-          } else {
-            // Default to 30 days from now
-            const defaultExpiration = new Date()
-            defaultExpiration.setDate(defaultExpiration.getDate() + 30)
-            orderDetails.expiresAt = defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
-          }
-
-          // Add description if provided (allowed by API documentation)
-          if (payload.link?.description) {
-            orderDetails.description = payload.link.description
-          }
-
-          // Add details if provided (allowed by API documentation)
-          if (payload.link?.details) {
-            orderDetails.details = payload.link.details
-          }
-
-          // Add initiatorKey if provided (per documentation example)
-          if (payload.link?.initiatorKey) {
-            orderDetails.initiatorKey = payload.link.initiatorKey
-          } else if (payload.partner?.initiatorKey) {
-            orderDetails.initiatorKey = payload.partner.initiatorKey
-          }
-
-          // Add payer if provided
-          if (payload.debtor) {
-            orderDetails.payer = {
-              document: payload.debtor.document,
-              email: payload.debtor.email,
-              phoneNumber: payload.debtor.phoneNumber,
-              name: payload.debtor.name
-            }
-          }
-
-          // Add bankslip if provided
-          if (payload.bankSlip) {
-            orderDetails.bankslip = {
-              number: payload.bankSlip.number,
-              creditorDocument: payload.bankSlip.creditorDocument,
-              creditorName: payload.bankSlip.creditorName
-            }
-          }
-          
-          // Add checkout if provided - following API documentation format
-          if (payload.link) {
-            orderDetails.checkout = {}
-            if (payload.link.maskFee !== undefined) {
-              orderDetails.checkout.maskFee = payload.link.maskFee
-            }
-            // Set installments to null if not provided, as per API documentation
-            orderDetails.checkout.installments = payload.link.installments || null
-          }
-
-          const basePayload: any = {
-            orderDetails: orderDetails
-          }
-
-          bodyPayload = basePayload
-        } else if (targetPath.startsWith('prepayment')) {
-          // Pre-payment authorization structure  
-          if (!merchantId) {
-            throw { status: 400, message: 'Missing required MerchantId for prepayment (configure QUITA_MAIS_MERCHANT_ID secret)' }
-          }
-
-          bodyPayload = {
-            MerchantId: merchantId,
-            CreditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
-            CreditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor',
-            Amount: payload.transaction?.amount || 0,
-            Installments: payload.transaction?.installments || 1,
-            DebtorDocument: payload.debtor?.document || '',
-            DebtorEmail: payload.debtor?.email || '',
-            DebtorPhoneNumber: payload.debtor?.phoneNumber || '',
-            DebtorName: payload.debtor?.name || '',
-            CardHolderName: payload.card?.holderName || '',
-            CardNumber: payload.card?.number || '',
-            CardExpirationDate: payload.card?.expirationDate || '',
-            CardCvv: payload.card?.cvv || '',
-          }
-        }
-
-        console.log('Transformed payload (sensitive data masked):', JSON.stringify(maskSensitiveData(bodyPayload), null, 2))
-      }
+      console.log(`Making API request to ${url}, attempt ${attempt}/${maxRetries}`)
       
       const requestOptions: RequestInit = {
-        method: httpMethod,
+        method: method,
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
@@ -243,8 +112,8 @@ async function makeProxyRequest(
         }
       }
       
-      if (bodyPayload && (httpMethod === 'POST' || httpMethod === 'PUT' || httpMethod === 'PATCH')) {
-        requestOptions.body = JSON.stringify(bodyPayload)
+      if (payload && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+        requestOptions.body = JSON.stringify(payload)
       }
       
       const response = await fetch(url, requestOptions)
@@ -253,7 +122,7 @@ async function makeProxyRequest(
       
       if (response.ok) {
         const data = await response.json()
-        console.log('Proxy request successful:', data)
+        console.log('API request successful:', data)
         return data
       }
       
@@ -316,23 +185,10 @@ serve(async (req) => {
   }
 
   try {
-    const { targetPath, httpMethod, payload } = await req.json()
+    // Receive UI data directly (no targetPath, httpMethod, payload wrappers)
+    const uiData = await req.json()
     
-    if (!targetPath) {
-      return new Response(
-        JSON.stringify({ error: 'targetPath is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-    
-    if (!httpMethod) {
-      return new Response(
-        JSON.stringify({ error: 'httpMethod is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-    
-    console.log('Proxy request:', { targetPath, httpMethod })
+    console.log('Processing UI data:', JSON.stringify(maskSensitiveData(uiData), null, 2))
     
     // Initialize Supabase client for calling other edge functions
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -342,8 +198,75 @@ serve(async (req) => {
     // Get authentication token
     const accessToken = await getAuthToken(supabase)
     
-    // Make proxied request to QuitaPlus API
-    const result = await makeProxyRequest(accessToken, targetPath, httpMethod, payload)
+    // Build orderDetails object following API documentation
+    const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID')
+    if (!merchantId) {
+      throw { status: 400, message: 'Missing required QUITA_MAIS_MERCHANT_ID secret' }
+    }
+
+    const orderDetails: any = {
+      merchantId: merchantId
+    }
+
+    // Add required ExpiresAt field
+    if (uiData.link?.expirationDate) {
+      const date = new Date(uiData.link.expirationDate)
+      orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
+    } else {
+      // Default to 30 days from now
+      const defaultExpiration = new Date()
+      defaultExpiration.setDate(defaultExpiration.getDate() + 30)
+      orderDetails.expiresAt = defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
+    }
+
+    // Add optional fields if provided
+    if (uiData.link?.description) {
+      orderDetails.description = uiData.link.description
+    }
+
+    if (uiData.link?.details) {
+      orderDetails.details = uiData.link.details
+    }
+
+    if (uiData.link?.initiatorKey) {
+      orderDetails.initiatorKey = uiData.link.initiatorKey
+    }
+
+    // Map debtor → payer
+    if (uiData.debtor) {
+      orderDetails.payer = {
+        document: uiData.debtor.document,
+        email: uiData.debtor.email,
+        phoneNumber: uiData.debtor.phoneNumber,
+        name: uiData.debtor.name
+      }
+    }
+
+    // Map bankSlip → bankslip
+    if (uiData.bankSlip) {
+      orderDetails.bankslip = {
+        number: uiData.bankSlip.number,
+        creditorDocument: uiData.bankSlip.creditorDocument,
+        creditorName: uiData.bankSlip.creditorName
+      }
+    }
+
+    // Map link.maskFee/installments → checkout.maskFee/installments
+    if (uiData.link) {
+      orderDetails.checkout = {}
+      if (uiData.link.maskFee !== undefined) {
+        orderDetails.checkout.maskFee = uiData.link.maskFee
+      }
+      orderDetails.checkout.installments = uiData.link.installments || null
+    }
+
+    // Final payload with only orderDetails
+    const apiPayload = { orderDetails }
+    
+    console.log('Sending to API:', JSON.stringify(maskSensitiveData(apiPayload), null, 2))
+    
+    // Make request to QuitaPlus API
+    const result = await makeApiRequest(accessToken, 'payment/order', 'POST', apiPayload)
     
     return new Response(
       JSON.stringify(result),

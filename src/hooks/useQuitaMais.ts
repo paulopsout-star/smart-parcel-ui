@@ -75,36 +75,34 @@ export const useQuitaMais = () => {
 
     try {
       // Create payment link using QuitaPlus proxy (no direct API calls)
+      // Create payment link using QuitaPlus proxy - send UI data directly
       const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy', {
         body: {
-          targetPath: 'payment/order',
-          httpMethod: 'POST',
-          payload: {
-            // Partner será injetado pelo proxy com base nos secrets
-            ...(request.bankslip ? {
-              bankSlip: {
-                number: request.bankslip.number,
-                creditorDocument: request.bankslip.creditorDocument,
-                creditorName: request.bankslip.creditorName
-              }
-            } : {}),
-            debtor: {
-              name: request.payer.name,
-              email: request.payer.email,
-              phoneNumber: request.payer.phoneNumber,
-              document: request.payer.document
-            },
-            link: {
-              // NÃO enviar amount e orderId para a API
-              expirationDate: request.expirationDate,
-              description: request.description, // conforme exemplo de documentação
-              details: (request as any).details, // opcional
-              initiatorKey: (request as any).initiatorKey, // opcional
-              installments: request.checkout.installments ?? null,
-              maskFee: request.checkout.maskFee
-            },
-            orderType: 1 // PaymentLink
-          }
+          // Send UI data directly without wrappers
+          ...(request.bankslip ? {
+            bankSlip: {
+              number: request.bankslip.number,
+              creditorDocument: request.bankslip.creditorDocument,
+              creditorName: request.bankslip.creditorName
+            }
+          } : {}),
+          debtor: {
+            name: request.payer.name,
+            email: request.payer.email,
+            phoneNumber: request.payer.phoneNumber,
+            document: request.payer.document
+          },
+          link: {
+            amount: request.amount, // will be saved to DB, not sent to API
+            description: request.description,
+            orderId: request.orderId, // will be saved to DB, not sent to API
+            expirationDate: request.expirationDate,
+            installments: request.checkout.installments ?? null,
+            maskFee: request.checkout.maskFee,
+            details: (request as any).details,
+            initiatorKey: (request as any).initiatorKey
+          },
+          orderType // will be saved to DB, not sent to API
         }
       });
 
@@ -116,7 +114,7 @@ export const useQuitaMais = () => {
         throw new Error('Resposta inválida do servidor');
       }
 
-      // Save to database and add to local history
+      // Save UI data extras to database (amount, orderId, orderType, ui_snapshot)
       const { data: savedLink, error: saveError } = await supabase
         .from('payment_links')
         .insert({
@@ -136,7 +134,13 @@ export const useQuitaMais = () => {
           creditor_name: request.bankslip?.creditorName,
           creditor_document: request.bankslip?.creditorDocument,
           expiration_date: request.expirationDate ? new Date(request.expirationDate).toISOString() : null,
-          status: paymentLink.status
+          status: paymentLink.status,
+          ui_snapshot: JSON.parse(JSON.stringify({
+            amount: request.amount,
+            orderId: request.orderId,
+            orderType: orderType,
+            originalRequest: request
+          }))
         })
         .select()
         .single();
