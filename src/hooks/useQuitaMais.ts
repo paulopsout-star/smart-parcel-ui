@@ -74,35 +74,33 @@ export const useQuitaMais = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // Create payment link using QuitaPlus proxy (no direct API calls)
-      // Create payment link using QuitaPlus proxy - send UI data directly
+      // Send data directly in the expected structure
       const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy', {
         body: {
-          // Send UI data directly following official contract structure
-          ...(request.bankslip ? {
-            bankSlip: {
-              number: request.bankslip.number,
-              creditorDocument: request.bankslip.creditorDocument,
-              creditorName: request.bankslip.creditorName
-            }
-          } : {}),
-          debtor: {
+          orderType, // for path normalization
+          amount: request.amount, // for EXTRAS_TO_STORE
+          orderId: request.orderId, // for EXTRAS_TO_STORE
+          description: request.description,
+          details: (request as any).details,
+          initiatorKey: (request as any).initiatorKey,
+          expirationDate: request.expirationDate,
+          payer: {
             name: request.payer.name,
             email: request.payer.email,
             phoneNumber: request.payer.phoneNumber,
             document: request.payer.document
           },
-          link: {
-            amount: request.amount, // goes to EXTRAS_TO_STORE
-            description: request.description,
-            orderId: request.orderId, // goes to EXTRAS_TO_STORE
-            expirationDate: request.expirationDate,
+          ...(request.bankslip ? {
+            bankslip: {
+              number: request.bankslip.number,
+              creditorDocument: request.bankslip.creditorDocument,
+              creditorName: request.bankslip.creditorName
+            }
+          } : {}),
+          checkout: {
             installments: request.checkout.installments,
-            maskFee: request.checkout.maskFee,
-            details: (request as any).details,
-            initiatorKey: (request as any).initiatorKey
-          },
-          orderType // goes to EXTRAS_TO_STORE as order_type_ui
+            maskFee: request.checkout.maskFee
+          }
         }
       });
 

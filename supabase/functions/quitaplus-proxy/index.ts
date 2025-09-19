@@ -224,14 +224,16 @@ serve(async (req) => {
       }
     }
 
-    // Adicionar initiatorKey obrigatório se disponível
-    if (uiData.link?.initiatorKey) {
-      REQUEST_BODY.orderDetails.initiatorKey = uiData.link.initiatorKey
+    // Adicionar campos obrigatórios/opcionais
+    if (uiData.initiatorKey) {
+      REQUEST_BODY.orderDetails.initiatorKey = uiData.initiatorKey
+    } else {
+      REQUEST_BODY.orderDetails.initiatorKey = null
     }
 
     // Adicionar expiresAt obrigatório (YYYY-MM-DD HH:mm:ss)
-    if (uiData.link?.expirationDate) {
-      const date = new Date(uiData.link.expirationDate)
+    if (uiData.expirationDate) {
+      const date = new Date(uiData.expirationDate)
       REQUEST_BODY.orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
     } else {
       // Default: 30 dias
@@ -241,43 +243,43 @@ serve(async (req) => {
     }
 
     // Campos opcionais
-    if (uiData.link?.description) {
-      REQUEST_BODY.orderDetails.description = uiData.link.description.substring(0, 200) // truncar
+    if (uiData.description) {
+      REQUEST_BODY.orderDetails.description = uiData.description.substring(0, 200) // truncar
     }
-    if (uiData.link?.details) {
-      REQUEST_BODY.orderDetails.details = uiData.link.details.substring(0, 200) // truncar
+    if (uiData.details) {
+      REQUEST_BODY.orderDetails.details = uiData.details.substring(0, 200) // truncar
     }
 
-    // Mapear debtor → payer (normalizar e truncar)
-    if (uiData.debtor) {
+    // Mapear payer (obrigatório)
+    if (uiData.payer) {
       REQUEST_BODY.orderDetails.payer = {
-        document: uiData.debtor.document.replace(/\D/g, ''), // somente dígitos
-        email: uiData.debtor.email.substring(0, 50), // máx 50 chars
-        phoneNumber: uiData.debtor.phoneNumber.replace(/\D/g, '').substring(0, 11), // máx 11 dígitos
-        name: uiData.debtor.name.substring(0, 200) // máx 200 chars
+        document: uiData.payer.document.replace(/\D/g, ''), // somente dígitos
+        email: uiData.payer.email.substring(0, 50), // máx 50 chars
+        phoneNumber: uiData.payer.phoneNumber.replace(/\D/g, '').substring(0, 11), // máx 11 dígitos
+        name: uiData.payer.name.substring(0, 200) // máx 200 chars
       }
     }
 
-    // Mapear bankSlip → bankslip (normalizar)
-    if (uiData.bankSlip) {
+    // Mapear bankslip (opcional)
+    if (uiData.bankslip) {
       REQUEST_BODY.orderDetails.bankslip = {
-        number: uiData.bankSlip.number.replace(/\D/g, ''), // somente dígitos
-        creditorDocument: uiData.bankSlip.creditorDocument.replace(/\D/g, ''), // somente dígitos
-        creditorName: uiData.bankSlip.creditorName.substring(0, 200) // máx 200 chars
+        number: uiData.bankslip.number.replace(/\D/g, ''), // somente dígitos
+        creditorDocument: uiData.bankslip.creditorDocument.replace(/\D/g, ''), // somente dígitos
+        creditorName: uiData.bankslip.creditorName.substring(0, 200) // máx 200 chars
       }
     }
 
-    // Mapear link → checkout (installments: vazio/0 → null)
-    if (uiData.link) {
+    // Mapear checkout (obrigatório)
+    if (uiData.checkout) {
       REQUEST_BODY.orderDetails.checkout = {
-        maskFee: uiData.link.maskFee || false,
-        installments: (uiData.link.installments && uiData.link.installments > 0) ? uiData.link.installments : null
+        maskFee: uiData.checkout.maskFee || false,
+        installments: (uiData.checkout.installments && uiData.checkout.installments > 0) ? uiData.checkout.installments : null
       }
     }
 
     // 3. BUILD EXTRAS_TO_STORE - dados somente para o banco (NUNCA enviados para API)
     const EXTRAS_TO_STORE = {
-      amount: uiData.link?.amount || 0,
+      amount: uiData.amount || 0,
       order_type_ui: rawOrderType,
       orderId: uiData.orderId || null,
       ui_snapshot: uiData // snapshot completo da UI
