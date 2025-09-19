@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,41 +8,76 @@ const corsHeaders = {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-async function getAccessToken(): Promise<string> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
-  
-  const { data, error } = await supabase.functions.invoke('quitaplus-token', {
-    body: {}
-  })
-  
-  if (error) {
-    throw new Error(`Failed to get token: ${error.message}`)
+async function getAuthToken(supabase: any, maxRetries = 3): Promise<string> {
+  let lastError: any
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Getting auth token, attempt ${attempt}/${maxRetries}`)
+      
+      const { data: tokenData, error } = await supabase.functions.invoke('quitaplus-token')
+      
+      if (error) {
+        throw new Error(`Token error: ${error.message}`)
+      }
+      
+      if (!tokenData?.accessToken) {
+        throw new Error('Token não recebido')
+      }
+      
+      console.log('Auth token obtained successfully')
+      return tokenData.accessToken
+      
+    } catch (error: any) {
+      console.log(`Token request failed on attempt ${attempt}:`, error.message)
+      lastError = error
+      
+      if (attempt < maxRetries) {
+        await sleep(Math.pow(2, attempt) * 1000) // Exponential backoff
+      }
+    }
   }
   
-  if (!data?.accessToken) {
-    throw new Error('No access token received')
-  }
-  
-  return data.accessToken
+  throw lastError
 }
 
-async function proxyRequestWithRetry(
-  url: string, 
-  init: RequestInit, 
+async function makeProxyRequest(
+  accessToken: string,
+  targetPath: string,
+  httpMethod: string,
+  payload?: any,
   maxRetries = 3
-): Promise<Response> {
+): Promise<any> {
+  const baseUrl = 'https://api-sandbox.cappta.com.br'
+  const url = `${baseUrl}/${targetPath}`
   let lastError: any
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`Proxy request attempt ${attempt}/${maxRetries} to ${url}`)
+      console.log(`Making proxy request to ${url}, attempt ${attempt}/${maxRetries}`)
       
-      const response = await fetch(url, init)
+      const requestOptions: RequestInit = {
+        method: httpMethod,
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        }
+      }
       
-      // Handle rate limiting (429) and server errors (5xx)
+      if (payload && (httpMethod === 'POST' || httpMethod === 'PUT' || httpMethod === 'PATCH')) {
+        requestOptions.body = JSON.stringify(payload)
+      }
+      
+      const response = await fetch(url, requestOptions)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Proxy request successful')
+        return data
+      }
+      
+      // Handle rate limiting and server errors with retry
       if (response.status === 429 || response.status >= 500) {
         const retryAfter = response.headers.get('retry-after')
         const backoffMs = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt) * 1000
@@ -54,20 +89,33 @@ async function proxyRequestWithRetry(
           continue
         }
       }
-
-      // For successful responses or client errors, return immediately
-      return response
-
+      
+      // For other errors, get response body and prepare to return error
+      const errorText = await response.text()
+      lastError = {
+        status: response.status,
+        message: errorText,
+        attempt
+      }
+      
+      if (response.status < 500) {
+        // Client errors (4xx) - don't retry
+        break
+      }
+      
     } catch (error: any) {
       console.log(`Network error on attempt ${attempt}:`, error.message)
-      lastError = error
+      lastError = {
+        error: error.message,
+        attempt
+      }
       
       if (attempt < maxRetries) {
         await sleep(Math.pow(2, attempt) * 1000)
       }
     }
   }
-
+  
   throw lastError
 }
 
@@ -77,134 +125,61 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders })
   }
 
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  }
+
   try {
-    // Parse URL and optional JSON body
-    const url = new URL(req.url)
-    const originalMethod = req.method
-    const contentType = req.headers.get('content-type') || ''
-    let jsonInput: any = null
-    if (originalMethod !== 'GET' && originalMethod !== 'HEAD' && contentType.includes('application/json')) {
-      try {
-        jsonInput = await req.json()
-      } catch (_) {
-        jsonInput = null
-      }
-    }
-
-    // Determine target path: from URL after /quitaplus-proxy/ or from body.targetPath
-    const pathParts = url.pathname.split('/')
-    const quitaplusIndex = pathParts.findIndex(part => part === 'quitaplus-proxy')
-    let targetPath = ''
-    if (quitaplusIndex !== -1 && quitaplusIndex < pathParts.length - 1) {
-      targetPath = pathParts.slice(quitaplusIndex + 1).join('/')
-    } else if (jsonInput?.targetPath) {
-      targetPath = String(jsonInput.targetPath)
-    }
-
+    const { targetPath, httpMethod, payload } = await req.json()
+    
     if (!targetPath) {
       return new Response(
-        JSON.stringify({ error: 'Invalid proxy path', details: 'Provide path after /quitaplus-proxy/ or in JSON body as targetPath' }),
+        JSON.stringify({ error: 'targetPath is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
-
-    // Get base URL from environment (remove /connect/token if present for API calls)
-    const tokenUrl = (Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br/connect/token')
-    const baseUrl = tokenUrl.replace('/connect/token', '').replace(/\/+$/,'')
     
-    // Build target URL
-    const sanitizedTargetPath = targetPath.replace(/^\/+/, '')
-    const targetUrl = `${baseUrl}/${sanitizedTargetPath}${url.search}`
-    
-    console.log('Proxying request to:', targetUrl)
-
-    // Get access token
-    const accessToken = await getAccessToken()
-
-    // Determine HTTP method override if provided
-    const httpMethod = (jsonInput?.httpMethod || originalMethod || 'POST').toUpperCase()
-
-    // Prepare headers for the proxied request
-    const proxyHeaders = new Headers()
-    
-    // Copy relevant headers from original request
-    const headersToProxy = ['content-type', 'accept', 'user-agent']
-    headersToProxy.forEach(headerName => {
-      const value = req.headers.get(headerName)
-      if (value) {
-        proxyHeaders.set(headerName, value)
-      }
-    })
-
-    // Add authorization header
-    proxyHeaders.set('Authorization', `Bearer ${accessToken}`)
-
-    // Prepare request body
-    let body: string | FormData | null = null
-    if (httpMethod !== 'GET' && httpMethod !== 'HEAD') {
-      if (jsonInput && Object.prototype.hasOwnProperty.call(jsonInput, 'payload')) {
-        const payload = jsonInput.payload
-        if (payload instanceof FormData) {
-          body = payload
-        } else if (payload != null) {
-          body = typeof payload === 'string' ? payload : JSON.stringify(payload)
-          if (!proxyHeaders.has('content-type')) {
-            proxyHeaders.set('Content-Type', 'application/json')
-          }
-        }
-      } else {
-        if (contentType.includes('application/json')) {
-          body = await req.text()
-        } else if (contentType.includes('application/x-www-form-urlencoded')) {
-          body = await req.text()
-        } else if (contentType.includes('multipart/form-data')) {
-          body = await req.formData()
-        } else {
-          body = await req.text()
-        }
-      }
+    if (!httpMethod) {
+      return new Response(
+        JSON.stringify({ error: 'httpMethod is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
-
-    // Make the proxied request with retry logic
-    const proxyResponse = await proxyRequestWithRetry(targetUrl, {
-      method: httpMethod,
-      headers: proxyHeaders,
-      body: body as any,
-    })
-
-    // Prepare response headers
-    const responseHeaders = new Headers(corsHeaders)
     
-    // Copy response headers (excluding CORS headers that we control)
-    const headersToForward = ['content-type', 'cache-control', 'expires', 'last-modified', 'etag']
-    headersToForward.forEach(headerName => {
-      const value = proxyResponse.headers.get(headerName)
-      if (value) {
-        responseHeaders.set(headerName, value)
+    console.log('Proxy request:', { targetPath, httpMethod })
+    
+    // Initialize Supabase client for calling other edge functions
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    
+    // Get authentication token
+    const accessToken = await getAuthToken(supabase)
+    
+    // Make proxied request to QuitaPlus API
+    const result = await makeProxyRequest(accessToken, targetPath, httpMethod, payload)
+    
+    return new Response(
+      JSON.stringify(result),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
-    })
-
-    // Return the proxied response
-    const responseBody = await proxyResponse.text()
-    
-    console.log(`Proxy response: ${proxyResponse.status} for ${targetUrl}`)
-    
-    return new Response(responseBody, {
-      status: proxyResponse.status,
-      statusText: proxyResponse.statusText,
-      headers: responseHeaders,
-    })
+    )
 
   } catch (error: any) {
     console.error('Error in quitaplus-proxy:', error)
     return new Response(
       JSON.stringify({ 
-        error: 'Proxy error', 
-        details: error.message,
-        timestamp: new Date().toISOString()
+        error: 'Proxy request failed', 
+        details: error.message || 'Request failed',
+        status: error.status || 500,
+        lastAttempt: error.attempt || 1
       }),
       { 
-        status: 500, 
+        status: error.status || 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     )
