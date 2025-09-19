@@ -17,6 +17,12 @@ serve(async (req) => {
     const clientId = Deno.env.get('QUITA_MAIS_CLIENT_ID')
     const clientSecret = Deno.env.get('QUITA_MAIS_CLIENT_SECRET')
 
+    console.log('Environment check:', {
+      baseUrl,
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret
+    });
+
     if (!clientId || !clientSecret) {
       console.error('Missing QuitaMais credentials')
       return new Response(
@@ -31,33 +37,58 @@ serve(async (req) => {
       )
     }
 
-    console.log('Requesting QuitaMais token...')
+    console.log('Requesting QuitaMais token from:', `${baseUrl}/connect/token`)
 
-    // Request token from QuitaMais API
-    const tokenRequest = await fetch(`${baseUrl}/connect/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-    })
+    // Try different common endpoints for OAuth token
+    const endpoints = ['/connect/token', '/oauth/token', '/auth/token', '/token'];
+    let tokenRequest;
+    let lastError;
 
-    if (!tokenRequest.ok) {
-      const errorText = await tokenRequest.text()
-      console.error('QuitaMais auth failed:', tokenRequest.status, errorText)
+    for (const endpoint of endpoints) {
+      const fullUrl = `${baseUrl}${endpoint}`;
+      console.log(`Trying endpoint: ${fullUrl}`);
+      
+      try {
+        tokenRequest = await fetch(fullUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            grant_type: 'client_credentials',
+            client_id: clientId,
+            client_secret: clientSecret,
+          }),
+        });
+
+        console.log(`Response status for ${endpoint}:`, tokenRequest.status);
+        
+        if (tokenRequest.ok) {
+          console.log(`Success with endpoint: ${endpoint}`);
+          break;
+        } else {
+          const errorText = await tokenRequest.text();
+          console.log(`Failed ${endpoint} (${tokenRequest.status}):`, errorText);
+          lastError = { status: tokenRequest.status, text: errorText, endpoint };
+        }
+      } catch (fetchError) {
+        console.log(`Network error for ${endpoint}:`, fetchError.message);
+        lastError = { error: fetchError.message, endpoint };
+      }
+    }
+
+    if (!tokenRequest || !tokenRequest.ok) {
+      console.error('All endpoints failed. Last error:', lastError);
       
       return new Response(
         JSON.stringify({ 
           error: 'Authentication failed', 
-          details: `QuitaMais API returned ${tokenRequest.status}`,
-          message: errorText 
+          details: `All endpoints failed. Last status: ${lastError?.status || 'Network Error'}`,
+          message: lastError?.text || lastError?.error || 'All authentication endpoints returned errors',
+          testedEndpoints: endpoints.map(ep => `${baseUrl}${ep}`)
         }),
         { 
-          status: tokenRequest.status, 
+          status: lastError?.status || 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       )
