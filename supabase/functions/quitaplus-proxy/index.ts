@@ -204,79 +204,91 @@ serve(async (req) => {
       throw { status: 400, message: 'Missing required QUITA_MAIS_MERCHANT_ID secret' }
     }
 
-    // ====== TRANSFORMATION FOLLOWING OFFICIAL CONTRACT ======
+    // ====== NORMALIZAÇÃO E CONTRATO EXATO QUITA+ ======
     
-    // 1. BUILD REQUEST_BODY - exact structure for API
+    // 1. NORMALIZAR orderType obrigatório
+    let normalizedOrderType: string
+    const rawOrderType = uiData.orderType
+    
+    if (rawOrderType === "boleto" || rawOrderType === "1" || rawOrderType === 1) {
+      normalizedOrderType = "bankslip"
+    } else {
+      throw { status: 400, message: `orderType inválido: ${rawOrderType}. Valores aceitos: "boleto", "1", 1` }
+    }
+
+    // 2. BUILD REQUEST_BODY - SOMENTE campos aceitos pela API
     const REQUEST_BODY: any = {
       orderDetails: {
         merchantId: merchantId
       }
     }
 
-    // Add required expiresAt field (YYYY-MM-DD HH:mm:ss format)
+    // Adicionar initiatorKey obrigatório se disponível
+    if (uiData.link?.initiatorKey) {
+      REQUEST_BODY.orderDetails.initiatorKey = uiData.link.initiatorKey
+    }
+
+    // Adicionar expiresAt obrigatório (YYYY-MM-DD HH:mm:ss)
     if (uiData.link?.expirationDate) {
       const date = new Date(uiData.link.expirationDate)
       REQUEST_BODY.orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
     } else {
-      // Default to 30 days from now
+      // Default: 30 dias
       const defaultExpiration = new Date()
       defaultExpiration.setDate(defaultExpiration.getDate() + 30)
       REQUEST_BODY.orderDetails.expiresAt = defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
     }
 
-    // Add initiatorKey if provided
-    if (uiData.link?.initiatorKey) {
-      REQUEST_BODY.orderDetails.initiatorKey = uiData.link.initiatorKey
-    }
-
-    // Add optional description and details
+    // Campos opcionais
     if (uiData.link?.description) {
-      REQUEST_BODY.orderDetails.description = uiData.link.description
+      REQUEST_BODY.orderDetails.description = uiData.link.description.substring(0, 200) // truncar
     }
     if (uiData.link?.details) {
-      REQUEST_BODY.orderDetails.details = uiData.link.details
+      REQUEST_BODY.orderDetails.details = uiData.link.details.substring(0, 200) // truncar
     }
 
-    // Map debtor → payer (normalize documents to digits only)
+    // Mapear debtor → payer (normalizar e truncar)
     if (uiData.debtor) {
       REQUEST_BODY.orderDetails.payer = {
-        document: uiData.debtor.document.replace(/\D/g, ''), // digits only
-        email: uiData.debtor.email,
-        phoneNumber: uiData.debtor.phoneNumber.replace(/\D/g, ''), // digits only
-        name: uiData.debtor.name
+        document: uiData.debtor.document.replace(/\D/g, ''), // somente dígitos
+        email: uiData.debtor.email.substring(0, 50), // máx 50 chars
+        phoneNumber: uiData.debtor.phoneNumber.replace(/\D/g, '').substring(0, 11), // máx 11 dígitos
+        name: uiData.debtor.name.substring(0, 200) // máx 200 chars
       }
     }
 
-    // Map bankSlip → bankslip (normalize numbers to digits only)
+    // Mapear bankSlip → bankslip (normalizar)
     if (uiData.bankSlip) {
       REQUEST_BODY.orderDetails.bankslip = {
-        number: uiData.bankSlip.number.replace(/\D/g, ''), // digits only
-        creditorDocument: uiData.bankSlip.creditorDocument.replace(/\D/g, ''), // digits only
-        creditorName: uiData.bankSlip.creditorName
+        number: uiData.bankSlip.number.replace(/\D/g, ''), // somente dígitos
+        creditorDocument: uiData.bankSlip.creditorDocument.replace(/\D/g, ''), // somente dígitos
+        creditorName: uiData.bankSlip.creditorName.substring(0, 200) // máx 200 chars
       }
     }
 
-    // Map link → checkout (normalize installments: empty/0 → null)
+    // Mapear link → checkout (installments: vazio/0 → null)
     if (uiData.link) {
       REQUEST_BODY.orderDetails.checkout = {
         maskFee: uiData.link.maskFee || false,
-        installments: uiData.link.installments || null
+        installments: (uiData.link.installments && uiData.link.installments > 0) ? uiData.link.installments : null
       }
     }
 
-    // 2. BUILD EXTRAS_TO_STORE - data for database only (never sent to API)
+    // 3. BUILD EXTRAS_TO_STORE - dados somente para o banco (NUNCA enviados para API)
     const EXTRAS_TO_STORE = {
       amount: uiData.link?.amount || 0,
-      order_type_ui: uiData.orderType || 'unknown',
-      ui_snapshot: uiData // complete original UI data
+      order_type_ui: rawOrderType,
+      orderId: uiData.orderId || null,
+      ui_snapshot: uiData // snapshot completo da UI
     }
     
-    console.log('REQUEST_BODY:', JSON.stringify(maskSensitiveData(REQUEST_BODY), null, 2))
-    console.log('EXTRAS_TO_STORE:', JSON.stringify(maskSensitiveData(EXTRAS_TO_STORE), null, 2))
     
-    // Make request to QuitaPlus API with clean REQUEST_BODY
-    // Make request to QuitaPlus API with clean REQUEST_BODY
-    const result = await makeApiRequest(accessToken, 'payment/order', 'POST', REQUEST_BODY)
+    console.log('REQUEST_BODY (CONTRATO EXATO):', JSON.stringify(maskSensitiveData(REQUEST_BODY), null, 2))
+    console.log('EXTRAS_TO_STORE (SOMENTE DB):', JSON.stringify(maskSensitiveData(EXTRAS_TO_STORE), null, 2))
+    console.log('URL FINAL:', `payment/order/${normalizedOrderType}`)
+    
+    // Fazer chamada para API Quita+ com URL normalizada e REQUEST_BODY limpo
+    const result = await makeApiRequest(accessToken, `payment/order/${normalizedOrderType}`, 'POST', REQUEST_BODY)
     
     // Return result with extras for database storage
     return new Response(
