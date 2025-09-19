@@ -12,13 +12,22 @@ serve(async (req) => {
   }
 
   try {
-    // Get environment variables
-    const baseUrl = Deno.env.get('BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    // Get environment variables and normalize BASE_URL to origin only (no path)
+    const rawBaseUrl = Deno.env.get('BASE_URL') || 'https://api-sandbox.cappta.com.br'
     const clientId = Deno.env.get('QUITA_MAIS_CLIENT_ID')
     const clientSecret = Deno.env.get('QUITA_MAIS_CLIENT_SECRET')
 
+    let baseUrl = rawBaseUrl
+    try {
+      const parsed = new URL(rawBaseUrl.includes('://') ? rawBaseUrl : `https://${rawBaseUrl}`)
+      baseUrl = `${parsed.protocol}//${parsed.host}` // strip any path/query
+    } catch (_e) {
+      baseUrl = 'https://api-sandbox.cappta.com.br'
+    }
+
     console.log('Environment check:', {
-      baseUrl,
+      rawBaseUrl,
+      normalizedBaseUrl: baseUrl,
       hasClientId: !!clientId,
       hasClientSecret: !!clientSecret
     });
@@ -40,7 +49,7 @@ serve(async (req) => {
     console.log('Requesting QuitaMais token from:', `${baseUrl}/connect/token`)
 
     // Try different common endpoints for OAuth token
-    const endpoints = ['/connect/token', '/oauth/token', '/auth/token', '/token'];
+    const endpoints = ['/connect/token', '/oauth/token', '/auth/token', '/token', '/identity/connect/token', '/oauth2/token'];
     let tokenRequest;
     let lastError;
 
