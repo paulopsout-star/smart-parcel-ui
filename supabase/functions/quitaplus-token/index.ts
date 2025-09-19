@@ -37,6 +37,12 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
       if (response.ok) {
         const data = await response.json()
         console.log('Token obtained successfully')
+        console.log('Token data received:', { 
+          hasAccessToken: !!data.access_token,
+          hasExpiresIn: !!data.expires_in,
+          tokenType: data.token_type,
+          expiresIn: data.expires_in 
+        })
         return data
       }
 
@@ -128,6 +134,9 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           accessToken: tokenCache.accessToken,
+          tokenType: 'Bearer',
+          expiresIn: Math.floor((tokenCache.expiresAt - now) / 1000),
+          expiresAt: tokenCache.expiresAt,
           fromCache: true
         }),
         {
