@@ -141,15 +141,9 @@ async function makeProxyRequest(
             CreditorName: payload.bankSlip.creditorName,
           } : undefined
 
-          // Build orderDetails with only required and provided fields
+          // Build orderDetails following the exact API documentation format
           const orderDetails: any = { 
             merchantId: merchantId
-          }
-
-          // Add amount - convert from cents to decimal with proper formatting
-          if (payload.link?.amount !== undefined) {
-            // Convert from cents to decimal value (e.g., 250 -> 2.50)
-            orderDetails.amount = (payload.link.amount / 100).toFixed(2)
           }
 
           // Add required ExpiresAt field - default to 30 days from now if not provided
@@ -163,10 +157,14 @@ async function makeProxyRequest(
             orderDetails.expiresAt = defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
           }
 
-          // Only add fields that are explicitly provided in the original payload
-
+          // Add description if provided (allowed by API documentation)
           if (payload.link?.description) {
             orderDetails.description = payload.link.description
+          }
+
+          // Add details if provided (allowed by API documentation)
+          if (payload.link?.details) {
+            orderDetails.details = payload.link.details
           }
 
           // Add payer if provided
@@ -188,15 +186,14 @@ async function makeProxyRequest(
             }
           }
           
-          // Add checkout if provided
+          // Add checkout if provided - following API documentation format
           if (payload.link) {
             orderDetails.checkout = {}
             if (payload.link.maskFee !== undefined) {
               orderDetails.checkout.maskFee = payload.link.maskFee
             }
-            if (payload.link.installments !== undefined) {
-              orderDetails.checkout.installments = payload.link.installments
-            }
+            // Set installments to null if not provided, as per API documentation
+            orderDetails.checkout.installments = payload.link.installments || null
           }
 
           const basePayload: any = {
