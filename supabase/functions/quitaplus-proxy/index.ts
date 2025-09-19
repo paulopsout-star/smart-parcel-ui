@@ -144,7 +144,8 @@ async function makeProxyRequest(
           // Flatten link fields into OrderDetails, API expects them at this level
           const amount = payload.link?.amount ?? payload.amount ?? 0
           const description = payload.link?.description ?? payload.description ?? 'Payment Link'
-          const orderId = payload.link?.orderId ?? payload.orderId ?? `ORDER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          // Generate simple numeric OrderId to avoid validation issues
+          const orderId = payload.link?.orderId ?? payload.orderId ?? Date.now().toString()
           const installments = payload.link?.installments ?? payload.installments
           const maskFee = payload.link?.maskFee ?? payload.maskFee
 
@@ -166,7 +167,10 @@ async function makeProxyRequest(
           if (creditorName) orderDetails.CreditorName = creditorName
           if (bankSlip) orderDetails.BankSlip = bankSlip
           if (payer) orderDetails.Payer = payer
-          if (orderId) orderDetails.OrderId = orderId
+          // Only add OrderId if explicitly provided (avoid validation issues)
+          if (payload.link?.orderId || payload.orderId) {
+            orderDetails.OrderId = payload.link?.orderId ?? payload.orderId
+          }
           if (installments != null) orderDetails.Installments = installments
           if (maskFee != null) orderDetails.MaskFee = maskFee
 
