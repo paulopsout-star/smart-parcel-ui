@@ -20,7 +20,7 @@ interface Profile {
   updated_at: string;
 }
 
-export function UserManagement() {
+export default function UserManagement() {
   const { isAdmin } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);

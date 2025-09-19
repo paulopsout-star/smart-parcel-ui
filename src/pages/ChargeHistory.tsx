@@ -27,7 +27,7 @@ interface Charge {
   }>;
 }
 
-export function ChargeHistory() {
+export default function ChargeHistory() {
   const { isOperador } = useAuth();
   const [charges, setCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);

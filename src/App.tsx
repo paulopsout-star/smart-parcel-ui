@@ -17,8 +17,8 @@ import NotFound from "./pages/NotFound";
 // Protected pages
 import Dashboard from "./pages/Dashboard";
 import NewCharge from "./pages/NewCharge";
-import { ChargeHistory } from "./pages/ChargeHistory";
-import { UserManagement } from "./pages/admin/UserManagement";
+import ChargeHistory from "./pages/ChargeHistory";
+import UserManagement from "./pages/admin/UserManagement";
 import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
 
