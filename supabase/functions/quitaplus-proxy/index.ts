@@ -60,10 +60,15 @@ async function makeProxyRequest(
       
       // Transform to Quita+ expected schema (OrderDetails) when creating payment link
       if (httpMethod === 'POST' && targetPath.startsWith('payment/order/') && payload) {
+        const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || ''
         const partner = {
-          MerchantId: Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || '',
+          MerchantId: merchantId,
           CreditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
           CreditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor',
+        }
+        
+        if (!partner.MerchantId) {
+          throw { status: 400, message: 'Missing required Partner.MerchantId (configure QUITA_MAIS_MERCHANT_ID secret or pass it in payload)' }
         }
 
         const debtor = payload.debtor ? {

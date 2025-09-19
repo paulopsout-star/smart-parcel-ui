@@ -80,16 +80,14 @@ export const useQuitaMais = () => {
           targetPath: 'payment/order/1',
           httpMethod: 'POST',
           payload: {
-            partner: {
-              merchantId: '', // Will be filled by proxy from environment
-              creditorDocument: request.bankslip?.creditorDocument || '',
-              creditorName: request.bankslip?.creditorName || ''
-            },
-            bankSlip: request.bankslip ? {
-              number: request.bankslip.number,
-              creditorDocument: request.bankslip.creditorDocument,
-              creditorName: request.bankslip.creditorName
-            } : undefined,
+            // Partner será injetado pelo proxy com base nos secrets
+            ...(request.bankslip ? {
+              bankSlip: {
+                number: request.bankslip.number,
+                creditorDocument: request.bankslip.creditorDocument,
+                creditorName: request.bankslip.creditorName
+              }
+            } : {}),
             debtor: {
               name: request.payer.name,
               email: request.payer.email,
@@ -104,7 +102,7 @@ export const useQuitaMais = () => {
               installments: request.checkout.installments,
               maskFee: request.checkout.maskFee
             },
-            orderType: 1 // PaymentLink type according to documentation
+            orderType: 1 // PaymentLink
           }
         }
       });
