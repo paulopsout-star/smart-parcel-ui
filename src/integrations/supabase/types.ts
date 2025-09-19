@@ -14,6 +14,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      charge_executions: {
+        Row: {
+          charge_id: string
+          created_at: string
+          error_details: Json | null
+          execution_date: string
+          execution_log: Json | null
+          id: string
+          idempotency_key: string | null
+          payment_link_id: string | null
+          payment_link_url: string | null
+          quita_guid: string | null
+          status: Database["public"]["Enums"]["charge_status"]
+        }
+        Insert: {
+          charge_id: string
+          created_at?: string
+          error_details?: Json | null
+          execution_date?: string
+          execution_log?: Json | null
+          id?: string
+          idempotency_key?: string | null
+          payment_link_id?: string | null
+          payment_link_url?: string | null
+          quita_guid?: string | null
+          status: Database["public"]["Enums"]["charge_status"]
+        }
+        Update: {
+          charge_id?: string
+          created_at?: string
+          error_details?: Json | null
+          execution_date?: string
+          execution_log?: Json | null
+          id?: string
+          idempotency_key?: string | null
+          payment_link_id?: string | null
+          payment_link_url?: string | null
+          quita_guid?: string | null
+          status?: Database["public"]["Enums"]["charge_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "charge_executions_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: false
+            referencedRelation: "charges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       charges: {
         Row: {
           amount: number
@@ -255,6 +305,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_next_charge_date: {
+        Args: {
+          base_date: string
+          interval_value?: number
+          recurrence_type: Database["public"]["Enums"]["recurrence_type"]
+        }
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
