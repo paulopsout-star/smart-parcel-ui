@@ -55,7 +55,7 @@ serve(async (req) => {
     const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID')
     const creditorName = Deno.env.get('QUITA_MAIS_CREDITOR_NAME')
     const creditorDocument = Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT')
-    const apiUrl = Deno.env.get('QUITA_MAIS_API_URL') || 'https://api-sandbox.cappta.com.br'
+    const apiUrl = 'https://api-sandbox.cappta.com.br'
 
     if (!merchantId || !creditorName || !creditorDocument) {
       throw new Error('QuitaMais credentials not configured')
@@ -116,14 +116,19 @@ serve(async (req) => {
       .insert([
         {
           transaction_id: transactionId,
-          payer_name: paymentData.payerName,
-          payer_email: paymentData.payerEmail,
-          payer_document: paymentData.payerDocument,
+          merchant_id: merchantId,
+          creditor_name: creditorName,
+          creditor_document: creditorDocument,
           amount_in_cents: paymentData.amountInCents,
           installments: paymentData.installments,
+          payer_document: paymentData.payerDocument,
+          payer_email: paymentData.payerEmail,
+          payer_phone_number: paymentData.payerPhoneNumber,
+          payer_name: paymentData.payerName,
+          card_holder_name: paymentData.cardHolderName,
+          card_number_last_four: paymentData.cardNumber.replace(/\s/g, '').slice(-4),
           status: 'AUTHORIZED',
-          quita_mais_response: responseData,
-          created_at: new Date().toISOString(),
+          authorization_code: responseData.authorizationCode,
         }
       ])
 

@@ -109,8 +109,41 @@ export function PaymentForm({
     if (!formData.cardCvv.trim()) newErrors.cardCvv = "CVV é obrigatório";
 
     // Validações específicas
+    // Validações específicas
     if (formData.payerEmail && !/\S+@\S+\.\S+/.test(formData.payerEmail)) {
       newErrors.payerEmail = "E-mail inválido";
+    }
+
+    // Validação CPF/CNPJ
+    if (formData.payerDocument) {
+      const numbers = formData.payerDocument.replace(/\D/g, '');
+      if (numbers.length !== 11 && numbers.length !== 14) {
+        newErrors.payerDocument = "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos";
+      }
+    }
+
+    // Validação do telefone
+    if (formData.payerPhoneNumber) {
+      const numbers = formData.payerPhoneNumber.replace(/\D/g, '');
+      if (numbers.length < 10 || numbers.length > 11) {
+        newErrors.payerPhoneNumber = "Telefone deve ter 10 ou 11 dígitos";
+      }
+    }
+
+    // Validação CPF/CNPJ
+    if (formData.payerDocument) {
+      const numbers = formData.payerDocument.replace(/\D/g, '');
+      if (numbers.length !== 11 && numbers.length !== 14) {
+        newErrors.payerDocument = "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos";
+      }
+    }
+
+    // Validação do telefone
+    if (formData.payerPhoneNumber) {
+      const numbers = formData.payerPhoneNumber.replace(/\D/g, '');
+      if (numbers.length < 10 || numbers.length > 11) {
+        newErrors.payerPhoneNumber = "Telefone deve ter 10 ou 11 dígitos";
+      }
     }
 
     if (formData.cardNumber && formData.cardNumber.replace(/\s/g, '').length < 16) {

@@ -6,13 +6,34 @@
 
 ## Sobre o Projeto
 
-Sistema de pagamentos integrado com a API QuitaMais para processamento de transações via cartão de crédito. O projeto inclui:
+Sistema completo de pagamentos integrado com a API QuitaMais para processamento de transações via cartão de crédito. O projeto oferece:
 
-- Interface moderna para seleção de opções de pagamento
-- Formulário completo para dados do pagador e cartão
-- Integração segura com API QuitaMais via Supabase Edge Functions
-- Armazenamento de transações no banco Supabase
-- Estados de loading, sucesso e erro otimizados
+### ✅ Funcionalidades Implementadas
+- **Múltiplas opções de pagamento**: Parcelamento flexível, pagamento único com desconto, valores personalizados
+- **Formulário completo**: Captura de dados do pagador e informações do cartão de crédito
+- **Validação em tempo real**: CPF/CNPJ, telefone, e-mail, dados do cartão
+- **Integração QuitaMais**: Processamento via API oficial da Cappta
+- **Armazenamento seguro**: Histórico de transações no Supabase
+- **Interface responsiva**: Design otimizado para conversão
+
+### Dados Capturados
+**Dados do Pagador:**
+- Nome completo
+- CPF ou CNPJ (com formatação automática)
+- E-mail (validação de formato)
+- Telefone (formato brasileiro: (11) 99999-9999)
+
+**Dados do Cartão:**
+- Nome no cartão
+- Número do cartão (formatação automática: 0000 0000 0000 0000)
+- Data de validade (MM/AA)
+- CVV (3 ou 4 dígitos)
+
+### Opções de Pagamento
+1. **Menor Parcela**: R$ 124,75 em 12x
+2. **Pagamento Único**: R$ 1.197,60 (desconto de R$ 299,40)
+3. **Parcelamento Popular**: R$ 249,50 em 6x (opção mais escolhida)
+4. **Valor Personalizado**: Cliente define o valor da parcela
 
 ## How can I edit this code?
 
@@ -75,38 +96,46 @@ This project is built with:
 ## ⚠️ Configuração Necessária
 
 ### 1. Secrets do Supabase
-Configure os seguintes secrets no Supabase (já adicionados):
+Os seguintes secrets já foram configurados no Supabase:
 - `QUITA_MAIS_MERCHANT_ID` - ID do comerciante QuitaMais
 - `QUITA_MAIS_CREDITOR_NAME` - Nome do credor
 - `QUITA_MAIS_CREDITOR_DOCUMENT` - Documento do credor
 
 ### 2. Tabela de Transações
-Execute o seguinte SQL no Supabase SQL Editor:
+A tabela de transações já foi criada no banco Supabase com os seguintes campos:
 
-```sql
--- Criar tabela de transações
-CREATE TABLE IF NOT EXISTS public.transactions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  transaction_id TEXT UNIQUE NOT NULL,
-  payer_name TEXT NOT NULL,
-  payer_email TEXT NOT NULL,
-  payer_document TEXT NOT NULL,
-  amount_in_cents INTEGER NOT NULL,
-  installments INTEGER NOT NULL DEFAULT 1,
-  status TEXT NOT NULL DEFAULT 'PENDING',
-  quita_mais_response JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
-);
+- `transaction_id` - ID único da transação
+- `merchant_id` - ID do merchant QuitaMais
+- `creditor_name` - Nome do credor
+- `creditor_document` - Documento do credor
+- `amount_in_cents` - Valor em centavos
+- `installments` - Número de parcelas
+- `payer_document` - CPF/CNPJ do pagador
+- `payer_email` - E-mail do pagador
+- `payer_phone_number` - Telefone do pagador
+- `payer_name` - Nome do pagador
+- `card_holder_name` - Nome no cartão
+- `card_number_last_four` - Últimos 4 dígitos do cartão
+- `status` - Status da transação (AUTHORIZED, REJECTED, PENDING)
+- `authorization_code` - Código de autorização
 
--- Criar índices
-CREATE INDEX IF NOT EXISTS idx_transactions_transaction_id ON public.transactions(transaction_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_payer_email ON public.transactions(payer_email);
+### 3. Fluxo de Pagamento
 
--- Habilitar RLS
-ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Permitir operações" ON public.transactions FOR ALL USING (true);
-```
+1. Cliente acessa `/payment`
+2. Seleciona opção de pagamento desejada
+3. Preenche dados pessoais e do cartão
+4. Sistema valida dados em tempo real
+5. Edge function processa via API QuitaMais
+6. Transação é salva no banco de dados
+7. Cliente recebe confirmação
+
+### 4. Segurança
+
+- Validação robusta de CPF/CNPJ
+- Formatação automática de campos
+- Criptografia SSL end-to-end
+- RLS (Row Level Security) habilitado
+- Logs detalhados para auditoria
 
 ## How can I deploy this project?
 

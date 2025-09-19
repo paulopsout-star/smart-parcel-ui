@@ -15,29 +15,29 @@ export default function Payment() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const { toast } = useToast();
 
-  const productName = "Curso de Desenvolvimento Web Completo";
-  const productPrice = "R$ 997,00";
+  const productName = "Integração QuitaMais - Sistema de Pagamentos";
+  const productPrice = "R$ 1.497,00";
 
   const paymentOptions = [
     {
       type: "min-installment" as PaymentOptionType,
       title: "Menor Parcela",
       description: "Parcele em mais vezes e pague menos por mês",
-      amount: "R$ 83,08",
+      amount: "R$ 124,75",
       installments: 12,
     },
     {
       type: "single-payment" as PaymentOptionType,
       title: "Pagamento único",
       description: "Pagamento único com desconto especial",
-      amount: "R$ 797,60",
-      discount: "Economize R$ 199,40",
+      amount: "R$ 1.197,60",
+      discount: "Economize R$ 299,40",
     },
     {
       type: "popular" as PaymentOptionType,
       title: "Parcelamento Popular",
       description: "A opção mais escolhida pelos nossos clientes",
-      amount: "R$ 166,17",
+      amount: "R$ 249,50",
       installments: 6,
       badge: "Mais Escolhido",
     },
