@@ -138,12 +138,12 @@ async function makeProxyRequest(
           } : undefined
 
           bodyPayload = {
-            OrderDetails: {
-              Partner: partner,
-              ...(bankSlip ? { BankSlip: bankSlip } : {}),
-              Debtor: debtor,
-              Link: link,
-            },
+            MerchantId: partner.MerchantId,
+            CreditorDocument: partner.CreditorDocument || bankSlip?.CreditorDocument || '',
+            CreditorName: partner.CreditorName || bankSlip?.CreditorName || '',
+            ...(bankSlip ? { BankSlip: bankSlip } : {}),
+            ...(debtor ? { Debtor: debtor } : {}),
+            ...(link ? { Link: link } : {}),
             OrderType: payload.orderType || 1,
           }
         } else if (targetPath.startsWith('prepayment')) {
