@@ -24,9 +24,10 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
-        body: new URLSearchParams({
+        body: JSON.stringify({
           grant_type: 'client_credentials',
           client_id: clientId,
           client_secret: clientSecret,
