@@ -33,12 +33,22 @@ function maskSensitiveData(obj: any): any {
     if (masked.debtor.document) masked.debtor.document = '***masked***'
     if (masked.debtor.phoneNumber) masked.debtor.phoneNumber = '***masked***'
   }
+
+  // Mask payer sensitive data
+  if (masked.payer) {
+    if (masked.payer.document) masked.payer.document = '***masked***'
+    if (masked.payer.phoneNumber) masked.payer.phoneNumber = '***masked***'
+  }
   
   // Mask in OrderDetails structure
   if (masked.OrderDetails) {
     if (masked.OrderDetails.Debtor) {
       if (masked.OrderDetails.Debtor.Document) masked.OrderDetails.Debtor.Document = '***masked***'
       if (masked.OrderDetails.Debtor.PhoneNumber) masked.OrderDetails.Debtor.PhoneNumber = '***masked***'
+    }
+    if (masked.OrderDetails.Payer) {
+      if (masked.OrderDetails.Payer.Document) masked.OrderDetails.Payer.Document = '***masked***'
+      if (masked.OrderDetails.Payer.PhoneNumber) masked.OrderDetails.Payer.PhoneNumber = '***masked***'
     }
   }
   
@@ -118,11 +128,11 @@ async function makeProxyRequest(
           const creditorName = payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || undefined
 
           // Build Debtor/BankSlip/Link
-          const debtor = payload.debtor ? {
-            Name: payload.debtor.name,
-            Email: payload.debtor.email,
-            PhoneNumber: normalizeDigits(payload.debtor.phoneNumber),
-            Document: normalizeDigits(payload.debtor.document),
+          const payer = (payload.payer || payload.debtor) ? {
+            Name: (payload.payer || payload.debtor).name,
+            Email: (payload.payer || payload.debtor).email,
+            PhoneNumber: normalizeDigits((payload.payer || payload.debtor).phoneNumber),
+            Document: normalizeDigits((payload.payer || payload.debtor).document),
           } : undefined
 
           const bankSlip = payload.bankSlip ? {
@@ -152,11 +162,13 @@ async function makeProxyRequest(
           if (creditorDocument) orderDetails.CreditorDocument = creditorDocument
           if (creditorName) orderDetails.CreditorName = creditorName
           if (bankSlip) orderDetails.BankSlip = bankSlip
-          if (debtor) orderDetails.Debtor = debtor
+          if (payer) orderDetails.Payer = payer
           if (link) orderDetails.Link = link
 
           const basePayload: any = {
-            ExpiresAt: expiresAt, // also at root to satisfy validator
+            ExpiresAt: expiresAt,
+            MerchantId: merchantId,
+            ...(payer ? { Payer: payer } : {}),
             OrderDetails: orderDetails,
             OrderType: payload.orderType || 1,
           }
