@@ -1,8 +1,18 @@
-# Welcome to your Lovable project
+# Sistema de Pagamentos QuitaMais
 
 ## Project info
 
 **URL**: https://lovable.dev/projects/eaddac47-07ed-4011-8ff8-fc1b25fafe6b
+
+## Sobre o Projeto
+
+Sistema de pagamentos integrado com a API QuitaMais para processamento de transações via cartão de crédito. O projeto inclui:
+
+- Interface moderna para seleção de opções de pagamento
+- Formulário completo para dados do pagador e cartão
+- Integração segura com API QuitaMais via Supabase Edge Functions
+- Armazenamento de transações no banco Supabase
+- Estados de loading, sucesso e erro otimizados
 
 ## How can I edit this code?
 
@@ -59,6 +69,44 @@ This project is built with:
 - React
 - shadcn-ui
 - Tailwind CSS
+- Supabase (Backend/Database)
+- QuitaMais API (Payment Processing)
+
+## ⚠️ Configuração Necessária
+
+### 1. Secrets do Supabase
+Configure os seguintes secrets no Supabase (já adicionados):
+- `QUITA_MAIS_MERCHANT_ID` - ID do comerciante QuitaMais
+- `QUITA_MAIS_CREDITOR_NAME` - Nome do credor
+- `QUITA_MAIS_CREDITOR_DOCUMENT` - Documento do credor
+
+### 2. Tabela de Transações
+Execute o seguinte SQL no Supabase SQL Editor:
+
+```sql
+-- Criar tabela de transações
+CREATE TABLE IF NOT EXISTS public.transactions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  transaction_id TEXT UNIQUE NOT NULL,
+  payer_name TEXT NOT NULL,
+  payer_email TEXT NOT NULL,
+  payer_document TEXT NOT NULL,
+  amount_in_cents INTEGER NOT NULL,
+  installments INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  quita_mais_response JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- Criar índices
+CREATE INDEX IF NOT EXISTS idx_transactions_transaction_id ON public.transactions(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_payer_email ON public.transactions(payer_email);
+
+-- Habilitar RLS
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Permitir operações" ON public.transactions FOR ALL USING (true);
+```
 
 ## How can I deploy this project?
 
