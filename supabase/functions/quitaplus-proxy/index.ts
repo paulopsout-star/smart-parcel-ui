@@ -140,8 +140,15 @@ async function makeProxyRequest(
             MaskFee: payload.link.maskFee,
           } : undefined
 
-          // According to API error, MerchantId must be inside OrderDetails root (not inside Partner)
-          const orderDetails: any = { MerchantId: merchantId }
+          // Compute required ExpiresAt (ISO8601). Default to +7 days if not provided
+          const expiresAt: string = (() => {
+            const raw = payload.link?.expirationDate
+            const date = raw ? new Date(raw) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+            return date.toISOString()
+          })()
+
+          // According to API error, required fields at OrderDetails root
+          const orderDetails: any = { MerchantId: merchantId, ExpiresAt: expiresAt }
           if (creditorDocument) orderDetails.CreditorDocument = creditorDocument
           if (creditorName) orderDetails.CreditorName = creditorName
           if (bankSlip) orderDetails.BankSlip = bankSlip
@@ -149,6 +156,7 @@ async function makeProxyRequest(
           if (link) orderDetails.Link = link
 
           const basePayload: any = {
+            ExpiresAt: expiresAt, // also at root to satisfy validator
             OrderDetails: orderDetails,
             OrderType: payload.orderType || 1,
           }
