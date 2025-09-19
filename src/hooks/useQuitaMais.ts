@@ -75,10 +75,14 @@ export const useQuitaMais = () => {
 
     try {
       // Create payment link using QuitaPlus proxy (no direct API calls)
-      const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy/payment-links', {
+      const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy', {
         body: {
-          ...request,
-          orderType
+          targetPath: 'payment-links',
+          httpMethod: 'POST',
+          payload: {
+            ...request,
+            orderType
+          }
         }
       });
 
@@ -169,8 +173,11 @@ export const useQuitaMais = () => {
 
     try {
       // Use QuitaPlus proxy to search for payment link (no direct API calls)
-      const { data: linkDetails, error } = await supabase.functions.invoke('quitaplus-proxy/payment-links/' + linkId, {
-        body: { linkId }
+      const { data: linkDetails, error } = await supabase.functions.invoke('quitaplus-proxy', {
+        body: {
+          targetPath: `payment-links/${linkId}`,
+          httpMethod: 'GET'
+        }
       });
       
       if (error) {

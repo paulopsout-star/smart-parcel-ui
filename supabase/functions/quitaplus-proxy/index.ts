@@ -78,32 +78,51 @@ serve(async (req) => {
   }
 
   try {
-    // Extract the path after /quitaplus/
+    // Parse URL and optional JSON body
     const url = new URL(req.url)
+    const originalMethod = req.method
+    const contentType = req.headers.get('content-type') || ''
+    let jsonInput: any = null
+    if (originalMethod !== 'GET' && originalMethod !== 'HEAD' && contentType.includes('application/json')) {
+      try {
+        jsonInput = await req.json()
+      } catch (_) {
+        jsonInput = null
+      }
+    }
+
+    // Determine target path: from URL after /quitaplus-proxy/ or from body.targetPath
     const pathParts = url.pathname.split('/')
     const quitaplusIndex = pathParts.findIndex(part => part === 'quitaplus-proxy')
-    
-    if (quitaplusIndex === -1 || quitaplusIndex === pathParts.length - 1) {
+    let targetPath = ''
+    if (quitaplusIndex !== -1 && quitaplusIndex < pathParts.length - 1) {
+      targetPath = pathParts.slice(quitaplusIndex + 1).join('/')
+    } else if (jsonInput?.targetPath) {
+      targetPath = String(jsonInput.targetPath)
+    }
+
+    if (!targetPath) {
       return new Response(
-        JSON.stringify({ error: 'Invalid proxy path' }),
+        JSON.stringify({ error: 'Invalid proxy path', details: 'Provide path after /quitaplus-proxy/ or in JSON body as targetPath' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get the target path (everything after /quitaplus-proxy/)
-    const targetPath = pathParts.slice(quitaplusIndex + 1).join('/')
-    
     // Get base URL from environment
-    const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    const baseUrl = (Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br').replace(/\/+$/,'')
     
     // Build target URL
-    const targetUrl = `${baseUrl}/${targetPath}${url.search}`
+    const sanitizedTargetPath = targetPath.replace(/^\/+/, '')
+    const targetUrl = `${baseUrl}/${sanitizedTargetPath}${url.search}`
     
     console.log('Proxying request to:', targetUrl)
 
     // Get access token
     const accessToken = await getAccessToken()
-    
+
+    // Determine HTTP method override if provided
+    const httpMethod = (jsonInput?.httpMethod || originalMethod || 'POST').toUpperCase()
+
     // Prepare headers for the proxied request
     const proxyHeaders = new Headers()
     
@@ -121,23 +140,33 @@ serve(async (req) => {
 
     // Prepare request body
     let body: string | FormData | null = null
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      const contentType = req.headers.get('content-type') || ''
-      
-      if (contentType.includes('application/json')) {
-        body = await req.text()
-      } else if (contentType.includes('application/x-www-form-urlencoded')) {
-        body = await req.text()
-      } else if (contentType.includes('multipart/form-data')) {
-        body = await req.formData()
+    if (httpMethod !== 'GET' && httpMethod !== 'HEAD') {
+      if (jsonInput && Object.prototype.hasOwnProperty.call(jsonInput, 'payload')) {
+        const payload = jsonInput.payload
+        if (payload instanceof FormData) {
+          body = payload
+        } else if (payload != null) {
+          body = typeof payload === 'string' ? payload : JSON.stringify(payload)
+          if (!proxyHeaders.has('content-type')) {
+            proxyHeaders.set('Content-Type', 'application/json')
+          }
+        }
       } else {
-        body = await req.text()
+        if (contentType.includes('application/json')) {
+          body = await req.text()
+        } else if (contentType.includes('application/x-www-form-urlencoded')) {
+          body = await req.text()
+        } else if (contentType.includes('multipart/form-data')) {
+          body = await req.formData()
+        } else {
+          body = await req.text()
+        }
       }
     }
 
     // Make the proxied request with retry logic
     const proxyResponse = await proxyRequestWithRetry(targetUrl, {
-      method: req.method,
+      method: httpMethod,
       headers: proxyHeaders,
       body: body as any,
     })

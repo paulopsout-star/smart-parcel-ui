@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, Copy, ExternalLink, Share2, Loader2 } from "lucide-react";
@@ -64,6 +64,14 @@ export default function CheckoutNew() {
 
   const { createPaymentLink, isLoading, copyToClipboard, shareViaWhatsApp, shareViaEmail, testConnectivity } = useQuitaMais();
   const { toast } = useToast();
+
+  // Auto-test connectivity on first load to validate integration
+  const [autoTested, setAutoTested] = useState(false);
+  useEffect(() => {
+    if (!autoTested) {
+      testConnectivity().finally(() => setAutoTested(true));
+    }
+  }, [autoTested, testConnectivity]);
 
   const {
     register,
