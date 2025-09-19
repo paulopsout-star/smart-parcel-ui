@@ -129,6 +129,7 @@ async function makeApiRequest(
       // Get response body for debugging
       const errorText = await response.text()
       console.log(`Response error (${response.status}):`, errorText)
+      console.log('Response headers:', JSON.stringify([...response.headers.entries()]))
       
       // Handle rate limiting and server errors with retry
       if (response.status === 429 || response.status >= 500) {
@@ -211,7 +212,7 @@ serve(async (req) => {
     const rawOrderType = uiData.orderType
     
     if (rawOrderType === "boleto" || rawOrderType === "1" || rawOrderType === 1) {
-      normalizedOrderType = "bankslip"
+      normalizedOrderType = "boleto" // Tentando valor mais comum em APIs BR
     } else {
       throw { status: 400, message: `orderType inválido: ${rawOrderType}. Valores aceitos: "boleto", "1", 1` }
     }
@@ -285,7 +286,8 @@ serve(async (req) => {
     
     console.log('REQUEST_BODY (CONTRATO EXATO):', JSON.stringify(maskSensitiveData(REQUEST_BODY), null, 2))
     console.log('EXTRAS_TO_STORE (SOMENTE DB):', JSON.stringify(maskSensitiveData(EXTRAS_TO_STORE), null, 2))
-    console.log('URL FINAL:', `payment/order/${normalizedOrderType}`)
+    console.log('URL FINAL COMPLETA:', `${baseUrl}/payment/order/${normalizedOrderType}`)
+    console.log('NORMALIZED ORDER TYPE:', normalizedOrderType)
     
     // Fazer chamada para API Quita+ com URL normalizada e REQUEST_BODY limpo
     const result = await makeApiRequest(accessToken, `payment/order/${normalizedOrderType}`, 'POST', REQUEST_BODY)
