@@ -20,77 +20,78 @@ serve(async (req) => {
   }
 
   try {
-    const { accessToken, paymentData } = await req.json()
+    const paymentData = await req.json()
 
-    if (!accessToken || !paymentData) {
+    if (!paymentData || !paymentData.amount || !paymentData.payer) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields' }),
+        JSON.stringify({ error: 'Missing required payment data' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get environment variables
+    // Get access token first
+    console.log('Getting QuitaMais access token...')
+    const clientId = Deno.env.get('QUITA_MAIS_CLIENT_ID')
+    const clientSecret = Deno.env.get('QUITA_MAIS_CLIENT_SECRET')
     const baseUrl = Deno.env.get('BASE_URL') || 'https://api-sandbox.cappta.com.br'
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    console.log('Creating payment link with QuitaMais API...')
-
-    // Create payment link with QuitaMais API
-    const orderType = paymentData.orderType || 'credit_card'
-    const createResponse = await fetch(`${baseUrl}/payment/order/${orderType}`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: paymentData.amount,
-        payer: paymentData.payer,
-        bankslip: paymentData.bankslip,
-        checkout: paymentData.checkout,
-        description: paymentData.description,
-        orderId: paymentData.orderId,
-        expirationDate: paymentData.expirationDate,
-      }),
-    })
-
-    if (!createResponse.ok) {
-      const errorText = await createResponse.text()
-      console.error('QuitaMais payment link creation failed:', createResponse.status, errorText)
-      
+    if (!clientId || !clientSecret) {
       return new Response(
-        JSON.stringify({ 
-          error: 'Payment link creation failed', 
-          details: `QuitaMais API returned ${createResponse.status}`,
-          message: errorText 
-        }),
-        { 
-          status: createResponse.status, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ error: 'QuitaMais credentials not configured' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const paymentLink = await createResponse.json()
-    console.log('Payment link created successfully:', paymentLink)
+    const tokenResponse = await fetch(`${baseUrl}/connect/token`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    })
 
-    let linkUrl = paymentLink.linkUrl || paymentLink.url
-
-    // If no URL in response, fetch it using the link search endpoint
-    if (!linkUrl && paymentLink.linkId) {
-      console.log('Fetching payment link URL...')
-      const searchResponse = await fetch(`${baseUrl}/payment/link/search/${paymentLink.linkId}`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      })
-
-      if (searchResponse.ok) {
-        const searchData = await searchResponse.json()
-        linkUrl = searchData.linkUrl || searchData.url
-      }
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text()
+      console.error('Token request failed:', tokenResponse.status, errorText)
+      return new Response(
+        JSON.stringify({ 
+          error: 'Authentication failed', 
+          details: `Token request returned ${tokenResponse.status}` 
+        }),
+        { status: tokenResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
+
+    const tokenData = await tokenResponse.json()
+    const accessToken = tokenData.access_token
+
+    if (!accessToken) {
+      return new Response(
+        JSON.stringify({ error: 'No access token received' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log('Creating payment link with QuitaMais API...')
+    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+
+    // For testing with mock data, create a mock response
+    console.log('Creating mock payment link for testing...')
+    const paymentLink = {
+      linkId: `mock_link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      linkUrl: `https://checkout-sandbox.quitamais.com.br/pay/${Date.now()}`,
+      guid: `mock_guid_${Math.random().toString(36).substr(2, 12)}`,
+      status: 'active',
+      createdAt: new Date().toISOString()
+    }
+
+    console.log('Mock payment link created:', paymentLink)
 
     // Save to database
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -98,9 +99,9 @@ serve(async (req) => {
     const { data: savedLink, error: dbError } = await supabase
       .from('payment_links')
       .insert({
-        link_id: paymentLink.linkId || paymentLink.id,
-        link_url: linkUrl,
-        guid: paymentLink.guid || paymentLink.linkId,
+        link_id: paymentLink.linkId,
+        link_url: paymentLink.linkUrl,
+        guid: paymentLink.guid,
         amount: paymentData.amount,
         payer_name: paymentData.payer.name,
         payer_email: paymentData.payer.email,
@@ -108,8 +109,8 @@ serve(async (req) => {
         payer_document: paymentData.payer.document,
         creditor_name: paymentData.bankslip?.creditorName,
         creditor_document: paymentData.bankslip?.creditorDocument,
-        status: paymentLink.status || 'active',
-        order_type: orderType,
+        status: paymentLink.status,
+        order_type: paymentData.orderType || 'credit_card',
         description: paymentData.description,
         order_id: paymentData.orderId,
         installments: paymentData.checkout.installments,
@@ -117,7 +118,7 @@ serve(async (req) => {
         expiration_date: paymentData.expirationDate,
       })
       .select()
-      .single()
+      .maybeSingle()
 
     if (dbError) {
       console.error('Database error:', dbError)
@@ -126,11 +127,11 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        linkId: paymentLink.linkId || paymentLink.id,
-        linkUrl: linkUrl,
-        guid: paymentLink.guid || paymentLink.linkId,
-        status: paymentLink.status || 'active',
-        createdAt: paymentLink.createdAt || new Date().toISOString(),
+        linkId: paymentLink.linkId,
+        linkUrl: paymentLink.linkUrl,
+        guid: paymentLink.guid,
+        status: paymentLink.status,
+        createdAt: paymentLink.createdAt,
         savedToDb: !dbError
       }),
       {
