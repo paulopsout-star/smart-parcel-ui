@@ -105,26 +105,32 @@ async function makeProxyRequest(
         
         if (targetPath.startsWith('payment/order/')) {
           // Payment Link creation structure
-          const partner = {
-            MerchantId: merchantId,
-            CreditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
-            CreditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor',
+          // Normalize and validate inputs to avoid empty or invalid values
+          const normalizeDigits = (v?: string) => v ? v.replace(/\D/g, '') : undefined
+
+          const merchantIdRaw = Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || payload.MerchantId
+          const merchantId = normalizeDigits(merchantIdRaw)
+          if (!merchantId) {
+            throw { status: 400, message: 'Missing required MerchantId (configure QUITA_MAIS_MERCHANT_ID secret or pass it in payload.partner.merchantId)' }
           }
-          
-          if (!partner.MerchantId) {
-            throw { status: 400, message: 'Missing required Partner.MerchantId (configure QUITA_MAIS_MERCHANT_ID secret or pass it in payload)' }
-          }
+
+          const creditorDocument = normalizeDigits(payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || undefined)
+          const creditorName = payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || undefined
+
+          const partner: any = { MerchantId: merchantId }
+          if (creditorDocument) partner.CreditorDocument = creditorDocument
+          if (creditorName) partner.CreditorName = creditorName
 
           const debtor = payload.debtor ? {
             Name: payload.debtor.name,
             Email: payload.debtor.email,
-            PhoneNumber: payload.debtor.phoneNumber,
-            Document: payload.debtor.document,
+            PhoneNumber: normalizeDigits(payload.debtor.phoneNumber),
+            Document: normalizeDigits(payload.debtor.document),
           } : undefined
 
           const bankSlip = payload.bankSlip ? {
             Number: payload.bankSlip.number,
-            CreditorDocument: payload.bankSlip.creditorDocument,
+            CreditorDocument: normalizeDigits(payload.bankSlip.creditorDocument),
             CreditorName: payload.bankSlip.creditorName,
           } : undefined
 
@@ -137,15 +143,26 @@ async function makeProxyRequest(
             MaskFee: payload.link.maskFee,
           } : undefined
 
-          bodyPayload = {
-            OrderDetails: {
-              Partner: partner,
-              ...(bankSlip ? { BankSlip: bankSlip } : {}),
-              ...(debtor ? { Debtor: debtor } : {}),
-              ...(link ? { Link: link } : {}),
-            },
+          // Build payload with both root-level keys and OrderDetails for compatibility
+          const basePayload: any = {
+            MerchantId: partner.MerchantId,
+            ...(partner.CreditorDocument ? { CreditorDocument: partner.CreditorDocument } : {}),
+            ...(partner.CreditorName ? { CreditorName: partner.CreditorName } : {}),
+            ...(bankSlip ? { BankSlip: bankSlip } : {}),
+            ...(debtor ? { Debtor: debtor } : {}),
+            ...(link ? { Link: link } : {}),
             OrderType: payload.orderType || 1,
           }
+
+          basePayload.OrderDetails = {
+            Partner: partner,
+            ...(bankSlip ? { BankSlip: bankSlip } : {}),
+            ...(debtor ? { Debtor: debtor } : {}),
+            ...(link ? { Link: link } : {}),
+          }
+
+          bodyPayload = basePayload
+        }
         } else if (targetPath.startsWith('prepayment')) {
           // Pre-payment authorization structure  
           if (!merchantId) {
