@@ -275,7 +275,12 @@ serve(async (req) => {
     console.log('EXTRAS_TO_STORE:', JSON.stringify(maskSensitiveData(EXTRAS_TO_STORE), null, 2))
     
     // Make request to QuitaPlus API with clean REQUEST_BODY
-    const result = await makeApiRequest(accessToken, 'payment/order', 'POST', REQUEST_BODY)
+    const orderTypeRaw = (uiData.orderType || '').toString().toLowerCase().trim()
+    const orderTypePath = (orderTypeRaw === 'boleto' || orderTypeRaw === 'bankslip') ? 'bankslip'
+      : (orderTypeRaw === 'credit_card' || orderTypeRaw === 'creditcard' || orderTypeRaw === 'card') ? 'credit-card'
+      : 'bankslip'
+    console.log('Resolved order type path:', orderTypePath)
+    const result = await makeApiRequest(accessToken, `payment/order/${orderTypePath}`, 'POST', REQUEST_BODY)
     
     // Return result with extras for database storage
     return new Response(
