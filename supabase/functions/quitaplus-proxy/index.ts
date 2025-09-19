@@ -257,7 +257,8 @@ serve(async (req) => {
       if (uiData.link.maskFee !== undefined) {
         orderDetails.checkout.maskFee = uiData.link.maskFee
       }
-      orderDetails.checkout.installments = uiData.link.installments || null
+      // Always set installments to null per API documentation
+      orderDetails.checkout.installments = null
     }
 
     // Final payload with only orderDetails

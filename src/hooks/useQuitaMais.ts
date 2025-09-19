@@ -78,7 +78,7 @@ export const useQuitaMais = () => {
       // Create payment link using QuitaPlus proxy - send UI data directly
       const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy', {
         body: {
-          // Send UI data directly without wrappers
+          // Send UI data directly without wrappers - orderType removed (not in API docs)
           ...(request.bankslip ? {
             bankSlip: {
               number: request.bankslip.number,
@@ -97,12 +97,12 @@ export const useQuitaMais = () => {
             description: request.description,
             orderId: request.orderId, // will be saved to DB, not sent to API
             expirationDate: request.expirationDate,
-            installments: request.checkout.installments ?? null,
+            installments: null, // always null per API documentation
             maskFee: request.checkout.maskFee,
             details: (request as any).details,
             initiatorKey: (request as any).initiatorKey
-          },
-          orderType // will be saved to DB, not sent to API
+          }
+          // orderType removed - not in API documentation
         }
       });
 
