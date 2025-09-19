@@ -108,8 +108,9 @@ serve(async (req) => {
       )
     }
 
-    // Get base URL from environment
-    const baseUrl = (Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br').replace(/\/+$/,'')
+    // Get base URL from environment (remove /connect/token if present for API calls)
+    const tokenUrl = (Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br/connect/token')
+    const baseUrl = tokenUrl.replace('/connect/token', '').replace(/\/+$/,'')
     
     // Build target URL
     const sanitizedTargetPath = targetPath.replace(/^\/+/, '')

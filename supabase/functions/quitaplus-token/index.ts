@@ -14,14 +14,14 @@ let tokenCache: TokenCache | null = null
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-async function fetchTokenWithRetry(baseUrl: string, clientId: string, clientSecret: string, maxRetries = 3): Promise<any> {
+async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSecret: string, maxRetries = 3): Promise<any> {
   let lastError: any
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Token request attempt ${attempt}/${maxRetries}`)
       
-      const response = await fetch(`${baseUrl}/connect/token`, {
+      const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -95,13 +95,13 @@ serve(async (req) => {
   }
 
   try {
-    // Get environment variables
-    const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    // Get environment variables - QUITAPLUS_BASE_URL should be the complete token URL
+    const tokenUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br/connect/token'
     const clientId = Deno.env.get('QUITAPLUS_CLIENT_ID')
     const clientSecret = Deno.env.get('QUITAPLUS_CLIENT_SECRET')
 
     console.log('Environment check:', {
-      baseUrl,
+      tokenUrl,
       hasClientId: !!clientId,
       hasClientSecret: !!clientSecret
     })
@@ -135,9 +135,9 @@ serve(async (req) => {
       )
     }
 
-    console.log('Requesting new token from:', `${baseUrl}/connect/token`)
+    console.log('Requesting new token from:', tokenUrl)
 
-    const tokenData = await fetchTokenWithRetry(baseUrl, clientId, clientSecret)
+    const tokenData = await fetchTokenWithRetry(tokenUrl, clientId, clientSecret)
     
     // Cache the token
     const expiresAt = now + (tokenData.expires_in * 1000)
