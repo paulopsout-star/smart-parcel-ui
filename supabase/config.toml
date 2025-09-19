@@ -7,13 +7,19 @@ schemas = ["public"]
 extra_search_path = ["public"]
 max_rows = 1000
 
-[functions.quitamais-auth]
+[functions.quitaplus-token]
+verify_jwt = false
+
+[functions.quitaplus-proxy]
 verify_jwt = false
 
 [functions.quitamais-payment-link]
 verify_jwt = false
 
 [functions.quitamais-link-search]
+verify_jwt = false
+
+[functions.process-payment]
 verify_jwt = false
 
 [db]

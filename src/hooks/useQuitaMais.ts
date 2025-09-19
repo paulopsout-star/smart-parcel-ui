@@ -28,8 +28,8 @@ export const useQuitaMais = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // Test authentication with QuitaMais API
-      const { data: tokenData, error } = await supabase.functions.invoke('quitamais-auth');
+      // Test authentication with QuitaPlus API via new token endpoint
+      const { data: tokenData, error } = await supabase.functions.invoke('quitaplus-token');
 
       if (error) {
         throw new Error(error.message || 'Erro ao testar conectividade');
@@ -41,7 +41,7 @@ export const useQuitaMais = () => {
 
       toast({
         title: "Conectividade OK!",
-        description: "Conexão com QuitaMais funcionando corretamente.",
+        description: "Conexão com QuitaPlus funcionando corretamente.",
         variant: "default"
       });
 
@@ -74,8 +74,8 @@ export const useQuitaMais = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // Create payment link using Supabase Edge Function
-      const { data: paymentLink, error } = await supabase.functions.invoke('quitamais-payment-link', {
+      // Create payment link using QuitaPlus proxy (no direct API calls)
+      const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy/payment-links', {
         body: {
           ...request,
           orderType
@@ -168,7 +168,8 @@ export const useQuitaMais = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      const { data: linkDetails, error } = await supabase.functions.invoke('quitamais-link-search', {
+      // Use QuitaPlus proxy to search for payment link (no direct API calls)
+      const { data: linkDetails, error } = await supabase.functions.invoke('quitaplus-proxy/payment-links/' + linkId, {
         body: { linkId }
       });
       
