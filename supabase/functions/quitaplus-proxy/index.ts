@@ -141,14 +141,12 @@ async function makeProxyRequest(
             CreditorName: payload.bankSlip.creditorName,
           } : undefined
 
-          const link = payload.link ? {
-            Amount: payload.link.amount,
-            Description: payload.link.description,
-            OrderId: payload.link.orderId,
-            ExpirationDate: payload.link.expirationDate,
-            Installments: payload.link.installments,
-            MaskFee: payload.link.maskFee,
-          } : undefined
+          // Flatten link fields into OrderDetails, API expects them at this level
+          const amount = payload.link?.amount ?? payload.amount ?? 0
+          const description = payload.link?.description ?? payload.description ?? 'Payment Link'
+          const orderId = payload.link?.orderId ?? payload.orderId
+          const installments = payload.link?.installments ?? payload.installments
+          const maskFee = payload.link?.maskFee ?? payload.maskFee
 
           // Compute required ExpiresAt (ISO8601). Default to +7 days if not provided
           const expiresAt: string = (() => {
@@ -157,19 +155,22 @@ async function makeProxyRequest(
             return date.toISOString()
           })()
 
-          // According to API error, required fields at OrderDetails root
-          const orderDetails: any = { MerchantId: merchantId, ExpiresAt: expiresAt }
+          // According to API errors, required fields belong at OrderDetails root
+          const orderDetails: any = { 
+            MerchantId: merchantId, 
+            ExpiresAt: expiresAt,
+            Description: description,
+            Amount: amount,
+          }
           if (creditorDocument) orderDetails.CreditorDocument = creditorDocument
           if (creditorName) orderDetails.CreditorName = creditorName
           if (bankSlip) orderDetails.BankSlip = bankSlip
           if (payer) orderDetails.Payer = payer
-          if (link) orderDetails.Link = link
+          if (orderId) orderDetails.OrderId = orderId
+          if (installments != null) orderDetails.Installments = installments
+          if (maskFee != null) orderDetails.MaskFee = maskFee
 
           const basePayload: any = {
-            ExpiresAt: expiresAt,
-            MerchantId: merchantId,
-            Description: payload.link?.description || 'Payment Link',
-            ...(payer ? { Payer: payer } : {}),
             OrderDetails: orderDetails,
             OrderType: payload.orderType || 1,
           }
