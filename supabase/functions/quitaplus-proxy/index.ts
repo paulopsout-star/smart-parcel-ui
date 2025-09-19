@@ -162,7 +162,6 @@ async function makeProxyRequest(
           }
 
           bodyPayload = basePayload
-        }
         } else if (targetPath.startsWith('prepayment')) {
           // Pre-payment authorization structure  
           if (!merchantId) {
