@@ -141,49 +141,49 @@ async function makeProxyRequest(
             CreditorName: payload.bankSlip.creditorName,
           } : undefined
 
-          // Format according to API specification
-          const amount = payload.link?.amount ?? payload.amount ?? 0
-          const description = payload.link?.description ?? payload.description ?? 'Payment Link'
-          const installments = payload.link?.installments ?? payload.installments
-          const maskFee = payload.link?.maskFee ?? payload.maskFee
-
-          // Format date as "YYYY-MM-DD HH:mm:ss" 
-          const expiresAt: string = (() => {
-            const raw = payload.link?.expirationDate
-            const date = raw ? new Date(raw) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-            return date.toISOString().slice(0, 19).replace('T', ' ')
-          })()
-
-          // Format payer object with camelCase
-          const formattedPayer = payer ? {
-            document: payer.Document,
-            email: payer.Email,
-            phoneNumber: payer.PhoneNumber,
-            name: payer.Name
-          } : undefined
-
-          // Format bankslip object with camelCase
-          const formattedBankslip = bankSlip ? {
-            number: bankSlip.Number,
-            creditorDocument: bankSlip.CreditorDocument,
-            creditorName: bankSlip.CreditorName
-          } : undefined
-
-          // Build orderDetails with correct structure
+          // Build orderDetails with only required and provided fields
           const orderDetails: any = { 
-            merchantId: merchantId,
-            expiresAt: expiresAt,
-            description: description,
-            details: payload.link?.details || payload.details || description
+            merchantId: merchantId
           }
 
-          if (formattedPayer) orderDetails.payer = formattedPayer
-          if (formattedBankslip) orderDetails.bankslip = formattedBankslip
+          // Only add fields that are explicitly provided in the original payload
+          if (payload.link?.expirationDate) {
+            const date = new Date(payload.link.expirationDate)
+            orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
+          }
+
+          if (payload.link?.description) {
+            orderDetails.description = payload.link.description
+          }
+
+          // Add payer if provided
+          if (payload.debtor) {
+            orderDetails.payer = {
+              document: payload.debtor.document,
+              email: payload.debtor.email,
+              phoneNumber: payload.debtor.phoneNumber,
+              name: payload.debtor.name
+            }
+          }
+
+          // Add bankslip if provided
+          if (payload.bankSlip) {
+            orderDetails.bankslip = {
+              number: payload.bankSlip.number,
+              creditorDocument: payload.bankSlip.creditorDocument,
+              creditorName: payload.bankSlip.creditorName
+            }
+          }
           
-          // Add checkout object
-          orderDetails.checkout = {
-            maskFee: maskFee !== undefined ? maskFee : false,
-            installments: installments !== undefined ? installments : null
+          // Add checkout if provided
+          if (payload.link) {
+            orderDetails.checkout = {}
+            if (payload.link.maskFee !== undefined) {
+              orderDetails.checkout.maskFee = payload.link.maskFee
+            }
+            if (payload.link.installments !== undefined) {
+              orderDetails.checkout.installments = payload.link.installments
+            }
           }
 
           const basePayload: any = {
