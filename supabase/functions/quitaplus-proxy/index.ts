@@ -146,6 +146,12 @@ async function makeProxyRequest(
             merchantId: merchantId
           }
 
+          // Add amount - convert from cents to decimal with proper formatting
+          if (payload.link?.amount !== undefined) {
+            // Convert from cents to decimal value (e.g., 250 -> 2.50)
+            orderDetails.amount = (payload.link.amount / 100).toFixed(2)
+          }
+
           // Only add fields that are explicitly provided in the original payload
           if (payload.link?.expirationDate) {
             const date = new Date(payload.link.expirationDate)
