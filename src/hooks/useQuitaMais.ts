@@ -77,11 +77,34 @@ export const useQuitaMais = () => {
       // Create payment link using QuitaPlus proxy (no direct API calls)
       const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy', {
         body: {
-          targetPath: 'payment-links',
+          targetPath: 'payment/order/1',
           httpMethod: 'POST',
           payload: {
-            ...request,
-            orderType
+            partner: {
+              merchantId: '', // Will be filled by proxy from environment
+              creditorDocument: request.bankslip?.creditorDocument || '',
+              creditorName: request.bankslip?.creditorName || ''
+            },
+            bankSlip: request.bankslip ? {
+              number: request.bankslip.number,
+              creditorDocument: request.bankslip.creditorDocument,
+              creditorName: request.bankslip.creditorName
+            } : undefined,
+            debtor: {
+              name: request.payer.name,
+              email: request.payer.email,
+              phoneNumber: request.payer.phoneNumber,
+              document: request.payer.document
+            },
+            link: {
+              amount: request.amount,
+              description: request.description || 'Pagamento',
+              orderId: request.orderId || `ORDER_${Date.now()}`,
+              expirationDate: request.expirationDate,
+              installments: request.checkout.installments,
+              maskFee: request.checkout.maskFee
+            },
+            orderType: 1 // PaymentLink type according to documentation
           }
         }
       });
@@ -175,7 +198,7 @@ export const useQuitaMais = () => {
       // Use QuitaPlus proxy to search for payment link (no direct API calls)
       const { data: linkDetails, error } = await supabase.functions.invoke('quitaplus-proxy', {
         body: {
-          targetPath: `payment-links/${linkId}`,
+          targetPath: `payment/order/${linkId}`,
           httpMethod: 'GET'
         }
       });

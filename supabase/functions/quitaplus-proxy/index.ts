@@ -48,7 +48,7 @@ async function makeProxyRequest(
   payload?: any,
   maxRetries = 3
 ): Promise<any> {
-  const baseUrl = 'https://api-sandbox.cappta.com.br/checkout'
+  const baseUrl = 'https://api-sandbox.cappta.com.br'
   const url = `${baseUrl}/${targetPath}`
   let lastError: any
   
@@ -56,6 +56,20 @@ async function makeProxyRequest(
     try {
       console.log(`Making proxy request to ${url}, attempt ${attempt}/${maxRetries}`)
       console.log('Request payload:', JSON.stringify(payload, null, 2))
+      
+      // Enhance payload with environment variables for QuitaMais API structure
+      if (httpMethod === 'POST' && targetPath === 'payment/order/1' && payload) {
+        payload = {
+          ...payload,
+          partner: {
+            ...payload.partner,
+            merchantId: Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || 'DEFAULT_MERCHANT',
+            creditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
+            creditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor'
+          }
+        }
+        console.log('Enhanced payload:', JSON.stringify(payload, null, 2))
+      }
       
       const requestOptions: RequestInit = {
         method: httpMethod,
