@@ -78,7 +78,7 @@ export const useQuitaMais = () => {
       // Create payment link using QuitaPlus proxy - send UI data directly
       const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy', {
         body: {
-          // Send UI data directly without wrappers - orderType removed (not in API docs)
+          // Send UI data directly following official contract structure
           ...(request.bankslip ? {
             bankSlip: {
               number: request.bankslip.number,
@@ -93,16 +93,16 @@ export const useQuitaMais = () => {
             document: request.payer.document
           },
           link: {
-            amount: request.amount, // will be saved to DB, not sent to API
+            amount: request.amount, // goes to EXTRAS_TO_STORE
             description: request.description,
-            orderId: request.orderId, // will be saved to DB, not sent to API
+            orderId: request.orderId, // goes to EXTRAS_TO_STORE
             expirationDate: request.expirationDate,
-            installments: null, // always null per API documentation
+            installments: request.checkout.installments,
             maskFee: request.checkout.maskFee,
             details: (request as any).details,
             initiatorKey: (request as any).initiatorKey
-          }
-          // orderType removed - not in API documentation
+          },
+          orderType // goes to EXTRAS_TO_STORE as order_type_ui
         }
       });
 
@@ -114,19 +114,22 @@ export const useQuitaMais = () => {
         throw new Error('Resposta inválida do servidor');
       }
 
-      // Save UI data extras to database (amount, orderId, orderType, ui_snapshot)
+      // Extract extras data returned by proxy (from EXTRAS_TO_STORE)
+      const extrasToStore = paymentLink._extrasToStore || {};
+      
+      // Save complete data to database using both API response and EXTRAS_TO_STORE
       const { data: savedLink, error: saveError } = await supabase
         .from('payment_links')
         .insert({
           link_id: paymentLink.linkId,
           link_url: paymentLink.linkUrl,
           guid: paymentLink.guid,
-          amount: request.amount,
+          amount: extrasToStore.amount || request.amount,
           payer_name: request.payer.name,
           payer_email: request.payer.email,
           payer_document: request.payer.document,
           payer_phone_number: request.payer.phoneNumber,
-          order_type: orderType,
+          order_type: extrasToStore.order_type_ui || orderType,
           order_id: request.orderId,
           description: request.description,
           installments: request.checkout.installments,
@@ -135,12 +138,12 @@ export const useQuitaMais = () => {
           creditor_document: request.bankslip?.creditorDocument,
           expiration_date: request.expirationDate ? new Date(request.expirationDate).toISOString() : null,
           status: paymentLink.status,
-          ui_snapshot: JSON.parse(JSON.stringify({
+          ui_snapshot: extrasToStore.ui_snapshot || {
             amount: request.amount,
             orderId: request.orderId,
             orderType: orderType,
             originalRequest: request
-          }))
+          }
         })
         .select()
         .single();

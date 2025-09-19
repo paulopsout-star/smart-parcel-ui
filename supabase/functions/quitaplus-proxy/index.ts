@@ -185,7 +185,7 @@ serve(async (req) => {
   }
 
   try {
-    // Receive UI data directly (no targetPath, httpMethod, payload wrappers)
+    // Receive UI data directly 
     const uiData = await req.json()
     
     console.log('Processing UI data:', JSON.stringify(maskSensitiveData(uiData), null, 2))
@@ -198,79 +198,91 @@ serve(async (req) => {
     // Get authentication token
     const accessToken = await getAuthToken(supabase)
     
-    // Build orderDetails object following API documentation
+    // Get environment variables
     const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID')
     if (!merchantId) {
       throw { status: 400, message: 'Missing required QUITA_MAIS_MERCHANT_ID secret' }
     }
 
-    const orderDetails: any = {
-      merchantId: merchantId
+    // ====== TRANSFORMATION FOLLOWING OFFICIAL CONTRACT ======
+    
+    // 1. BUILD REQUEST_BODY - exact structure for API
+    const REQUEST_BODY: any = {
+      orderDetails: {
+        merchantId: merchantId
+      }
     }
 
-    // Add required ExpiresAt field
+    // Add required expiresAt field (YYYY-MM-DD HH:mm:ss format)
     if (uiData.link?.expirationDate) {
       const date = new Date(uiData.link.expirationDate)
-      orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
+      REQUEST_BODY.orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
     } else {
       // Default to 30 days from now
       const defaultExpiration = new Date()
       defaultExpiration.setDate(defaultExpiration.getDate() + 30)
-      orderDetails.expiresAt = defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
+      REQUEST_BODY.orderDetails.expiresAt = defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
     }
 
-    // Add optional fields if provided
-    if (uiData.link?.description) {
-      orderDetails.description = uiData.link.description
-    }
-
-    if (uiData.link?.details) {
-      orderDetails.details = uiData.link.details
-    }
-
+    // Add initiatorKey if provided
     if (uiData.link?.initiatorKey) {
-      orderDetails.initiatorKey = uiData.link.initiatorKey
+      REQUEST_BODY.orderDetails.initiatorKey = uiData.link.initiatorKey
     }
 
-    // Map debtor → payer
+    // Add optional description and details
+    if (uiData.link?.description) {
+      REQUEST_BODY.orderDetails.description = uiData.link.description
+    }
+    if (uiData.link?.details) {
+      REQUEST_BODY.orderDetails.details = uiData.link.details
+    }
+
+    // Map debtor → payer (normalize documents to digits only)
     if (uiData.debtor) {
-      orderDetails.payer = {
-        document: uiData.debtor.document,
+      REQUEST_BODY.orderDetails.payer = {
+        document: uiData.debtor.document.replace(/\D/g, ''), // digits only
         email: uiData.debtor.email,
-        phoneNumber: uiData.debtor.phoneNumber,
+        phoneNumber: uiData.debtor.phoneNumber.replace(/\D/g, ''), // digits only
         name: uiData.debtor.name
       }
     }
 
-    // Map bankSlip → bankslip
+    // Map bankSlip → bankslip (normalize numbers to digits only)
     if (uiData.bankSlip) {
-      orderDetails.bankslip = {
-        number: uiData.bankSlip.number,
-        creditorDocument: uiData.bankSlip.creditorDocument,
+      REQUEST_BODY.orderDetails.bankslip = {
+        number: uiData.bankSlip.number.replace(/\D/g, ''), // digits only
+        creditorDocument: uiData.bankSlip.creditorDocument.replace(/\D/g, ''), // digits only
         creditorName: uiData.bankSlip.creditorName
       }
     }
 
-    // Map link.maskFee/installments → checkout.maskFee/installments
+    // Map link → checkout (normalize installments: empty/0 → null)
     if (uiData.link) {
-      orderDetails.checkout = {}
-      if (uiData.link.maskFee !== undefined) {
-        orderDetails.checkout.maskFee = uiData.link.maskFee
+      REQUEST_BODY.orderDetails.checkout = {
+        maskFee: uiData.link.maskFee || false,
+        installments: uiData.link.installments || null
       }
-      // Always set installments to null per API documentation
-      orderDetails.checkout.installments = null
     }
 
-    // Final payload with only orderDetails
-    const apiPayload = { orderDetails }
+    // 2. BUILD EXTRAS_TO_STORE - data for database only (never sent to API)
+    const EXTRAS_TO_STORE = {
+      amount: uiData.link?.amount || 0,
+      order_type_ui: uiData.orderType || 'unknown',
+      ui_snapshot: uiData // complete original UI data
+    }
     
-    console.log('Sending to API:', JSON.stringify(maskSensitiveData(apiPayload), null, 2))
+    console.log('REQUEST_BODY:', JSON.stringify(maskSensitiveData(REQUEST_BODY), null, 2))
+    console.log('EXTRAS_TO_STORE:', JSON.stringify(maskSensitiveData(EXTRAS_TO_STORE), null, 2))
     
-    // Make request to QuitaPlus API
-    const result = await makeApiRequest(accessToken, 'payment/order', 'POST', apiPayload)
+    // Make request to QuitaPlus API with clean REQUEST_BODY
+    const result = await makeApiRequest(accessToken, 'payment/order', 'POST', REQUEST_BODY)
     
+    // Return result with extras for database storage
     return new Response(
-      JSON.stringify(result),
+      JSON.stringify({
+        ...result,
+        _extrasToStore: EXTRAS_TO_STORE
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
