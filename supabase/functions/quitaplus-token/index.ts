@@ -8,6 +8,7 @@ const corsHeaders = {
 interface TokenCache {
   accessToken: string
   expiresAt: number
+  tokenType?: string
 }
 
 let tokenCache: TokenCache | null = null
@@ -134,7 +135,7 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           accessToken: tokenCache.accessToken,
-          tokenType: 'Bearer',
+          tokenType: tokenCache.tokenType || 'Bearer',
           expiresIn: Math.floor((tokenCache.expiresAt - now) / 1000),
           expiresAt: tokenCache.expiresAt,
           fromCache: true
@@ -149,18 +150,28 @@ serve(async (req) => {
 
     const tokenData = await fetchTokenWithRetry(tokenUrl, clientId, clientSecret)
     
+    // Normalize token response fields
+    const accessToken = tokenData?.access_token ?? tokenData?.accessToken ?? tokenData?.token
+    const expiresIn = (tokenData?.expires_in ?? tokenData?.expiresIn ?? 3600) as number
+    const tokenType = (tokenData?.token_type ?? tokenData?.tokenType ?? 'Bearer') as string
+
+    if (!accessToken) {
+      throw new Error('Token de acesso não recebido da API')
+    }
+    
     // Cache the token
-    const expiresAt = now + (tokenData.expires_in * 1000)
+    const expiresAt = now + (expiresIn * 1000)
     tokenCache = {
-      accessToken: tokenData.access_token,
-      expiresAt
+      accessToken,
+      expiresAt,
+      tokenType,
     }
 
     return new Response(
       JSON.stringify({
-        accessToken: tokenData.access_token,
-        tokenType: tokenData.token_type || 'Bearer',
-        expiresIn: tokenData.expires_in,
+        accessToken,
+        tokenType,
+        expiresIn,
         expiresAt,
         fromCache: false
       }),
