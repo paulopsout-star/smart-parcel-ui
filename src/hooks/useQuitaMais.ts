@@ -24,6 +24,49 @@ export const useQuitaMais = () => {
   
   const { toast } = useToast();
 
+  const testConnectivity = useCallback(async (): Promise<boolean> => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      // Test authentication with QuitaMais API
+      const { data: tokenData, error } = await supabase.functions.invoke('quitamais-auth');
+
+      if (error) {
+        throw new Error(error.message || 'Erro ao testar conectividade');
+      }
+
+      if (!tokenData?.accessToken) {
+        throw new Error('Token de acesso não recebido');
+      }
+
+      toast({
+        title: "Conectividade OK!",
+        description: "Conexão com QuitaMais funcionando corretamente.",
+        variant: "default"
+      });
+
+      setState(prev => ({ ...prev, isLoading: false, error: null }));
+      return true;
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+      
+      setState(prev => ({ 
+        ...prev, 
+        isLoading: false, 
+        error: errorMessage 
+      }));
+
+      toast({
+        title: "Erro de Conectividade",
+        description: errorMessage,
+        variant: "destructive"
+      });
+
+      return false;
+    }
+  }, [toast]);
+
   const createPaymentLink = useCallback(async (
     request: PaymentLinkRequest,
     orderType: OrderType = 'boleto'
@@ -241,6 +284,7 @@ export const useQuitaMais = () => {
 
   return {
     ...state,
+    testConnectivity,
     createPaymentLink,
     getPaymentLinkDetails,
     copyToClipboard,

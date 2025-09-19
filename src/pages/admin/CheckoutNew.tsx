@@ -62,7 +62,7 @@ export default function CheckoutNew() {
     guid: string;
   } | null>(null);
 
-  const { createPaymentLink, isLoading, copyToClipboard, shareViaWhatsApp, shareViaEmail } = useQuitaMais();
+  const { createPaymentLink, isLoading, copyToClipboard, shareViaWhatsApp, shareViaEmail, testConnectivity } = useQuitaMais();
   const { toast } = useToast();
 
   const {
@@ -251,17 +251,33 @@ export default function CheckoutNew() {
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
-          <div className="flex items-center gap-4 mb-8">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <ArrowLeft className="w-4 h-4" />
-              Voltar
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold">Gerar Link de Checkout</h1>
-              <p className="text-muted-foreground">
-                Crie um link de pagamento personalizado para seus clientes
-              </p>
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="sm" className="gap-2">
+                <ArrowLeft className="w-4 h-4" />
+                Voltar
+              </Button>
+              <div>
+                <h1 className="text-2xl font-bold">Gerar Link de Checkout</h1>
+                <p className="text-muted-foreground">
+                  Crie um link de pagamento personalizado para seus clientes
+                </p>
+              </div>
             </div>
+            
+            <Button 
+              variant="outline" 
+              onClick={testConnectivity}
+              disabled={isLoading}
+              className="gap-2"
+            >
+              {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <div className="w-4 h-4 rounded-full bg-success" />
+              )}
+              Testar Conectividade
+            </Button>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
