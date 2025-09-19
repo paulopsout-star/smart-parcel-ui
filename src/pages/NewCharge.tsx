@@ -194,28 +194,13 @@ export default function NewCharge() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/dashboard">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Voltar
-              </Link>
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold">Nova Cobrança</h1>
-              <p className="text-muted-foreground">
-                Crie uma cobrança pontual ou recorrente
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto p-6">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Nova Cobrança</h1>
+        <p className="text-muted-foreground">
+          Crie uma cobrança pontual ou recorrente
+        </p>
+      </div>
         <div className="max-w-4xl mx-auto">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
             <div className="grid lg:grid-cols-3 gap-8">
@@ -496,9 +481,8 @@ export default function NewCharge() {
                   </CardContent>
                 </Card>
               </div>
-            </div>
-          </form>
-        </div>
+          </div>
+        </form>
       </div>
     </div>
   );

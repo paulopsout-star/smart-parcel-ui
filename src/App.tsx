@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { Layout } from "@/components/Layout";
 
 // Public pages
 import Index from "./pages/Index";
@@ -16,6 +17,8 @@ import NotFound from "./pages/NotFound";
 // Protected pages
 import Dashboard from "./pages/Dashboard";
 import NewCharge from "./pages/NewCharge";
+import { ChargeHistory } from "./pages/ChargeHistory";
+import { UserManagement } from "./pages/admin/UserManagement";
 import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
 
@@ -35,22 +38,53 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             
-            {/* Protected routes - Admin/Operador */}
+            {/* Protected routes with Layout */}
             <Route path="/dashboard" element={
               <ProtectedRoute>
-                <Dashboard />
+                <Layout>
+                  <Dashboard />
+                </Layout>
               </ProtectedRoute>
             } />
             
+            <Route path="/new-charge" element={
+              <ProtectedRoute>
+                <Layout>
+                  <NewCharge />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/charge-history" element={
+              <ProtectedRoute>
+                <Layout>
+                  <ChargeHistory />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/admin/users" element={
+              <ProtectedRoute requiredRole="admin">
+                <Layout>
+                  <UserManagement />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            {/* Legacy routes */}
             <Route path="/charges/new" element={
               <ProtectedRoute>
-                <NewCharge />
+                <Layout>
+                  <NewCharge />
+                </Layout>
               </ProtectedRoute>
             } />
             
             <Route path="/charges" element={
               <ProtectedRoute>
-                <CheckoutHistory />
+                <Layout>
+                  <ChargeHistory />
+                </Layout>
               </ProtectedRoute>
             } />
             
@@ -63,13 +97,6 @@ const App = () => (
             <Route path="/admin/checkout/history" element={
               <ProtectedRoute>
                 <CheckoutHistory />
-              </ProtectedRoute>
-            } />
-            
-            {/* Admin only routes */}
-            <Route path="/admin/users" element={
-              <ProtectedRoute requiredRole="admin">
-                <div>Admin Users Page - To be implemented</div>
               </ProtectedRoute>
             } />
             

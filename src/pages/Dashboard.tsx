@@ -96,65 +96,35 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <CreditCard className="w-4 h-4 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold">Sistema de Cobrança</h1>
-                <p className="text-sm text-muted-foreground">
-                  Bem-vindo, {profile?.full_name}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <Badge variant={profile?.role === 'admin' ? 'default' : 'secondary'}>
-                {profile?.role === 'admin' ? 'Administrador' : 'Operador'}
-              </Badge>
-              
-              <div className="flex items-center gap-2">
-                {profile?.role === 'admin' && (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="/admin/users">
-                      <Settings className="w-4 h-4 mr-2" />
-                      Gerenciar Usuários
-                    </Link>
-                  </Button>
-                )}
-                
-                <Button variant="outline" size="sm" onClick={handleSignOut}>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sair
-                </Button>
-              </div>
-            </div>
-          </div>
+    <div className="container mx-auto p-6 space-y-8">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Bem-vindo, {profile?.full_name}
+          </p>
         </div>
-      </header>
+        <Badge variant={profile?.role === 'admin' ? 'default' : 'secondary'}>
+          {profile?.role === 'admin' ? 'Administrador' : 'Operador'}
+        </Badge>
+      </div>
 
-      <div className="container mx-auto px-4 py-8">
-        {/* Quick Actions */}
-        <div className="flex gap-4 mb-8">
-          <Button asChild size="lg">
-            <Link to="/charges/new">
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Cobrança
-            </Link>
-          </Button>
-          
-          <Button variant="outline" asChild size="lg">
-            <Link to="/charges">
-              <BarChart3 className="w-4 h-4 mr-2" />
-              Ver Cobranças
-            </Link>
-          </Button>
-        </div>
+      {/* Quick Actions */}
+      <div className="flex gap-4">
+        <Button asChild size="lg">
+          <Link to="/new-charge">
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Cobrança
+          </Link>
+        </Button>
+        
+        <Button variant="outline" asChild size="lg">
+          <Link to="/charge-history">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Histórico
+          </Link>
+        </Button>
+      </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
@@ -252,7 +222,6 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
-      </div>
     </div>
   );
 }
