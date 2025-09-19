@@ -77,7 +77,7 @@ export const useQuitaMais = () => {
       // Create payment link using QuitaPlus proxy (no direct API calls)
       const { data: paymentLink, error } = await supabase.functions.invoke('quitaplus-proxy', {
         body: {
-          targetPath: 'payment/order/1',
+          targetPath: 'payment/order',
           httpMethod: 'POST',
           payload: {
             // Partner será injetado pelo proxy com base nos secrets
@@ -95,11 +95,12 @@ export const useQuitaMais = () => {
               document: request.payer.document
             },
             link: {
-              amount: request.amount,
-              description: request.description || 'Pagamento',
-              orderId: request.orderId || `ORDER_${Date.now()}`,
+              // NÃO enviar amount e orderId para a API
               expirationDate: request.expirationDate,
-              installments: request.checkout.installments,
+              description: request.description, // conforme exemplo de documentação
+              details: (request as any).details, // opcional
+              initiatorKey: (request as any).initiatorKey, // opcional
+              installments: request.checkout.installments ?? null,
               maskFee: request.checkout.maskFee
             },
             orderType: 1 // PaymentLink

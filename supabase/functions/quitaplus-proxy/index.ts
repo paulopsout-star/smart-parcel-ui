@@ -113,7 +113,7 @@ async function makeProxyRequest(
       if (httpMethod === 'POST' && payload) {
         const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || ''
         
-        if (targetPath.startsWith('payment/order/')) {
+        if (targetPath.startsWith('payment/order')) {
           // Payment Link creation structure
           // Normalize and validate inputs to avoid empty or invalid values
           const normalizeDigits = (v?: string) => v ? v.replace(/\D/g, '') : undefined
