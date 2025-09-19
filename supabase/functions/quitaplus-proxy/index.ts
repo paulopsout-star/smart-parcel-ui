@@ -54,21 +54,51 @@ async function makeProxyRequest(
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`Making proxy request to ${url}, attempt ${attempt}/${maxRetries}`)
       console.log('Request payload:', JSON.stringify(payload, null, 2))
       
-      // Enhance payload with environment variables for QuitaMais API structure
-      if (httpMethod === 'POST' && targetPath === 'payment/order/1' && payload) {
-        payload = {
-          ...payload,
-          partner: {
-            ...payload.partner,
-            merchantId: Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || 'DEFAULT_MERCHANT',
-            creditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
-            creditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor'
-          }
+      let bodyPayload = payload
+      
+      // Transform to Quita+ expected schema (OrderDetails) when creating payment link
+      if (httpMethod === 'POST' && targetPath.startsWith('payment/order/') && payload) {
+        const partner = {
+          MerchantId: Deno.env.get('QUITA_MAIS_MERCHANT_ID') || payload.partner?.merchantId || '',
+          CreditorDocument: payload.partner?.creditorDocument || Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '',
+          CreditorName: payload.partner?.creditorName || Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || 'Credor',
         }
-        console.log('Enhanced payload:', JSON.stringify(payload, null, 2))
+
+        const debtor = payload.debtor ? {
+          Name: payload.debtor.name,
+          Email: payload.debtor.email,
+          PhoneNumber: payload.debtor.phoneNumber,
+          Document: payload.debtor.document,
+        } : undefined
+
+        const bankSlip = payload.bankSlip ? {
+          Number: payload.bankSlip.number,
+          CreditorDocument: payload.bankSlip.creditorDocument,
+          CreditorName: payload.bankSlip.creditorName,
+        } : undefined
+
+        const link = payload.link ? {
+          Amount: payload.link.amount,
+          Description: payload.link.description,
+          OrderId: payload.link.orderId,
+          ExpirationDate: payload.link.expirationDate,
+          Installments: payload.link.installments,
+          MaskFee: payload.link.maskFee,
+        } : undefined
+
+        bodyPayload = {
+          OrderDetails: {
+            Partner: partner,
+            ...(bankSlip ? { BankSlip: bankSlip } : {}),
+            Debtor: debtor,
+            Link: link,
+          },
+          OrderType: payload.orderType || 1,
+        }
+
+        console.log('Transformed payload:', JSON.stringify(bodyPayload, null, 2))
       }
       
       const requestOptions: RequestInit = {
@@ -80,8 +110,8 @@ async function makeProxyRequest(
         }
       }
       
-      if (payload && (httpMethod === 'POST' || httpMethod === 'PUT' || httpMethod === 'PATCH')) {
-        requestOptions.body = JSON.stringify(payload)
+      if (bodyPayload && (httpMethod === 'POST' || httpMethod === 'PUT' || httpMethod === 'PATCH')) {
+        requestOptions.body = JSON.stringify(bodyPayload)
       }
       
       const response = await fetch(url, requestOptions)
