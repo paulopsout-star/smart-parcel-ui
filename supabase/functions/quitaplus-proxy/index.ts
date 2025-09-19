@@ -48,13 +48,14 @@ async function makeProxyRequest(
   payload?: any,
   maxRetries = 3
 ): Promise<any> {
-  const baseUrl = 'https://api-sandbox.cappta.com.br'
+  const baseUrl = 'https://api-sandbox.cappta.com.br/checkout'
   const url = `${baseUrl}/${targetPath}`
   let lastError: any
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Making proxy request to ${url}, attempt ${attempt}/${maxRetries}`)
+      console.log('Request payload:', JSON.stringify(payload, null, 2))
       
       const requestOptions: RequestInit = {
         method: httpMethod,
@@ -71,11 +72,17 @@ async function makeProxyRequest(
       
       const response = await fetch(url, requestOptions)
       
+      console.log(`Response status: ${response.status}`)
+      
       if (response.ok) {
         const data = await response.json()
-        console.log('Proxy request successful')
+        console.log('Proxy request successful:', data)
         return data
       }
+      
+      // Get response body for debugging
+      const errorText = await response.text()
+      console.log(`Response error (${response.status}):`, errorText)
       
       // Handle rate limiting and server errors with retry
       if (response.status === 429 || response.status >= 500) {
@@ -90,8 +97,7 @@ async function makeProxyRequest(
         }
       }
       
-      // For other errors, get response body and prepare to return error
-      const errorText = await response.text()
+      // For other errors, prepare to return error
       lastError = {
         status: response.status,
         message: errorText,
