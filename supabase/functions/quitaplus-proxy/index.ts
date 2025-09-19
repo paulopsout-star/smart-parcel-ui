@@ -276,7 +276,7 @@ serve(async (req) => {
     
     // Make request to QuitaPlus API with clean REQUEST_BODY
     // Make request to QuitaPlus API with clean REQUEST_BODY
-    const result = await makeApiRequest(accessToken, 'payment/link', 'POST', REQUEST_BODY)
+    const result = await makeApiRequest(accessToken, 'payment/order', 'POST', REQUEST_BODY)
     
     // Return result with extras for database storage
     return new Response(
