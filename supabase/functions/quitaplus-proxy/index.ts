@@ -152,11 +152,18 @@ async function makeProxyRequest(
             orderDetails.amount = (payload.link.amount / 100).toFixed(2)
           }
 
-          // Only add fields that are explicitly provided in the original payload
+          // Add required ExpiresAt field - default to 30 days from now if not provided
           if (payload.link?.expirationDate) {
             const date = new Date(payload.link.expirationDate)
             orderDetails.expiresAt = date.toISOString().slice(0, 19).replace('T', ' ')
+          } else {
+            // Default to 30 days from now
+            const defaultExpiration = new Date()
+            defaultExpiration.setDate(defaultExpiration.getDate() + 30)
+            orderDetails.expiresAt = defaultExpiration.toISOString().slice(0, 19).replace('T', ' ')
           }
+
+          // Only add fields that are explicitly provided in the original payload
 
           if (payload.link?.description) {
             orderDetails.description = payload.link.description
