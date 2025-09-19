@@ -14,6 +14,80 @@ export type Database = {
   }
   public: {
     Tables: {
+      charges: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          installments: number | null
+          is_active: boolean
+          mask_fee: boolean | null
+          metadata: Json | null
+          next_charge_date: string | null
+          payer_document: string
+          payer_email: string
+          payer_name: string
+          payer_phone: string
+          recurrence_end_date: string | null
+          recurrence_interval: number | null
+          recurrence_type: Database["public"]["Enums"]["recurrence_type"]
+          status: Database["public"]["Enums"]["charge_status"]
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          installments?: number | null
+          is_active?: boolean
+          mask_fee?: boolean | null
+          metadata?: Json | null
+          next_charge_date?: string | null
+          payer_document: string
+          payer_email: string
+          payer_name: string
+          payer_phone: string
+          recurrence_end_date?: string | null
+          recurrence_interval?: number | null
+          recurrence_type?: Database["public"]["Enums"]["recurrence_type"]
+          status?: Database["public"]["Enums"]["charge_status"]
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          installments?: number | null
+          is_active?: boolean
+          mask_fee?: boolean | null
+          metadata?: Json | null
+          next_charge_date?: string | null
+          payer_document?: string
+          payer_email?: string
+          payer_name?: string
+          payer_phone?: string
+          recurrence_end_date?: string | null
+          recurrence_interval?: number | null
+          recurrence_type?: Database["public"]["Enums"]["recurrence_type"]
+          status?: Database["public"]["Enums"]["charge_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "charges_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_links: {
         Row: {
           amount: number
@@ -86,6 +160,33 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string
+          id: string
+          is_active: boolean
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          full_name: string
+          id: string
+          is_active?: boolean
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          full_name?: string
+          id?: string
+          is_active?: boolean
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount_in_cents: number
@@ -154,10 +255,34 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin_or_operador: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "operador"
+      charge_status:
+        | "pending"
+        | "processing"
+        | "completed"
+        | "failed"
+        | "cancelled"
+      recurrence_type:
+        | "pontual"
+        | "diaria"
+        | "semanal"
+        | "quinzenal"
+        | "mensal"
+        | "semestral"
+        | "anual"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -284,6 +409,24 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "operador"],
+      charge_status: [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "cancelled",
+      ],
+      recurrence_type: [
+        "pontual",
+        "diaria",
+        "semanal",
+        "quinzenal",
+        "mensal",
+        "semestral",
+        "anual",
+      ],
+    },
   },
 } as const
