@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
-import { Loader2, Eye, RefreshCw } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List } from 'lucide-react';
+import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -36,6 +37,22 @@ export default function ChargeHistory() {
   const [charges, setCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
+  const [executionsDialog, setExecutionsDialog] = useState<{ open: boolean; chargeId: string; chargeName: string }>({
+    open: false,
+    chargeId: '',
+    chargeName: ''
+  });
+  const [executions, setExecutions] = useState<any[]>([]);
+  
+  const { 
+    loading: linksLoading, 
+    executionsLoading,
+    getPaymentLink, 
+    generatePaymentLink, 
+    copyToClipboard, 
+    openPaymentLink,
+    getChargeExecutions
+  } = useChargeLinks();
 
   const fetchCharges = async () => {
     try {
@@ -86,6 +103,79 @@ export default function ChargeHistory() {
         variant: "destructive",
       });
     }
+  };
+
+  const handleViewExecutions = async (chargeId: string, chargeName: string) => {
+    setExecutionsDialog({ open: true, chargeId, chargeName });
+    const executionsList = await getChargeExecutions(chargeId);
+    setExecutions(executionsList);
+  };
+
+  const CheckoutButtons = ({ charge }: { charge: Charge }) => {
+    const [paymentLink, setPaymentLink] = useState<any>(null);
+    const [linkChecked, setLinkChecked] = useState(false);
+
+    useEffect(() => {
+      if (!linkChecked) {
+        getPaymentLink(charge.id).then(link => {
+          setPaymentLink(link);
+          setLinkChecked(true);
+        });
+      }
+    }, [charge.id, linkChecked]);
+
+    const handleGenerateLink = async () => {
+      const newLink = await generatePaymentLink(charge.id);
+      if (newLink) {
+        setPaymentLink(newLink);
+      }
+    };
+
+    if (!linkChecked) {
+      return (
+        <div className="flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span className="text-sm text-muted-foreground">Verificando...</span>
+        </div>
+      );
+    }
+
+    if (paymentLink) {
+      return (
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => openPaymentLink(paymentLink.absolute_url)}
+            disabled={linksLoading}
+          >
+            <ExternalLink className="w-4 h-4 mr-1" />
+            Abrir
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => copyToClipboard(paymentLink.absolute_url)}
+            disabled={linksLoading}
+          >
+            <Copy className="w-4 h-4 mr-1" />
+            Copiar
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={handleGenerateLink}
+        disabled={linksLoading}
+      >
+        <Plus className="w-4 h-4 mr-1" />
+        Gerar Link
+      </Button>
+    );
   };
 
   useEffect(() => {
@@ -177,7 +267,7 @@ export default function ChargeHistory() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <p className="text-sm font-medium">Valor</p>
                   <p className="text-lg">{formatCurrency(charge.amount)}</p>
@@ -192,6 +282,10 @@ export default function ChargeHistory() {
                     <p>{format(new Date(charge.next_charge_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
                   </div>
                 )}
+                <div>
+                  <p className="text-sm font-medium">Checkout</p>
+                  <CheckoutButtons charge={charge} />
+                </div>
               </div>
 
               {charge.description && (
@@ -236,6 +330,16 @@ export default function ChargeHistory() {
                   >
                     <RefreshCw className="w-4 h-4 mr-1" />
                     Processar Agora
+                  </Button>
+                )}
+                {charge.recurrence_type !== 'pontual' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleViewExecutions(charge.id, charge.payer_name)}
+                  >
+                    <List className="w-4 h-4 mr-1" />
+                    Ver Execuções
                   </Button>
                 )}
                 <Button
@@ -302,6 +406,75 @@ export default function ChargeHistory() {
               <ChargeExecutions chargeId={selectedCharge.id} />
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Executions Dialog for Recurring Charges */}
+      <Dialog open={executionsDialog.open} onOpenChange={(open) => setExecutionsDialog(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Execuções - {executionsDialog.chargeName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {executionsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin" />
+              </div>
+            ) : executions.length > 0 ? (
+              <div className="space-y-2">
+                {executions.map((execution) => (
+                  <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(execution.status)}
+                        <span className="font-medium">
+                          {execution.scheduled_for ? 
+                            format(new Date(execution.scheduled_for), 'dd/MM/yyyy HH:mm', { locale: ptBR }) :
+                            format(new Date(execution.execution_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })
+                          }
+                        </span>
+                      </div>
+                      {execution.last_error && (
+                        <p className="text-sm text-destructive">Erro: {execution.last_error}</p>
+                      )}
+                    </div>
+                    {execution.status === 'READY' && execution.payment_link_id && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const baseUrl = window.location.origin;
+                            const url = `${baseUrl}/payment?execution=${execution.id}`;
+                            openPaymentLink(url);
+                          }}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-1" />
+                          Abrir
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const baseUrl = window.location.origin;
+                            const url = `${baseUrl}/payment?execution=${execution.id}`;
+                            copyToClipboard(url);
+                          }}
+                        >
+                          <Copy className="w-4 h-4 mr-1" />
+                          Copiar
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhuma execução encontrada para esta cobrança.
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

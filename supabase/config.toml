@@ -34,6 +34,9 @@ verify_jwt = false
 [functions.public-payment-link]
 verify_jwt = false
 
+[functions.charge-links]
+verify_jwt = true
+
 [db]
 port = 54322
 shadow_port = 54320
