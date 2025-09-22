@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,9 @@ const formSchema = z.object({
   description: z.string().optional(),
   installments: z.string(),
   mask_fee: z.boolean(),
+  has_boleto: z.boolean(),
+  boleto_barcode: z.string().optional(),
+  message_template_id: z.string().optional(),
   
   // Recorrência
   recurrence_type: z.enum(["pontual", "diaria", "semanal", "quinzenal", "mensal", "semestral", "anual"]),
@@ -44,6 +47,9 @@ interface FormData {
   description?: string;
   installments: string;
   mask_fee: boolean;
+  has_boleto: boolean;
+  boleto_barcode?: string;
+  message_template_id?: string;
   recurrence_type: "pontual" | "diaria" | "semanal" | "quinzenal" | "mensal" | "semestral" | "anual";
   recurrence_interval: string;
   recurrence_end_date?: string;
@@ -52,6 +58,8 @@ interface FormData {
 export default function NewCharge() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [messageTemplates, setMessageTemplates] = useState<any[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
   const { profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -66,6 +74,7 @@ export default function NewCharge() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       mask_fee: false,
+      has_boleto: false,
       installments: "1",
       recurrence_type: "pontual",
       recurrence_interval: "1"
@@ -74,6 +83,33 @@ export default function NewCharge() {
 
   const watchRecurrenceType = watch("recurrence_type");
   const watchAmount = watch("amount");
+  const watchHasBoleto = watch("has_boleto");
+
+  // Carregar templates de mensagem
+  useEffect(() => {
+    const loadMessageTemplates = async () => {
+      if (!profile) return;
+      
+      setLoadingTemplates(true);
+      try {
+        const { data, error } = await supabase
+          .from('message_templates')
+          .select('*')
+          .eq('user_id', profile.id)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setMessageTemplates(data || []);
+      } catch (error) {
+        console.error('Error loading message templates:', error);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+
+    loadMessageTemplates();
+  }, [profile]);
 
   const formatAmount = (value: string) => {
     // Convert string to cents (integer)
@@ -129,6 +165,25 @@ export default function NewCharge() {
       const interval = parseInt(data.recurrence_interval) || 1;
       const nextChargeDate = calculateNextChargeDate(data.recurrence_type, interval);
 
+      // Buscar snapshot do template de mensagem se selecionado
+      let messageTemplateSnapshot = null;
+      if (data.message_template_id) {
+        const { data: template } = await supabase
+          .from('message_templates')
+          .select('*')
+          .eq('id', data.message_template_id)
+          .single();
+        
+        if (template) {
+          messageTemplateSnapshot = {
+            id: template.id,
+            name: template.name,
+            content: template.content,
+            variables: template.variables
+          };
+        }
+      }
+
       // Create charge record
       const { data: charge, error: chargeError } = await supabase
         .from('charges')
@@ -142,6 +197,10 @@ export default function NewCharge() {
           description: data.description || null,
           installments: parseInt(data.installments),
           mask_fee: data.mask_fee,
+          has_boleto: data.has_boleto,
+          boleto_barcode: data.boleto_barcode || null,
+          message_template_id: data.message_template_id || null,
+          message_template_snapshot: messageTemplateSnapshot,
           recurrence_type: data.recurrence_type,
           recurrence_interval: interval,
           recurrence_end_date: data.recurrence_end_date ? new Date(data.recurrence_end_date).toISOString() : null,
@@ -339,6 +398,71 @@ export default function NewCharge() {
                       <Label htmlFor="mask_fee">
                         Parcelas fechadas (cliente não pode alterar)
                       </Label>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Controller
+                        control={control}
+                        name="has_boleto"
+                        render={({ field }) => (
+                          <Checkbox
+                            id="has_boleto"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        )}
+                      />
+                      <Label htmlFor="has_boleto">
+                        Cobrança com vínculo de boleto (simulado)
+                      </Label>
+                    </div>
+
+                    {watchHasBoleto && (
+                      <div>
+                        <Label htmlFor="boleto_barcode">Linha Digitável do Boleto</Label>
+                        <Input
+                          id="boleto_barcode"
+                          placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
+                          {...register("boleto_barcode")}
+                          className="font-mono"
+                        />
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Digite a linha digitável do boleto para simulação
+                        </p>
+                      </div>
+                    )}
+
+                    <div>
+                      <Label htmlFor="message_template_id">Template de Mensagem</Label>
+                      <Controller
+                        control={control}
+                        name="message_template_id"
+                        render={({ field }) => (
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={loadingTemplates}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={loadingTemplates ? "Carregando..." : "Selecione um template"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="">Nenhum template</SelectItem>
+                              {messageTemplates.map((template) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Template para mensagem WhatsApp (simulado). {' '}
+                        <Link to="/message-templates" className="text-primary hover:underline">
+                          Gerenciar templates
+                        </Link>
+                      </p>
                     </div>
 
                     <div>

@@ -64,16 +64,56 @@ export type Database = {
           },
         ]
       }
+      charge_messages: {
+        Row: {
+          charge_id: string
+          content: string
+          created_at: string
+          error_details: Json | null
+          id: string
+          phone_number: string
+          sent_at: string | null
+          status: string
+          template_id: string | null
+        }
+        Insert: {
+          charge_id: string
+          content: string
+          created_at?: string
+          error_details?: Json | null
+          id?: string
+          phone_number: string
+          sent_at?: string | null
+          status?: string
+          template_id?: string | null
+        }
+        Update: {
+          charge_id?: string
+          content?: string
+          created_at?: string
+          error_details?: Json | null
+          id?: string
+          phone_number?: string
+          sent_at?: string | null
+          status?: string
+          template_id?: string | null
+        }
+        Relationships: []
+      }
       charges: {
         Row: {
           amount: number
+          boleto_barcode: string | null
           created_at: string
           created_by: string
           description: string | null
+          has_boleto: boolean | null
           id: string
           installments: number | null
           is_active: boolean
           mask_fee: boolean | null
+          message_template_id: string | null
+          message_template_snapshot: Json | null
           metadata: Json | null
           next_charge_date: string | null
           payer_document: string
@@ -88,13 +128,17 @@ export type Database = {
         }
         Insert: {
           amount: number
+          boleto_barcode?: string | null
           created_at?: string
           created_by: string
           description?: string | null
+          has_boleto?: boolean | null
           id?: string
           installments?: number | null
           is_active?: boolean
           mask_fee?: boolean | null
+          message_template_id?: string | null
+          message_template_snapshot?: Json | null
           metadata?: Json | null
           next_charge_date?: string | null
           payer_document: string
@@ -109,13 +153,17 @@ export type Database = {
         }
         Update: {
           amount?: number
+          boleto_barcode?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
+          has_boleto?: boolean | null
           id?: string
           installments?: number | null
           is_active?: boolean
           mask_fee?: boolean | null
+          message_template_id?: string | null
+          message_template_snapshot?: Json | null
           metadata?: Json | null
           next_charge_date?: string | null
           payer_document?: string
@@ -137,6 +185,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      message_templates: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          name: string
+          updated_at: string
+          user_id: string
+          variables: Json | null
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          updated_at?: string
+          user_id: string
+          variables?: Json | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          updated_at?: string
+          user_id?: string
+          variables?: Json | null
+        }
+        Relationships: []
       }
       payment_links: {
         Row: {
@@ -210,9 +291,82 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_splits: {
+        Row: {
+          amount_cents: number
+          charge_id: string | null
+          created_at: string
+          id: string
+          method: string
+          payment_link_id: string | null
+          processed_at: string | null
+          status: string
+          transaction_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          charge_id?: string | null
+          created_at?: string
+          id?: string
+          method: string
+          payment_link_id?: string | null
+          processed_at?: string | null
+          status?: string
+          transaction_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          charge_id?: string | null
+          created_at?: string
+          id?: string
+          method?: string
+          payment_link_id?: string | null
+          processed_at?: string | null
+          status?: string
+          transaction_id?: string | null
+        }
+        Relationships: []
+      }
+      payout_accounts: {
+        Row: {
+          account_holder_document: string
+          account_holder_name: string
+          created_at: string
+          id: string
+          is_active: boolean | null
+          pix_key: string
+          pix_key_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_holder_document: string
+          account_holder_name: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          pix_key: string
+          pix_key_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_holder_document?: string
+          account_holder_name?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          pix_key?: string
+          pix_key_type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
+          default_payout_account_id: string | null
           full_name: string
           id: string
           is_active: boolean
@@ -221,6 +375,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          default_payout_account_id?: string | null
           full_name: string
           id: string
           is_active?: boolean
@@ -229,11 +384,57 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          default_payout_account_id?: string | null
           full_name?: string
           id?: string
           is_active?: boolean
           role?: Database["public"]["Enums"]["app_role"]
           updated_at?: string
+        }
+        Relationships: []
+      }
+      refund_jobs: {
+        Row: {
+          charge_id: string | null
+          created_at: string
+          error_details: Json | null
+          fee_amount_cents: number
+          id: string
+          original_amount_cents: number
+          payment_link_id: string | null
+          processed_at: string | null
+          reason: string
+          refund_amount_cents: number
+          scheduled_for: string
+          status: string
+        }
+        Insert: {
+          charge_id?: string | null
+          created_at?: string
+          error_details?: Json | null
+          fee_amount_cents?: number
+          id?: string
+          original_amount_cents: number
+          payment_link_id?: string | null
+          processed_at?: string | null
+          reason: string
+          refund_amount_cents: number
+          scheduled_for: string
+          status?: string
+        }
+        Update: {
+          charge_id?: string | null
+          created_at?: string
+          error_details?: Json | null
+          fee_amount_cents?: number
+          id?: string
+          original_amount_cents?: number
+          payment_link_id?: string | null
+          processed_at?: string | null
+          reason?: string
+          refund_amount_cents?: number
+          scheduled_for?: string
+          status?: string
         }
         Relationships: []
       }

@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import Dashboard from "./pages/Dashboard";
 import NewCharge from "./pages/NewCharge";
 import ChargeHistory from "./pages/ChargeHistory";
+import MessageTemplates from "./pages/MessageTemplates";
 import UserManagement from "./pages/admin/UserManagement";
 import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
@@ -59,6 +60,14 @@ const App = () => (
               <ProtectedRoute>
                 <Layout>
                   <ChargeHistory />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/message-templates" element={
+              <ProtectedRoute>
+                <Layout>
+                  <MessageTemplates />
                 </Layout>
               </ProtectedRoute>
             } />
