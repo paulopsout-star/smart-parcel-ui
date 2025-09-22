@@ -57,7 +57,7 @@ export default function SubscriptionManagement() {
     plan_code: ''
   });
   const [filters, setFilters] = useState({
-    status: '',
+    status: 'all',
     page: 1
   });
 
@@ -71,7 +71,7 @@ export default function SubscriptionManagement() {
       }
 
       const params = new URLSearchParams();
-      if (filters.status) params.append('status', filters.status);
+      if (filters.status && filters.status !== 'all') params.append('status', filters.status);
       params.append('page', filters.page.toString());
 
       const functionUrl = `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/subscription-manager/list?${params}`;
@@ -253,7 +253,7 @@ export default function SubscriptionManagement() {
                   <SelectValue placeholder="Todos os status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="ACTIVE">Ativo</SelectItem>
                   <SelectItem value="PAST_DUE">Em Atraso</SelectItem>
                   <SelectItem value="CANCELED">Cancelado</SelectItem>
