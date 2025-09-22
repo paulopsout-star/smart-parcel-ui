@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, ArrowLeft, CreditCard } from "lucide-react";
+import { Loader2, ArrowLeft, CreditCard, Wallet } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -60,6 +60,8 @@ export default function NewCharge() {
   const [error, setError] = useState("");
   const [messageTemplates, setMessageTemplates] = useState<any[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
+  const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(true);
   const { profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -85,30 +87,46 @@ export default function NewCharge() {
   const watchAmount = watch("amount");
   const watchHasBoleto = watch("has_boleto");
 
-  // Carregar templates de mensagem
+  // Carregar templates de mensagem e verificar conta PIX
   useEffect(() => {
-    const loadMessageTemplates = async () => {
+    const loadData = async () => {
       if (!profile) return;
       
       setLoadingTemplates(true);
+      setCheckingPayoutAccount(true);
+
       try {
-        const { data, error } = await supabase
+        // Carregar templates
+        const { data: templatesData, error: templatesError } = await supabase
           .from('message_templates')
           .select('*')
           .eq('user_id', profile.id)
           .eq('is_active', true)
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        setMessageTemplates(data || []);
+        if (templatesError) throw templatesError;
+        setMessageTemplates(templatesData || []);
+
+        // Verificar conta PIX ativa
+        const { data: payoutData, error: payoutError } = await supabase
+          .from('payout_accounts')
+          .select('id')
+          .eq('user_id', profile.id)
+          .eq('is_active', true)
+          .limit(1);
+
+        if (payoutError) throw payoutError;
+        setHasPayoutAccount((payoutData || []).length > 0);
+
       } catch (error) {
-        console.error('Error loading message templates:', error);
+        console.error('Error loading data:', error);
       } finally {
         setLoadingTemplates(false);
+        setCheckingPayoutAccount(false);
       }
     };
 
-    loadMessageTemplates();
+    loadData();
   }, [profile]);
 
   const formatAmount = (value: string) => {
@@ -156,6 +174,17 @@ export default function NewCharge() {
 
   const onSubmit = async (data: FormData) => {
     if (!profile) return;
+    
+    // Validar conta PIX para cobranças sem boleto
+    if (!data.has_boleto && !hasPayoutAccount) {
+      setError('Para cobranças sem boleto, é necessário ter uma conta PIX cadastrada.');
+      toast({
+        title: "Conta PIX necessária",
+        description: "Cadastre uma conta PIX em 'Contas PIX' antes de criar cobranças sem boleto.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setIsLoading(true);
     setError("");
@@ -217,13 +246,31 @@ export default function NewCharge() {
         throw chargeError;
       }
 
-      // Process charge immediately (create payment link)
+      // Process charge immediately (create payment link and send message)
       const { data: executionResult, error: executionError } = await supabase.functions.invoke('process-charge', {
         body: {
           chargeId: charge.id,
           immediate: true
         }
       });
+
+      // Se houver template de mensagem, enviar mensagem mock
+      if (data.message_template_id && messageTemplateSnapshot) {
+        try {
+          await supabase.functions.invoke('send-mock-message', {
+            body: {
+              chargeId: charge.id,
+              templateContent: messageTemplateSnapshot.content,
+              phoneNumber: data.payer_phone,
+              payerName: data.payer_name,
+              amount: amountInCents
+            }
+          });
+        } catch (messageError) {
+          console.error('Error sending mock message:', messageError);
+          // Não falhar a criação da cobrança por causa da mensagem
+        }
+      }
 
       if (executionError) {
         console.error('Error processing charge:', executionError);
@@ -464,6 +511,18 @@ export default function NewCharge() {
                         </Link>
                       </p>
                     </div>
+
+                    {!watchHasBoleto && !hasPayoutAccount && !checkingPayoutAccount && (
+                      <Alert variant="destructive">
+                        <Wallet className="w-4 h-4" />
+                        <AlertDescription>
+                          Para cobranças sem boleto, você precisa ter uma conta PIX cadastrada. 
+                          <Link to="/payout-accounts" className="ml-1 underline">
+                            Cadastrar conta PIX
+                          </Link>
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
                     <div>
                       <Label htmlFor="description">Descrição</Label>

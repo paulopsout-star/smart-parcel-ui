@@ -16,7 +16,9 @@ import {
   History, 
   Users, 
   LogOut, 
-  User 
+  User,
+  MessageSquare,
+  CreditCard
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -46,6 +48,9 @@ export function Layout({ children }: LayoutProps) {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Nova Cobrança', href: '/new-charge', icon: Plus },
     { name: 'Histórico', href: '/charge-history', icon: History },
+    { name: 'Templates', href: '/message-templates', icon: MessageSquare },
+    { name: 'Contas PIX', href: '/payout-accounts', icon: CreditCard },
+    { name: 'Mensagens', href: '/message-queue', icon: MessageSquare },
     ...(isAdmin ? [{ name: 'Usuários', href: '/admin/users', icon: Users }] : []),
   ];
 

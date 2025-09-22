@@ -56,3 +56,15 @@ email_double_confirm_changes = true
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
+
+[functions.quitamais-auth]
+verify_jwt = false
+
+[functions.process-charge]
+verify_jwt = false
+
+[functions.recurring-charges-cron]
+verify_jwt = false
+
+[functions.send-mock-message]
+verify_jwt = false

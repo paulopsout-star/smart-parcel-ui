@@ -55,16 +55,10 @@ export default function MessageQueue() {
   const loadMessages = async () => {
     setLoading(true);
     try {
+      // Carregar mensagens primeiro
       let query = supabase
         .from('charge_messages')
-        .select(`
-          *,
-          charges (
-            payer_name,
-            amount,
-            description
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -72,10 +66,25 @@ export default function MessageQueue() {
         query = query.eq('status', statusFilter);
       }
 
-      const { data, error } = await query;
+      const { data: messagesData, error: messagesError } = await query;
+      if (messagesError) throw messagesError;
 
-      if (error) throw error;
-      setMessages(data || []);
+      // Buscar dados das cobranças relacionadas
+      const chargeIds = messagesData?.map(m => m.charge_id) || [];
+      const { data: chargesData, error: chargesError } = await supabase
+        .from('charges')
+        .select('id, payer_name, amount, description')
+        .in('id', chargeIds);
+      
+      if (chargesError) throw chargesError;
+
+      // Combinar os dados
+      const messagesWithCharges = messagesData?.map(message => ({
+        ...message,
+        charges: chargesData?.find(charge => charge.id === message.charge_id) || null
+      })) || [];
+
+      setMessages(messagesWithCharges as any);
     } catch (error) {
       console.error('Error loading messages:', error);
       toast({

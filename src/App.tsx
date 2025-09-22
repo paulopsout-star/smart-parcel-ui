@@ -19,6 +19,8 @@ import Dashboard from "./pages/Dashboard";
 import NewCharge from "./pages/NewCharge";
 import ChargeHistory from "./pages/ChargeHistory";
 import MessageTemplates from "./pages/MessageTemplates";
+import PayoutAccounts from "./pages/PayoutAccounts";
+import MessageQueue from "./pages/MessageQueue";
 import UserManagement from "./pages/admin/UserManagement";
 import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
@@ -72,6 +74,22 @@ const App = () => (
               </ProtectedRoute>
             } />
             
+            <Route path="/payout-accounts" element={
+              <ProtectedRoute>
+                <Layout>
+                  <PayoutAccounts />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/message-queue" element={
+              <ProtectedRoute>
+                <Layout>
+                  <MessageQueue />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
             <Route path="/admin/users" element={
               <ProtectedRoute requiredRole="admin">
                 <Layout>
@@ -80,7 +98,7 @@ const App = () => (
               </ProtectedRoute>
             } />
             
-            {/* Legacy routes */}
+            {/* Legacy routes for backward compatibility */}
             <Route path="/charges/new" element={
               <ProtectedRoute>
                 <Layout>
