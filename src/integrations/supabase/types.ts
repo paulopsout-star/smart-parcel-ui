@@ -336,6 +336,7 @@ export type Database = {
       payment_links: {
         Row: {
           amount: number
+          charge_id: string | null
           created_at: string
           creditor_document: string | null
           creditor_name: string | null
@@ -359,6 +360,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          charge_id?: string | null
           created_at?: string
           creditor_document?: string | null
           creditor_name?: string | null
@@ -382,6 +384,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          charge_id?: string | null
           created_at?: string
           creditor_document?: string | null
           creditor_name?: string | null
@@ -403,7 +406,15 @@ export type Database = {
           ui_snapshot?: Json | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "payment_links_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: false
+            referencedRelation: "charges"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payment_splits: {
         Row: {
