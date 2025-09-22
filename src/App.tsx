@@ -12,6 +12,7 @@ import Index from "./pages/Index";
 import Payment from "./pages/Payment";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import CreateAdmin from "./pages/CreateAdmin";
 import NotFound from "./pages/NotFound";
 
 // Protected pages
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/payment" element={<Payment />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/create-admin" element={<CreateAdmin />} />
             
             {/* Protected routes with Layout */}
             <Route path="/dashboard" element={
