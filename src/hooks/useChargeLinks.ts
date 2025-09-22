@@ -35,6 +35,10 @@ export function useChargeLinks() {
 
       if (error) {
         console.error('Supabase function error:', error);
+        // Don't treat 404 as an error - just means no link exists
+        if (error.message?.includes('404') || data?.code === 'NOT_FOUND') {
+          return null;
+        }
         return null;
       }
       return data?.link || null;
@@ -58,6 +62,17 @@ export function useChargeLinks() {
 
       if (error) {
         console.error('Supabase function error:', error);
+        
+        // Handle specific error codes
+        if (data?.code === 'SUBSCRIPTION_BLOCKED') {
+          toast({
+            title: "Assinatura necessária",
+            description: "É necessário ter uma assinatura ativa para gerar novos links de pagamento",
+            variant: "destructive",
+          });
+          return null;
+        }
+        
         throw new Error(error.message || 'Failed to generate payment link');
       }
 

@@ -24,26 +24,21 @@ serve(async (req) => {
       }
     );
 
-    const url = new URL(req.url);
     let chargeId: string | null = null;
     let action: string | null = null;
 
-    // Try to get chargeId from URL path first
-    const pathParts = url.pathname.split('/').filter(part => part);
-    const chargeIndex = pathParts.indexOf('charges');
-    if (chargeIndex !== -1 && chargeIndex + 1 < pathParts.length) {
-      chargeId = pathParts[chargeIndex + 1];
-      action = 'payment-link';
-    }
-
-    // If not found in path, try to get from request body
-    if (!chargeId && req.method === 'POST') {
+    // Get chargeId from request body for POST requests
+    if (req.method === 'POST') {
       try {
         const body = await req.json();
         chargeId = body.chargeId || body.charge_id;
-        action = body.action || 'payment-link';
-      } catch {
-        // Ignore JSON parsing errors
+        action = body.action || 'get';
+      } catch (error) {
+        console.error('Error parsing request body:', error);
+        return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
     }
 
@@ -58,7 +53,7 @@ serve(async (req) => {
     console.log(`Processing ${req.method} request for charge: ${chargeId}, action: ${action}`);
 
     // Handle GET requests (get existing payment link)
-    if (req.method === 'GET' || (req.method === 'POST' && action === 'get')) {
+    if (req.method === 'POST' && action === 'get') {
       console.log(`Getting payment link for charge ${chargeId}`);
 
       // Check if charge exists and user has access (RLS will handle this)
@@ -66,12 +61,23 @@ serve(async (req) => {
         .from('charges')
         .select('id, amount, payer_name, payer_email, payer_document, payer_phone, description, status')
         .eq('id', chargeId)
-        .single();
+        .maybeSingle();
 
       if (chargeError) {
         console.error('Error fetching charge:', chargeError);
         return new Response(JSON.stringify({ 
+          code: 'CHARGE_ACCESS_DENIED',
           error: 'Charge not found or access denied' 
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!charge) {
+        return new Response(JSON.stringify({ 
+          code: 'CHARGE_NOT_FOUND',
+          error: 'Charge not found' 
         }), {
           status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -81,7 +87,7 @@ serve(async (req) => {
       // Look for existing ACTIVE payment link
       const { data: existingLink, error: linkError } = await supabase
         .from('payment_links')
-        .select('id, link_id, link_url, guid, status')
+        .select('id, token, url, status')
         .eq('charge_id', chargeId)
         .eq('status', 'active')
         .maybeSingle();
@@ -89,6 +95,7 @@ serve(async (req) => {
       if (linkError) {
         console.error('Error fetching payment link:', linkError);
         return new Response(JSON.stringify({ 
+          code: 'DB_ERROR',
           error: 'Error fetching payment link' 
         }), {
           status: 500,
@@ -98,21 +105,23 @@ serve(async (req) => {
 
       if (!existingLink) {
         return new Response(JSON.stringify({ 
+          code: 'NOT_FOUND',
           link: null,
           message: 'No active payment link found' 
         }), {
+          status: 404,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
 
       const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
-      const absoluteUrl = `${baseUrl}/payment?token=${existingLink.guid}`;
+      const absoluteUrl = `${baseUrl}${existingLink.url}`;
 
       return new Response(JSON.stringify({
         link: {
           id: existingLink.id,
-          token: existingLink.guid,
-          url: `/payment?token=${existingLink.guid}`,
+          token: existingLink.token,
+          url: existingLink.url,
           absolute_url: absoluteUrl,
           status: existingLink.status
         }
@@ -135,6 +144,7 @@ serve(async (req) => {
 
         if (!subscriptionStatus?.allowed) {
           return new Response(JSON.stringify({ 
+            code: 'SUBSCRIPTION_BLOCKED',
             error: 'Subscription required to generate new payment links' 
           }), {
             status: 403,
@@ -148,17 +158,33 @@ serve(async (req) => {
         .from('charges')
         .select('*')
         .eq('id', chargeId)
-        .single();
+        .maybeSingle();
 
       if (chargeError) {
         console.error('Error fetching charge:', chargeError);
-        throw new Error('Charge not found or access denied');
+        return new Response(JSON.stringify({ 
+          code: 'CHARGE_ACCESS_DENIED',
+          error: 'Charge not found or access denied' 
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      if (!charge) {
+        return new Response(JSON.stringify({ 
+          code: 'CHARGE_NOT_FOUND',
+          error: 'Charge not found' 
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // Check for existing ACTIVE payment link (idempotent)
       const { data: existingLink } = await supabase
         .from('payment_links')
-        .select('id, link_id, link_url, guid, status')
+        .select('id, token, url, status')
         .eq('charge_id', chargeId)
         .eq('status', 'active')
         .maybeSingle();
@@ -166,13 +192,13 @@ serve(async (req) => {
       if (existingLink) {
         console.log(`Returning existing payment link for charge ${chargeId}`);
         const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
-        const absoluteUrl = `${baseUrl}/payment?token=${existingLink.guid}`;
+        const absoluteUrl = `${baseUrl}${existingLink.url}`;
 
         return new Response(JSON.stringify({
           link: {
             id: existingLink.id,
-            token: existingLink.guid,
-            url: `/payment?token=${existingLink.guid}`,
+            token: existingLink.token,
+            url: existingLink.url,
             absolute_url: absoluteUrl,
             status: existingLink.status
           }
@@ -181,19 +207,10 @@ serve(async (req) => {
         });
       }
 
-      // Generate new payment link
-      const linkId = `charge_${chargeId}_${Date.now()}`;
-      const guid = `${chargeId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
-      const linkUrl = `/payment?token=${guid}`;
-      const absoluteUrl = `${baseUrl}${linkUrl}`;
-
+      // Create new payment link - trigger will populate token/url
       const { data: newLink, error: insertError } = await supabase
         .from('payment_links')
         .insert({
-          link_id: linkId,
-          link_url: linkUrl,
-          guid: guid,
           charge_id: chargeId,
           amount: charge.amount,
           payer_name: charge.payer_name,
@@ -204,27 +221,58 @@ serve(async (req) => {
           installments: charge.installments || 1,
           mask_fee: charge.mask_fee || false,
           status: 'active',
-          order_type: 'credit_card',
-          ui_snapshot: {
-            charge_id: chargeId,
-            created_via: 'charge_history'
-          }
+          order_type: 'credit_card'
         })
-        .select()
+        .select('id, token, url, status')
         .single();
 
       if (insertError) {
         console.error('Error creating payment link:', insertError);
-        throw insertError;
+        // Handle unique constraint violations (race condition)
+        if (insertError.code === '23505') {
+          const { data: existingAfterRace } = await supabase
+            .from('payment_links')
+            .select('id, token, url, status')
+            .eq('charge_id', chargeId)
+            .eq('status', 'active')
+            .maybeSingle();
+          
+          if (existingAfterRace) {
+            const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
+            const absoluteUrl = `${baseUrl}${existingAfterRace.url}`;
+            
+            return new Response(JSON.stringify({
+              link: {
+                id: existingAfterRace.id,
+                token: existingAfterRace.token,
+                url: existingAfterRace.url,
+                absolute_url: absoluteUrl,
+                status: existingAfterRace.status
+              }
+            }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        }
+        
+        return new Response(JSON.stringify({ 
+          code: 'CREATE_FAILED',
+          error: 'Failed to create payment link' 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       console.log(`Created new payment link for charge ${chargeId}`);
+      const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
+      const absoluteUrl = `${baseUrl}${newLink.url}`;
 
       return new Response(JSON.stringify({
         link: {
           id: newLink.id,
-          token: newLink.guid,
-          url: linkUrl,
+          token: newLink.token,
+          url: newLink.url,
           absolute_url: absoluteUrl,
           status: newLink.status
         }
@@ -233,7 +281,10 @@ serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+    return new Response(JSON.stringify({ 
+      error: 'Method not allowed',
+      code: 'METHOD_NOT_ALLOWED' 
+    }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
