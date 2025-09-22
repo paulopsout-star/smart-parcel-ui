@@ -25,18 +25,40 @@ serve(async (req) => {
     );
 
     const url = new URL(req.url);
-    const pathParts = url.pathname.split('/');
-    const chargeId = pathParts[pathParts.indexOf('charges') + 1];
+    let chargeId: string | null = null;
+    let action: string | null = null;
 
-    if (!chargeId) {
-      return new Response(JSON.stringify({ error: 'Charge ID is required' }), {
+    // Try to get chargeId from URL path first
+    const pathParts = url.pathname.split('/').filter(part => part);
+    const chargeIndex = pathParts.indexOf('charges');
+    if (chargeIndex !== -1 && chargeIndex + 1 < pathParts.length) {
+      chargeId = pathParts[chargeIndex + 1];
+      action = 'payment-link';
+    }
+
+    // If not found in path, try to get from request body
+    if (!chargeId && req.method === 'POST') {
+      try {
+        const body = await req.json();
+        chargeId = body.chargeId || body.charge_id;
+        action = body.action || 'payment-link';
+      } catch {
+        // Ignore JSON parsing errors
+      }
+    }
+
+    if (!chargeId || !chargeId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      console.error('Invalid or missing charge ID:', chargeId);
+      return new Response(JSON.stringify({ error: 'Valid charge ID is required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // GET /charges/:id/payment-link
-    if (req.method === 'GET') {
+    console.log(`Processing ${req.method} request for charge: ${chargeId}, action: ${action}`);
+
+    // Handle GET requests (get existing payment link)
+    if (req.method === 'GET' || (req.method === 'POST' && action === 'get')) {
       console.log(`Getting payment link for charge ${chargeId}`);
 
       // Check if charge exists and user has access (RLS will handle this)
@@ -48,7 +70,12 @@ serve(async (req) => {
 
       if (chargeError) {
         console.error('Error fetching charge:', chargeError);
-        throw new Error('Charge not found or access denied');
+        return new Response(JSON.stringify({ 
+          error: 'Charge not found or access denied' 
+        }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // Look for existing ACTIVE payment link
@@ -61,7 +88,12 @@ serve(async (req) => {
 
       if (linkError) {
         console.error('Error fetching payment link:', linkError);
-        throw linkError;
+        return new Response(JSON.stringify({ 
+          error: 'Error fetching payment link' 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       if (!existingLink) {
@@ -89,20 +121,16 @@ serve(async (req) => {
       });
     }
 
-    // POST /charges/:id/payment-link
-    if (req.method === 'POST') {
+    // Handle POST requests (create new payment link)
+    if (req.method === 'POST' && action === 'create') {
       console.log(`Creating payment link for charge ${chargeId}`);
 
       // Check subscription status first
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', supabase.auth.getUser().data.user?.id)
-        .single();
-
-      if (userProfile) {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (user) {
         const { data: subscriptionStatus } = await supabase.functions.invoke('subscription-manager', {
-          body: { action: 'check_status', company_id: userProfile.id }
+          body: { action: 'check_status', company_id: user.id }
         });
 
         if (!subscriptionStatus?.allowed) {

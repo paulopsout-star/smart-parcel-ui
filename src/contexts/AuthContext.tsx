@@ -33,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user ID:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
 
+      console.log('Profile fetched successfully:', data);
       return data as Profile;
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -122,6 +124,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = profile?.role === 'admin' && profile?.is_active;
   const isOperador = (profile?.role === 'operador' || profile?.role === 'admin') && profile?.is_active;
+
+  // Debug logging
+  console.log('Auth Debug - Profile:', profile);
+  console.log('Auth Debug - isAdmin:', isAdmin);
+  console.log('Auth Debug - isOperador:', isOperador);
+  console.log('Auth Debug - loading:', loading);
 
   const value = {
     user,

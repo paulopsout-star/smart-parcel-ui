@@ -28,13 +28,15 @@ export function useChargeLinks() {
       setLoading(true);
       const { data, error } = await supabase.functions.invoke('charge-links', {
         body: { 
-          method: 'GET',
-          path: `/charges/${chargeId}/payment-link`,
-          chargeId 
+          chargeId: chargeId,
+          action: 'get'
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase function error:', error);
+        return null;
+      }
       return data?.link || null;
     } catch (error: any) {
       console.error('Error getting payment link:', error);
@@ -49,13 +51,15 @@ export function useChargeLinks() {
       setLoading(true);
       const { data, error } = await supabase.functions.invoke('charge-links', {
         body: { 
-          method: 'POST',
-          path: `/charges/${chargeId}/payment-link`,
-          chargeId 
+          chargeId: chargeId,
+          action: 'create'
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw new Error(error.message || 'Failed to generate payment link');
+      }
 
       if (data?.link) {
         toast({
