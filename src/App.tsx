@@ -27,6 +27,7 @@ import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
 import RefundManagement from "./pages/admin/RefundManagement";
 import RecurrenceManagement from "./pages/admin/RecurrenceManagement";
+import Reports from "./pages/admin/Reports";
 
 const queryClient = new QueryClient();
 
@@ -106,6 +107,14 @@ const App = () => (
               <ProtectedRoute requiredRole="admin">
                 <Layout>
                   <RecurrenceManagement />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/admin/reports" element={
+              <ProtectedRoute requiredRole="admin">
+                <Layout>
+                  <Reports />
                 </Layout>
               </ProtectedRoute>
             } />

@@ -20,7 +20,8 @@ import {
   MessageSquare,
   CreditCard,
   RefreshCw,
-  Repeat
+  Repeat,
+  BarChart3
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -56,7 +57,8 @@ export function Layout({ children }: LayoutProps) {
     ...(isAdmin ? [
       { name: 'Usuários', href: '/admin/users', icon: Users },
       { name: 'Estornos', href: '/admin/refunds', icon: RefreshCw },
-      { name: 'Recorrentes', href: '/admin/recurrences', icon: Repeat }
+      { name: 'Recorrentes', href: '/admin/recurrences', icon: Repeat },
+      { name: 'Relatórios', href: '/admin/reports', icon: BarChart3 }
     ] : []),
   ];
 

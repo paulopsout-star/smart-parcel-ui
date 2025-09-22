@@ -25,6 +25,12 @@ verify_jwt = false
 [functions.payment-splits]
 verify_jwt = false
 
+[functions.admin-reports]
+verify_jwt = false
+
+[functions.export-worker]
+verify_jwt = false
+
 [db]
 port = 54322
 shadow_port = 54320

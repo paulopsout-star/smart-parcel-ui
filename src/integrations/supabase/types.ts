@@ -225,6 +225,54 @@ export type Database = {
           },
         ]
       }
+      export_jobs: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          error: string | null
+          file_path: string | null
+          filters_json: Json
+          finished_at: string | null
+          format: string
+          id: string
+          owner_id: string
+          rows_count: number | null
+          scope: string
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          error?: string | null
+          file_path?: string | null
+          filters_json: Json
+          finished_at?: string | null
+          format: string
+          id?: string
+          owner_id: string
+          rows_count?: number | null
+          scope: string
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          error?: string | null
+          file_path?: string | null
+          filters_json?: Json
+          finished_at?: string | null
+          format?: string
+          id?: string
+          owner_id?: string
+          rows_count?: number | null
+          scope?: string
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       message_templates: {
         Row: {
           content: string
