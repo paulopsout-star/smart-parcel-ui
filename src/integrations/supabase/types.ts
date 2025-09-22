@@ -234,6 +234,33 @@ export type Database = {
         }
         Relationships: []
       }
+      mock_events: {
+        Row: {
+          created_at: string
+          event_key: string
+          id: string
+          payload: Json
+          processed_at: string | null
+          provider: string
+        }
+        Insert: {
+          created_at?: string
+          event_key: string
+          id?: string
+          payload: Json
+          processed_at?: string | null
+          provider: string
+        }
+        Update: {
+          created_at?: string
+          event_key?: string
+          id?: string
+          payload?: Json
+          processed_at?: string | null
+          provider?: string
+        }
+        Relationships: []
+      }
       payment_links: {
         Row: {
           amount: number
@@ -587,6 +614,7 @@ export type Database = {
         | "completed"
         | "failed"
         | "cancelled"
+      payment_method: "PIX" | "CARD" | "QUITA"
       recurrence_type:
         | "pontual"
         | "diaria"
@@ -595,6 +623,7 @@ export type Database = {
         | "mensal"
         | "semestral"
         | "anual"
+      template_channel: "WHATSAPP" | "EMAIL"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -730,6 +759,7 @@ export const Constants = {
         "failed",
         "cancelled",
       ],
+      payment_method: ["PIX", "CARD", "QUITA"],
       recurrence_type: [
         "pontual",
         "diaria",
@@ -739,6 +769,7 @@ export const Constants = {
         "semestral",
         "anual",
       ],
+      template_channel: ["WHATSAPP", "EMAIL"],
     },
   },
 } as const
