@@ -72,11 +72,21 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          foreground: "hsl(var(--brand-foreground))",
+          light: "hsl(var(--brand-light))",
+          dark: "hsl(var(--brand-dark))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      backgroundImage: {
+        "gradient-brand": "var(--gradient-brand)",
+        "gradient-hero": "var(--gradient-hero)",
       },
       keyframes: {
         "accordion-down": {
