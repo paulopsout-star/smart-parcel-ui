@@ -499,46 +499,35 @@ export default function NewCharge() {
                       </Label>
                     </div>
 
-                    {/* Seletor de tipo de cobrança pontual - apenas para pontual */}
+                    {/* Seletor de boleto - apenas para pontual */}
                     {watchRecurrenceType === 'pontual' && (
-                      <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
-                        <Label className="text-base font-medium">Tipo de Cobrança Pontual</Label>
-                        <Controller
-                          control={control}
-                          name="has_boleto_link"
-                          render={({ field }) => (
-                            <RadioGroup
-                              value={field.value ? "with_boleto_link" : "without_boleto_link"}
-                              onValueChange={(value) => {
-                                const hasBoletoLink = value === "with_boleto_link";
-                                field.onChange(hasBoletoLink);
-                                // Clear linha digitável when switching to "without boleto"
-                                if (!hasBoletoLink) {
-                                  setValue("boleto_linha_digitavel", "");
-                                }
-                              }}
-                              className="flex flex-col space-y-3"
-                            >
-                              <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="without_boleto_link" id="without_boleto_link" />
-                                <Label htmlFor="without_boleto_link" className="flex items-center gap-2 cursor-pointer">
-                                  <CreditCard className="w-4 h-4" />
-                                  Cobrança Pontual SEM vínculo de boleto
-                                </Label>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="with_boleto_link" id="with_boleto_link" />
-                                <Label htmlFor="with_boleto_link" className="flex items-center gap-2 cursor-pointer">
-                                  <Receipt className="w-4 h-4" />
-                                  Cobrança Pontual COM vínculo de boleto (simulado)
-                                </Label>
-                              </div>
-                            </RadioGroup>
-                          )}
-                        />
+                      <div className="space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <Controller
+                            control={control}
+                            name="has_boleto_link"
+                            render={({ field }) => (
+                              <Checkbox
+                                id="has_boleto_link"
+                                checked={field.value}
+                                onCheckedChange={(checked) => {
+                                  field.onChange(checked);
+                                  // Clear linha digitável when unchecking
+                                  if (!checked) {
+                                    setValue("boleto_linha_digitavel", "");
+                                  }
+                                }}
+                              />
+                            )}
+                          />
+                          <Label htmlFor="has_boleto_link" className="flex items-center gap-2 cursor-pointer">
+                            <Receipt className="w-4 h-4" />
+                            Com boleto (simulado)
+                          </Label>
+                        </div>
                         
                         {watchHasBoletoLink && (
-                          <div className="mt-4">
+                          <div className="p-4 border rounded-lg bg-muted/50">
                             <Label htmlFor="boleto_linha_digitavel">Linha Digitável do Boleto *</Label>
                             <Textarea
                               id="boleto_linha_digitavel"
