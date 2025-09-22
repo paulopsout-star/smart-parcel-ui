@@ -54,6 +54,12 @@ export default function Payment() {
 
       if (data.status === 'completed') {
         setPaymentCompleted(true);
+        // Se já estava completo, redirecionar imediatamente
+        if (token) {
+          setTimeout(() => {
+            navigate(`/thank-you?pl=${token}`);
+          }, 1000);
+        }
       }
     } catch (error: any) {
       console.error('Error loading charge:', error);
@@ -72,8 +78,36 @@ export default function Payment() {
     setPaymentCompleted(true);
     toast({
       title: 'Pagamento concluído!',
-      description: 'Todos os splits foram processados com sucesso.',
+      description: 'Redirecionando para página de confirmação...',
     });
+    
+    // Redirecionar para Thank You page
+    if (token) {
+      setTimeout(() => {
+        navigate(`/thank-you?pl=${token}`);
+      }, 2000);
+    } else {
+      // Se não tiver token, buscar payment_link relacionado à cobrança
+      setTimeout(async () => {
+        try {
+          const { data: paymentLink } = await supabase
+            .from('payment_links')
+            .select('link_id')
+            .eq('order_id', charge?.id)
+            .single();
+          
+          if (paymentLink?.link_id) {
+            navigate(`/thank-you?pl=${paymentLink.link_id}`);
+          } else {
+            // Fallback para uma mensagem de sucesso simples
+            navigate('/');
+          }
+        } catch (error) {
+          console.error('Error finding payment link:', error);
+          navigate('/');
+        }
+      }, 2000);
+    }
   };
 
   const formatCurrency = (cents: number) => {
@@ -144,8 +178,9 @@ export default function Payment() {
             <CheckCircle className="w-16 h-16 text-success mx-auto mb-6" />
             <h2 className="text-3xl font-bold mb-4">Pagamento Realizado com Sucesso!</h2>
             <p className="text-muted-foreground mb-8">
-              Sua cobrança foi processada e todos os splits foram concluídos.
+              Redirecionando para página de confirmação...
             </p>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
             <Card>
               <CardContent className="p-6">
                 <h3 className="font-semibold mb-4">Detalhes da Cobrança</h3>

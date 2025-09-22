@@ -84,5 +84,8 @@ verify_jwt = false
 [functions.refunds-scheduler]
 verify_jwt = false
 
+[functions.thank-you-summary]
+verify_jwt = false
+
 [functions.create-admin-user]
 verify_jwt = false
