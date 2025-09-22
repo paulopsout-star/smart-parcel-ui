@@ -272,12 +272,12 @@ export default function Reports() {
             </div>
             <div>
               <label className="text-sm font-medium">Tipo</label>
-              <Select value={filters.tipo || ''} onValueChange={(value) => setFilters(prev => ({ ...prev, tipo: value || undefined }))}>
+              <Select value={filters.tipo || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, tipo: value === 'all' ? undefined : value }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="pontual">Pontual</SelectItem>
                   <SelectItem value="recorrente">Recorrente</SelectItem>
                 </SelectContent>
@@ -285,12 +285,12 @@ export default function Reports() {
             </div>
             <div>
               <label className="text-sm font-medium">Método</label>
-              <Select value={filters.metodo || ''} onValueChange={(value) => setFilters(prev => ({ ...prev, metodo: value || undefined }))}>
+              <Select value={filters.metodo || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, metodo: value === 'all' ? undefined : value }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="PIX">PIX</SelectItem>
                   <SelectItem value="CARD">Cartão</SelectItem>
                   <SelectItem value="QUITA">Quita+</SelectItem>
@@ -299,12 +299,12 @@ export default function Reports() {
             </div>
             <div>
               <label className="text-sm font-medium">Status</label>
-              <Select value={filters.status || ''} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value || undefined }))}>
+              <Select value={filters.status || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? undefined : value }))}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="paid">Pago</SelectItem>
                   <SelectItem value="pending">Pendente</SelectItem>
                   <SelectItem value="failed">Falhou</SelectItem>
