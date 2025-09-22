@@ -196,7 +196,7 @@ export default function NewCharge() {
 
       // Buscar snapshot do template de mensagem se selecionado
       let messageTemplateSnapshot = null;
-      if (data.message_template_id) {
+      if (data.message_template_id && data.message_template_id !== "none") {
         const { data: template } = await supabase
           .from('message_templates')
           .select('*')
@@ -228,7 +228,7 @@ export default function NewCharge() {
           mask_fee: data.mask_fee,
           has_boleto: data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
-          message_template_id: data.message_template_id || null,
+          message_template_id: data.message_template_id === "none" ? null : data.message_template_id,
           message_template_snapshot: messageTemplateSnapshot,
           recurrence_type: data.recurrence_type,
           recurrence_interval: interval,
@@ -255,7 +255,7 @@ export default function NewCharge() {
       });
 
       // Se houver template de mensagem, enviar mensagem mock
-      if (data.message_template_id && messageTemplateSnapshot) {
+      if (data.message_template_id && data.message_template_id !== "none" && messageTemplateSnapshot) {
         try {
           await supabase.functions.invoke('send-mock-message', {
             body: {
@@ -494,7 +494,7 @@ export default function NewCharge() {
                               <SelectValue placeholder={loadingTemplates ? "Carregando..." : "Selecione um template"} />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">Nenhum template</SelectItem>
+                              <SelectItem value="none">Nenhum template</SelectItem>
                               {messageTemplates.map((template) => (
                                 <SelectItem key={template.id} value={template.id}>
                                   {template.name}
