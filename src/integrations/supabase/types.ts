@@ -355,8 +355,10 @@ export type Database = {
           payer_name: string
           payer_phone_number: string | null
           status: string
+          token: string | null
           ui_snapshot: Json | null
           updated_at: string
+          url: string | null
         }
         Insert: {
           amount: number
@@ -379,8 +381,10 @@ export type Database = {
           payer_name: string
           payer_phone_number?: string | null
           status?: string
+          token?: string | null
           ui_snapshot?: Json | null
           updated_at?: string
+          url?: string | null
         }
         Update: {
           amount?: number
@@ -403,8 +407,10 @@ export type Database = {
           payer_name?: string
           payer_phone_number?: string | null
           status?: string
+          token?: string | null
           ui_snapshot?: Json | null
           updated_at?: string
+          url?: string | null
         }
         Relationships: [
           {
