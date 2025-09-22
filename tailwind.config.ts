@@ -78,6 +78,16 @@ export default {
           light: "hsl(var(--brand-light))",
           dark: "hsl(var(--brand-dark))",
         },
+        ink: {
+          DEFAULT: "hsl(var(--ink))",
+          secondary: "hsl(var(--ink-secondary))",
+          muted: "hsl(var(--ink-muted))",
+        },
+        surface: {
+          DEFAULT: "hsl(var(--surface))",
+          alt: "hsl(var(--surface-alt))",
+          light: "hsl(var(--surface-light))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -87,6 +97,7 @@ export default {
       backgroundImage: {
         "gradient-brand": "var(--gradient-brand)",
         "gradient-hero": "var(--gradient-hero)",
+        "gradient-surface": "var(--gradient-surface)",
       },
       keyframes: {
         "accordion-down": {

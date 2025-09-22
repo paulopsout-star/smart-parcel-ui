@@ -20,7 +20,7 @@ import {
 
 export default function Index() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-surface-alt text-ink">
       {/* SEO Meta Tags */}
       <title>Autonegocie - Hub de Pagamentos | Plataforma Completa de Cobrança</title>
       <meta name="description" content="Hub de Pagamentos Autonegocie - Plataforma completa para gestão de cobranças, parcelamentos flexíveis e recebimento garantido. Transforme sua negociação com clientes." />
@@ -30,24 +30,24 @@ export default function Index() {
       <meta name="robots" content="index, follow" />
       
       {/* Header */}
-      <header className="border-b bg-white/95 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b bg-surface/95 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <div className="text-2xl font-bold bg-gradient-brand bg-clip-text text-transparent">
                 Autonegocie
               </div>
-              <Badge variant="secondary" className="text-xs">Hub de Pagamentos</Badge>
+              <Badge variant="secondary" className="text-xs bg-brand/20 text-ink">Hub de Pagamentos</Badge>
             </div>
             <nav className="hidden md:flex items-center space-x-6">
-              <a href="#recursos" className="text-foreground/80 hover:text-brand transition-colors">Recursos</a>
-              <a href="#como-funciona" className="text-foreground/80 hover:text-brand transition-colors">Como funciona</a>
-              <a href="#casos-de-uso" className="text-foreground/80 hover:text-brand transition-colors">Casos de uso</a>
-              <a href="#faq" className="text-foreground/80 hover:text-brand transition-colors">FAQ</a>
+              <a href="#recursos" className="text-ink-secondary hover:text-brand transition-colors">Recursos</a>
+              <a href="#como-funciona" className="text-ink-secondary hover:text-brand transition-colors">Como funciona</a>
+              <a href="#casos-de-uso" className="text-ink-secondary hover:text-brand transition-colors">Casos de uso</a>
+              <a href="#faq" className="text-ink-secondary hover:text-brand transition-colors">FAQ</a>
             </nav>
             <div className="flex items-center space-x-3">
               <Link to="/login">
-                <Button variant="ghost" className="text-foreground hover:text-brand">
+                <Button variant="ghost" className="text-ink hover:text-brand">
                   Login
                 </Button>
               </Link>
@@ -110,25 +110,25 @@ export default function Index() {
         </section>
 
         {/* Recursos Section */}
-        <section id="recursos" className="py-20 bg-muted/30">
+        <section id="recursos" className="py-20 bg-surface-light">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-ink">
                 Recursos que <span className="text-brand">garantem resultados</span>
               </h2>
-              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              <p className="text-xl text-ink-secondary max-w-2xl mx-auto">
                 Ferramentas poderosas para otimizar sua gestão de cobranças e aumentar a conversão
               </p>
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+              <Card className="border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-surface">
                 <CardHeader>
-                  <div className="w-12 h-12 bg-brand-light rounded-lg flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 bg-brand/20 rounded-lg flex items-center justify-center mb-4">
                     <CreditCard className="h-6 w-6 text-brand" />
                   </div>
-                  <CardTitle>Parcelamento Flexível</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-ink">Parcelamento Flexível</CardTitle>
+                  <CardDescription className="text-ink-secondary">
                     Ofereça até 21x no cartão com recebimento integral à vista em 1 dia útil
                   </CardDescription>
                 </CardHeader>
@@ -136,27 +136,27 @@ export default function Index() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Até 9 cartões diferentes
+                      <span className="text-ink-secondary">Até 9 cartões diferentes</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Sem desconto de taxas
+                      <span className="text-ink-secondary">Sem desconto de taxas</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Aprovação automática
+                      <span className="text-ink-secondary">Aprovação automática</span>
                     </li>
                   </ul>
                 </CardContent>
               </Card>
 
-              <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+              <Card className="border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-surface">
                 <CardHeader>
-                  <div className="w-12 h-12 bg-brand-light rounded-lg flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 bg-brand/20 rounded-lg flex items-center justify-center mb-4">
                     <Shield className="h-6 w-6 text-brand" />
                   </div>
-                  <CardTitle>Segurança Total</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-ink">Segurança Total</CardTitle>
+                  <CardDescription className="text-ink-secondary">
                     Zero chargeback e total proteção contra fraudes
                   </CardDescription>
                 </CardHeader>
@@ -164,27 +164,27 @@ export default function Index() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Antifraude avançado
+                      <span className="text-ink-secondary">Antifraude avançado</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Proteção garantida
+                      <span className="text-ink-secondary">Proteção garantida</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Dados criptografados
+                      <span className="text-ink-secondary">Dados criptografados</span>
                     </li>
                   </ul>
                 </CardContent>
               </Card>
 
-              <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+              <Card className="border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-surface">
                 <CardHeader>
-                  <div className="w-12 h-12 bg-brand-light rounded-lg flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 bg-brand/20 rounded-lg flex items-center justify-center mb-4">
                     <BarChart3 className="h-6 w-6 text-brand" />
                   </div>
-                  <CardTitle>Gestão Inteligente</CardTitle>
-                  <CardDescription>
+                  <CardTitle className="text-ink">Gestão Inteligente</CardTitle>
+                  <CardDescription className="text-ink-secondary">
                     Dashboard completo com relatórios e analytics em tempo real
                   </CardDescription>
                 </CardHeader>
@@ -192,15 +192,15 @@ export default function Index() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Relatórios detalhados
+                      <span className="text-ink-secondary">Relatórios detalhados</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Métricas de conversão
+                      <span className="text-ink-secondary">Métricas de conversão</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      Exportação de dados
+                      <span className="text-ink-secondary">Exportação de dados</span>
                     </li>
                   </ul>
                 </CardContent>
@@ -210,13 +210,13 @@ export default function Index() {
         </section>
 
         {/* Como Funciona Section */}
-        <section id="como-funciona" className="py-20">
+        <section id="como-funciona" className="py-20 bg-surface">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-ink">
                 Como funciona o <span className="text-brand">Hub de Pagamentos</span>
               </h2>
-              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              <p className="text-xl text-ink-secondary max-w-2xl mx-auto">
                 Processo simples e eficiente em poucos passos
               </p>
             </div>
@@ -226,8 +226,8 @@ export default function Index() {
                 <div className="w-16 h-16 bg-brand rounded-full flex items-center justify-center text-brand-foreground text-2xl font-bold mb-4 mx-auto">
                   1
                 </div>
-                <h3 className="text-xl font-semibold mb-2">Crie seu Link</h3>
-                <p className="text-muted-foreground">
+                <h3 className="text-xl font-semibold mb-2 text-ink">Crie seu Link</h3>
+                <p className="text-ink-secondary">
                   Gere links de pagamento personalizados com suas condições e valores
                 </p>
               </div>
@@ -236,8 +236,8 @@ export default function Index() {
                 <div className="w-16 h-16 bg-brand rounded-full flex items-center justify-center text-brand-foreground text-2xl font-bold mb-4 mx-auto">
                   2
                 </div>
-                <h3 className="text-xl font-semibold mb-2">Envie ao Cliente</h3>
-                <p className="text-muted-foreground">
+                <h3 className="text-xl font-semibold mb-2 text-ink">Envie ao Cliente</h3>
+                <p className="text-ink-secondary">
                   Compartilhe via WhatsApp, email ou SMS. Cliente escolhe a melhor forma de pagar
                 </p>
               </div>
@@ -246,8 +246,8 @@ export default function Index() {
                 <div className="w-16 h-16 bg-brand rounded-full flex items-center justify-center text-brand-foreground text-2xl font-bold mb-4 mx-auto">
                   3
                 </div>
-                <h3 className="text-xl font-semibold mb-2">Receba em 1 Dia</h3>
-                <p className="text-muted-foreground">
+                <h3 className="text-xl font-semibold mb-2 text-ink">Receba em 1 Dia</h3>
+                <p className="text-ink-secondary">
                   Valor integral creditado em sua conta em 1 dia útil, sem descontos
                 </p>
               </div>
@@ -256,61 +256,61 @@ export default function Index() {
         </section>
 
         {/* Casos de Uso Section */}
-        <section id="casos-de-uso" className="py-20 bg-muted/30">
+        <section id="casos-de-uso" className="py-20 bg-surface-light">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-ink">
                 Casos de <span className="text-brand">uso ideais</span>
               </h2>
-              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              <p className="text-xl text-ink-secondary max-w-2xl mx-auto">
                 Solução perfeita para diversos segmentos e necessidades
               </p>
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card className="text-center border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <Card className="text-center border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-surface">
                 <CardHeader>
                   <FileText className="h-12 w-12 text-brand mx-auto mb-4" />
-                  <CardTitle className="text-lg">Escritórios de Advocacia</CardTitle>
+                  <CardTitle className="text-lg text-ink">Escritórios de Advocacia</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ink-secondary">
                     Negociação de dívidas e acordos judiciais com parcelamento flexível
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="text-center border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <Card className="text-center border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-surface">
                 <CardHeader>
                   <Users className="h-12 w-12 text-brand mx-auto mb-4" />
-                  <CardTitle className="text-lg">Empresas de Cobrança</CardTitle>
+                  <CardTitle className="text-lg text-ink">Empresas de Cobrança</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ink-secondary">
                     Recuperação de crédito com opções atrativas de pagamento
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="text-center border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <Card className="text-center border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-surface">
                 <CardHeader>
                   <Zap className="h-12 w-12 text-brand mx-auto mb-4" />
-                  <CardTitle className="text-lg">Concessionárias</CardTitle>
+                  <CardTitle className="text-lg text-ink">Concessionárias</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ink-secondary">
                     Negociação de débitos de energia, água e telecomunicações
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="text-center border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <Card className="text-center border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-surface">
                 <CardHeader>
                   <HeadphonesIcon className="h-12 w-12 text-brand mx-auto mb-4" />
-                  <CardTitle className="text-lg">Call Centers</CardTitle>
+                  <CardTitle className="text-lg text-ink">Call Centers</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-ink-secondary">
                     Fechamento de acordos telefônicos com confirmação imediata
                   </p>
                 </CardContent>
