@@ -119,10 +119,12 @@ export type Database = {
         Row: {
           amount: number
           boleto_barcode: string | null
+          boleto_linha_digitavel: string | null
           created_at: string
           created_by: string
           description: string | null
           has_boleto: boolean | null
+          has_boleto_link: boolean
           id: string
           installments: number | null
           is_active: boolean
@@ -144,10 +146,12 @@ export type Database = {
         Insert: {
           amount: number
           boleto_barcode?: string | null
+          boleto_linha_digitavel?: string | null
           created_at?: string
           created_by: string
           description?: string | null
           has_boleto?: boolean | null
+          has_boleto_link?: boolean
           id?: string
           installments?: number | null
           is_active?: boolean
@@ -169,10 +173,12 @@ export type Database = {
         Update: {
           amount?: number
           boleto_barcode?: string | null
+          boleto_linha_digitavel?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
           has_boleto?: boolean | null
+          has_boleto_link?: boolean
           id?: string
           installments?: number | null
           is_active?: boolean

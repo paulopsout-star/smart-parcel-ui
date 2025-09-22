@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, ArrowLeft, CreditCard, Wallet } from "lucide-react";
+import { Loader2, ArrowLeft, CreditCard, Wallet, Receipt, Banknote } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,10 +33,29 @@ const formSchema = z.object({
   boleto_barcode: z.string().optional(),
   message_template_id: z.string().optional(),
   
+  // Novos campos para vínculo de boleto
+  has_boleto_link: z.boolean().default(false),
+  boleto_linha_digitavel: z.string().optional().refine((val) => {
+    if (!val) return true; // Optional field
+    const digitsOnly = val.replace(/\D/g, '');
+    return digitsOnly.length === 47 || digitsOnly.length === 48;
+  }, {
+    message: "Linha digitável deve ter 47 ou 48 dígitos"
+  }),
+  
   // Recorrência
   recurrence_type: z.enum(["pontual", "diaria", "semanal", "quinzenal", "mensal", "semestral", "anual"]),
   recurrence_interval: z.string(),
   recurrence_end_date: z.string().optional(),
+}).refine((data) => {
+  // Se for pontual e tem vínculo de boleto, linha digitável é obrigatória
+  if (data.recurrence_type === "pontual" && data.has_boleto_link && !data.boleto_linha_digitavel) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Linha digitável é obrigatória para cobranças com vínculo de boleto",
+  path: ["boleto_linha_digitavel"]
 });
 
 interface FormData {
@@ -50,6 +70,8 @@ interface FormData {
   has_boleto: boolean;
   boleto_barcode?: string;
   message_template_id?: string;
+  has_boleto_link: boolean;
+  boleto_linha_digitavel?: string;
   recurrence_type: "pontual" | "diaria" | "semanal" | "quinzenal" | "mensal" | "semestral" | "anual";
   recurrence_interval: string;
   recurrence_end_date?: string;
@@ -71,12 +93,14 @@ export default function NewCharge() {
     handleSubmit,
     watch,
     control,
+    setValue,
     formState: { errors }
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       mask_fee: false,
       has_boleto: false,
+      has_boleto_link: false,
       installments: "1",
       recurrence_type: "pontual",
       recurrence_interval: "1"
@@ -86,6 +110,8 @@ export default function NewCharge() {
   const watchRecurrenceType = watch("recurrence_type");
   const watchAmount = watch("amount");
   const watchHasBoleto = watch("has_boleto");
+  const watchHasBoletoLink = watch("has_boleto_link");
+  const watchBoletoLinhaDigitavel = watch("boleto_linha_digitavel");
 
   // Carregar templates de mensagem e verificar conta PIX
   useEffect(() => {
@@ -172,11 +198,16 @@ export default function NewCharge() {
     }
   };
 
+  // Helper function to normalize linha digitável
+  const normalizeBoletoLinhaDigitavel = (linha: string) => {
+    return linha.replace(/\D/g, ''); // Remove all non-digits
+  };
+
   const onSubmit = async (data: FormData) => {
     if (!profile) return;
     
-    // Validar conta PIX para cobranças sem boleto
-    if (!data.has_boleto && !hasPayoutAccount) {
+    // Validar conta PIX para cobranças sem boleto e sem vínculo de boleto
+    if (!data.has_boleto && !data.has_boleto_link && !hasPayoutAccount) {
       setError('Para cobranças sem boleto, é necessário ter uma conta PIX cadastrada.');
       toast({
         title: "Conta PIX necessária",
@@ -184,6 +215,11 @@ export default function NewCharge() {
         variant: "destructive"
       });
       return;
+    }
+    
+    // Log UI event for telemetry
+    if (data.recurrence_type === "pontual") {
+      console.log('ui.newcharge.pontual.toggle_boleto_link:', data.has_boleto_link ? 'on' : 'off');
     }
     
     setIsLoading(true);
@@ -213,6 +249,19 @@ export default function NewCharge() {
         }
       }
 
+      // Normalize linha digitável if provided
+      const normalizedLinhaDigitavel = data.boleto_linha_digitavel 
+        ? normalizeBoletoLinhaDigitavel(data.boleto_linha_digitavel)
+        : null;
+
+      // Backend logging for telemetry
+      if (data.has_boleto_link && normalizedLinhaDigitavel) {
+        console.log('Backend: boleto_linha_digitavel saved', {
+          length: normalizedLinhaDigitavel.length,
+          hash_prefix: normalizedLinhaDigitavel.substring(0, 8) // Log first 8 digits only
+        });
+      }
+
       // Create charge record
       const { data: charge, error: chargeError } = await supabase
         .from('charges')
@@ -228,6 +277,9 @@ export default function NewCharge() {
           mask_fee: data.mask_fee,
           has_boleto: data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
+          // New fields for boleto link
+          has_boleto_link: data.recurrence_type === "pontual" ? data.has_boleto_link : false,
+          boleto_linha_digitavel: data.recurrence_type === "pontual" && data.has_boleto_link ? normalizedLinhaDigitavel : null,
           message_template_id: data.message_template_id === "none" ? null : data.message_template_id,
           message_template_snapshot: messageTemplateSnapshot,
           recurrence_type: data.recurrence_type,
@@ -378,7 +430,7 @@ export default function NewCharge() {
                   </CardContent>
                 </Card>
 
-                {/* Dados da Cobrança */}
+                 {/* Dados da Cobrança */}
                 <Card>
                   <CardHeader>
                     <CardTitle>Configurações da Cobrança</CardTitle>
@@ -447,24 +499,99 @@ export default function NewCharge() {
                       </Label>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                      <Controller
-                        control={control}
-                        name="has_boleto"
-                        render={({ field }) => (
-                          <Checkbox
-                            id="has_boleto"
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
+                    {/* Seletor de tipo de cobrança pontual - apenas para pontual */}
+                    {watchRecurrenceType === 'pontual' && (
+                      <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                        <Label className="text-base font-medium">Tipo de Cobrança Pontual</Label>
+                        <Controller
+                          control={control}
+                          name="has_boleto_link"
+                          render={({ field }) => (
+                            <RadioGroup
+                              value={field.value ? "with_boleto_link" : "without_boleto_link"}
+                              onValueChange={(value) => {
+                                const hasBoletoLink = value === "with_boleto_link";
+                                field.onChange(hasBoletoLink);
+                                // Clear linha digitável when switching to "without boleto"
+                                if (!hasBoletoLink) {
+                                  setValue("boleto_linha_digitavel", "");
+                                }
+                              }}
+                              className="flex flex-col space-y-3"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="without_boleto_link" id="without_boleto_link" />
+                                <Label htmlFor="without_boleto_link" className="flex items-center gap-2 cursor-pointer">
+                                  <CreditCard className="w-4 h-4" />
+                                  Cobrança Pontual SEM vínculo de boleto
+                                </Label>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="with_boleto_link" id="with_boleto_link" />
+                                <Label htmlFor="with_boleto_link" className="flex items-center gap-2 cursor-pointer">
+                                  <Receipt className="w-4 h-4" />
+                                  Cobrança Pontual COM vínculo de boleto (simulado)
+                                </Label>
+                              </div>
+                            </RadioGroup>
+                          )}
+                        />
+                        
+                        {watchHasBoletoLink && (
+                          <div className="mt-4">
+                            <Label htmlFor="boleto_linha_digitavel">Linha Digitável do Boleto *</Label>
+                            <Textarea
+                              id="boleto_linha_digitavel"
+                              placeholder="Digite ou cole a linha digitável do boleto (apenas números)"
+                              {...register("boleto_linha_digitavel")}
+                              className={`font-mono resize-none ${errors.boleto_linha_digitavel ? "border-destructive" : ""}`}
+                              rows={3}
+                            />
+                            {errors.boleto_linha_digitavel && (
+                              <p className="text-sm text-destructive mt-1">{errors.boleto_linha_digitavel.message}</p>
+                            )}
+                            <div className="flex items-start gap-2 mt-2">
+                              <Banknote className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                              <div className="text-sm text-muted-foreground">
+                                <p className="mb-1">
+                                  <strong>Onde encontrar:</strong> A linha digitável está no seu boleto, geralmente logo abaixo do código de barras.
+                                </p>
+                                <p className="mb-1">
+                                  <strong>Formato esperado:</strong> 47 ou 48 dígitos (apenas números)
+                                </p>
+                                {watchBoletoLinhaDigitavel && (
+                                  <p className="text-primary">
+                                    <strong>Dígitos encontrados:</strong> {watchBoletoLinhaDigitavel.replace(/\D/g, '').length}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         )}
-                      />
-                      <Label htmlFor="has_boleto">
-                        Cobrança com vínculo de boleto (simulado)
-                      </Label>
-                    </div>
+                      </div>
+                    )}
 
-                    {watchHasBoleto && (
+                    {/* Manter checkbox antigo para recorrentes */}
+                    {watchRecurrenceType !== 'pontual' && (
+                      <div className="flex items-center space-x-2">
+                        <Controller
+                          control={control}
+                          name="has_boleto"
+                          render={({ field }) => (
+                            <Checkbox
+                              id="has_boleto"
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          )}
+                        />
+                        <Label htmlFor="has_boleto">
+                          Cobrança com vínculo de boleto (simulado)
+                        </Label>
+                      </div>
+                    )}
+
+                    {watchRecurrenceType !== 'pontual' && watchHasBoleto && (
                       <div>
                         <Label htmlFor="boleto_barcode">Linha Digitável do Boleto</Label>
                         <Input
@@ -512,7 +639,10 @@ export default function NewCharge() {
                       </p>
                     </div>
 
-                    {!watchHasBoleto && !hasPayoutAccount && !checkingPayoutAccount && (
+                    {/* Alert for PIX account requirement - only for charges without boleto link */}
+                    {((watchRecurrenceType === 'pontual' && !watchHasBoletoLink) || 
+                      (watchRecurrenceType !== 'pontual' && !watchHasBoleto)) && 
+                      !hasPayoutAccount && !checkingPayoutAccount && (
                       <Alert variant="destructive">
                         <Wallet className="w-4 h-4" />
                         <AlertDescription>
@@ -635,8 +765,21 @@ export default function NewCharge() {
                       <span className="text-muted-foreground">Tipo:</span>
                       <span className="font-medium capitalize">
                         {watchRecurrenceType}
+                        {watchRecurrenceType === 'pontual' && watchHasBoletoLink && (
+                          <span className="text-xs text-muted-foreground ml-1">(com boleto)</span>
+                        )}
                       </span>
                     </div>
+
+                    {/* Show boleto info in summary */}
+                    {watchRecurrenceType === 'pontual' && watchHasBoletoLink && watchBoletoLinhaDigitavel && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Linha Digitável:</span>
+                        <span className="font-medium text-xs font-mono">
+                          {watchBoletoLinhaDigitavel.replace(/\D/g, '').substring(0, 12)}...
+                        </span>
+                      </div>
+                    )}
 
                     {error && (
                       <Alert variant="destructive">
