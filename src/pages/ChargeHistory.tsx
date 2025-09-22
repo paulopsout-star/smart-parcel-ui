@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { Loader2, Eye, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -17,6 +19,7 @@ interface Charge {
   description: string;
   status: string;
   recurrence_type: string;
+  has_boleto_link: boolean;
   created_at: string;
   next_charge_date: string | null;
   executions: Array<{
@@ -31,6 +34,7 @@ export default function ChargeHistory() {
   const { isOperador } = useAuth();
   const [charges, setCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
 
   const fetchCharges = async () => {
     try {
@@ -134,6 +138,13 @@ export default function ChargeHistory() {
     return labels[type as keyof typeof labels] || type;
   };
 
+  const formatCurrency = (cents: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(cents / 100);
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -152,6 +163,11 @@ export default function ChargeHistory() {
                 <div>
                   <CardTitle className="text-lg">{charge.payer_name}</CardTitle>
                   <p className="text-sm text-muted-foreground">{charge.payer_email}</p>
+                  {charge.has_boleto_link && (
+                    <Badge variant="outline" className="mt-1">
+                      Com Boleto
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   {getStatusBadge(charge.status)}
@@ -163,7 +179,7 @@ export default function ChargeHistory() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-sm font-medium">Valor</p>
-                  <p className="text-lg">R$ {(charge.amount / 100).toFixed(2)}</p>
+                  <p className="text-lg">{formatCurrency(charge.amount)}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium">Criado em</p>
@@ -221,6 +237,14 @@ export default function ChargeHistory() {
                     Processar Agora
                   </Button>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedCharge(charge)}
+                >
+                  <Eye className="w-4 h-4 mr-1" />
+                  Ver Detalhes
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -234,6 +258,49 @@ export default function ChargeHistory() {
           </Card>
         )}
       </div>
+
+      {/* Charge Details Dialog */}
+      <Dialog open={!!selectedCharge} onOpenChange={(open) => !open && setSelectedCharge(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Cobrança</DialogTitle>
+          </DialogHeader>
+          {selectedCharge && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-medium mb-2">Informações Básicas</h4>
+                  <div className="space-y-2 text-sm">
+                    <div><strong>Pagador:</strong> {selectedCharge.payer_name}</div>
+                    <div><strong>Email:</strong> {selectedCharge.payer_email}</div>
+                    <div><strong>Valor:</strong> {formatCurrency(selectedCharge.amount)}</div>
+                    <div><strong>Descrição:</strong> {selectedCharge.description}</div>
+                    <div><strong>Tipo:</strong> {getRecurrenceLabel(selectedCharge.recurrence_type)}</div>
+                    <div><strong>Status:</strong> {getStatusBadge(selectedCharge.status)}</div>
+                    {selectedCharge.has_boleto_link && (
+                      <div><strong>Boleto:</strong> <Badge variant="outline">Com vínculo</Badge></div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-2">Datas</h4>
+                  <div className="space-y-2 text-sm">
+                    <div><strong>Criado em:</strong> {format(new Date(selectedCharge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</div>
+                    {selectedCharge.next_charge_date && (
+                      <div><strong>Próxima cobrança:</strong> {format(new Date(selectedCharge.next_charge_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <ChargeRefundTimeline 
+                chargeId={selectedCharge.id} 
+                hasBoletoLink={selectedCharge.has_boleto_link}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

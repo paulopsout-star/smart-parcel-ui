@@ -25,6 +25,7 @@ import MessageQueue from "./pages/MessageQueue";
 import UserManagement from "./pages/admin/UserManagement";
 import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
+import RefundManagement from "./pages/admin/RefundManagement";
 
 const queryClient = new QueryClient();
 
@@ -92,10 +93,10 @@ const App = () => (
               </ProtectedRoute>
             } />
             
-            <Route path="/admin/users" element={
+            <Route path="/admin/refunds" element={
               <ProtectedRoute requiredRole="admin">
                 <Layout>
-                  <UserManagement />
+                  <RefundManagement />
                 </Layout>
               </ProtectedRoute>
             } />
