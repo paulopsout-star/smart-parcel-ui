@@ -445,35 +445,31 @@ async function getChargeExecutions(supabase: any, chargeId: string, filters: any
 
   let query = supabase
     .from('charge_executions')
-    .select(`
-      *,
-      payment_links(
-        id,
-        link_url,
-        status,
-        amount
-      )
-    `)
+    .select('*')
     .eq('charge_id', chargeId)
-    .order('scheduled_for', { ascending: false })
-    .limit(filters.limit);
+    .order('execution_date', { ascending: false })
+    .limit(filters.limit || 100);
 
   if (filters.status) {
     query = query.eq('status', filters.status);
   }
   
   if (filters.from) {
-    query = query.gte('scheduled_for', filters.from);
+    query = query.gte('execution_date', filters.from);
   }
   
   if (filters.to) {
-    query = query.lte('scheduled_for', filters.to);
+    query = query.lte('execution_date', filters.to);
   }
 
   const { data: executions, error } = await query;
   
-  if (error) throw error;
+  if (error) {
+    console.error('Error fetching executions:', error);
+    throw error;
+  }
 
+  console.log(`Found ${executions?.length || 0} executions for charge ${chargeId}`);
   return { executions: executions || [] };
 }
 
