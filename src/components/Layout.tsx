@@ -21,7 +21,8 @@ import {
   CreditCard,
   RefreshCw,
   Repeat,
-  BarChart3
+  BarChart3,
+  Settings
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -58,7 +59,8 @@ export function Layout({ children }: LayoutProps) {
       { name: 'Usuários', href: '/admin/users', icon: Users },
       { name: 'Estornos', href: '/admin/refunds', icon: RefreshCw },
       { name: 'Recorrentes', href: '/admin/recurrences', icon: Repeat },
-      { name: 'Relatórios', href: '/admin/reports', icon: BarChart3 }
+      { name: 'Relatórios', href: '/admin/reports', icon: BarChart3 },
+      { name: 'Assinaturas', href: '/admin/subscriptions', icon: Settings }
     ] : []),
   ];
 

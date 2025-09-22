@@ -29,6 +29,7 @@ import RefundManagement from "./pages/admin/RefundManagement";
 import RecurrenceManagement from "./pages/admin/RecurrenceManagement";
 import Reports from "./pages/admin/Reports";
 import ThankYou from "./pages/ThankYou";
+import SubscriptionManagement from "./pages/admin/SubscriptionManagement";
 
 const queryClient = new QueryClient();
 
@@ -117,6 +118,14 @@ const App = () => (
               <ProtectedRoute requiredRole="admin">
                 <Layout>
                   <Reports />
+                </Layout>
+              </ProtectedRoute>
+            } />
+            
+            <Route path="/admin/subscriptions" element={
+              <ProtectedRoute requiredRole="admin">
+                <Layout>
+                  <SubscriptionManagement />
                 </Layout>
               </ProtectedRoute>
             } />

@@ -590,6 +590,48 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          canceled_at: string | null
+          company_id: string
+          created_at: string
+          current_period_end: string | null
+          grace_days: number
+          id: string
+          owner_id: string
+          plan_code: string | null
+          started_at: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          canceled_at?: string | null
+          company_id: string
+          created_at?: string
+          current_period_end?: string | null
+          grace_days?: number
+          id?: string
+          owner_id: string
+          plan_code?: string | null
+          started_at?: string
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          canceled_at?: string | null
+          company_id?: string
+          created_at?: string
+          current_period_end?: string | null
+          grace_days?: number
+          id?: string
+          owner_id?: string
+          plan_code?: string | null
+          started_at?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount_in_cents: number
@@ -675,6 +717,14 @@ export type Database = {
       }
       is_admin_or_operador: {
         Args: { _user_id: string }
+        Returns: boolean
+      }
+      is_subscription_active: {
+        Args: { p_company_id: string }
+        Returns: boolean
+      }
+      is_subscription_allowed: {
+        Args: { p_company_id: string; p_now_ts?: string }
         Returns: boolean
       }
     }

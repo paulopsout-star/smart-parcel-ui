@@ -87,5 +87,8 @@ verify_jwt = false
 [functions.thank-you-summary]
 verify_jwt = false
 
+[functions.subscription-manager]
+verify_jwt = false
+
 [functions.create-admin-user]
 verify_jwt = false

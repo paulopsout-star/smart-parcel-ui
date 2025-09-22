@@ -16,6 +16,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
+import { SubscriptionBanner } from "@/components/SubscriptionBanner";
+import { useSubscription } from "@/hooks/useSubscription";
 
 const formSchema = z.object({
   // Dados do pagador
@@ -87,6 +89,7 @@ export default function NewCharge() {
   const { profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { checkSubscriptionOrThrow, isAllowed } = useSubscription();
 
   const {
     register,
@@ -205,6 +208,18 @@ export default function NewCharge() {
 
   const onSubmit = async (data: FormData) => {
     if (!profile) return;
+    
+    // Verificar assinatura antes de criar cobrança
+    try {
+      await checkSubscriptionOrThrow();
+    } catch (error) {
+      toast({
+        title: 'Assinatura Inativa',
+        description: error instanceof Error ? error.message : 'Sua assinatura não permite criar novas cobranças.',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     // Validar conta PIX para cobranças sem boleto e sem vínculo de boleto
     if (!data.has_boleto && !data.has_boleto_link && !hasPayoutAccount) {
@@ -359,6 +374,9 @@ export default function NewCharge() {
           Crie uma cobrança pontual ou recorrente
         </p>
       </div>
+      
+      <SubscriptionBanner />
+      
         <div className="max-w-4xl mx-auto">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
             <div className="grid lg:grid-cols-3 gap-8">
@@ -776,23 +794,23 @@ export default function NewCharge() {
                       </Alert>
                     )}
 
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={isLoading}
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Criando...
-                        </>
-                      ) : (
-                        <>
-                          <CreditCard className="w-4 h-4 mr-2" />
-                          Criar Cobrança
-                        </>
-                      )}
-                    </Button>
+                     <Button
+                       type="submit"
+                       className="w-full"
+                       disabled={isLoading || !isAllowed()}
+                     >
+                       {isLoading ? (
+                         <>
+                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                           Criando...
+                         </>
+                       ) : (
+                         <>
+                           <CreditCard className="w-4 h-4 mr-2" />
+                           Criar Cobrança
+                         </>
+                       )}
+                     </Button>
                   </CardContent>
                 </Card>
               </div>
