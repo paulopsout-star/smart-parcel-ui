@@ -128,10 +128,15 @@ serve(async (req) => {
         .from('payment_splits')
         .select('*, charges!inner(id, amount)')
         .eq('id', splitId)
-        .eq('status', 'pending')
-        .single();
+        .eq('status', 'pending');
 
       if (splitError) throw splitError;
+      
+      if (!currentSplit || currentSplit.length === 0) {
+        throw new Error('Payment split not found or not in pending status');
+      }
+      
+      const split = currentSplit[0]; // Get first result since we removed .single()
 
       // Update split status
       const { data: updatedSplit, error: updateError } = await supabase
@@ -152,8 +157,8 @@ serve(async (req) => {
           .from('transactions')
           .insert({
             transaction_id: `mock_${splitId}_${Date.now()}`,
-            charge_id: currentSplit.charge_id,
-            amount_in_cents: currentSplit.amount_cents,
+            charge_id: split.charge_id,
+            amount_in_cents: split.amount_cents,
             status: 'succeeded',
             payer_name: 'Mock Payer',
             payer_email: 'mock@example.com',
@@ -175,7 +180,7 @@ serve(async (req) => {
         const { data: allSplits, error: allSplitsError } = await supabase
           .from('payment_splits')
           .select('status')
-          .eq('charge_id', currentSplit.charge_id);
+          .eq('charge_id', split.charge_id);
 
         if (allSplitsError) throw allSplitsError;
 
@@ -186,7 +191,7 @@ serve(async (req) => {
           const { error: chargeUpdateError } = await supabase
             .from('charges')
             .update({ status: 'completed' })
-            .eq('id', currentSplit.charge_id);
+            .eq('id', split.charge_id);
 
           if (chargeUpdateError) {
             console.error('Failed to update charge status:', chargeUpdateError);

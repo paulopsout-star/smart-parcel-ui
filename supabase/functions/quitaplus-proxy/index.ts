@@ -8,6 +8,14 @@ const corsHeaders = {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+// Function to generate a bankslip number
+function generateBankslipNumber(): string {
+  // Generate a simple bankslip number based on timestamp and random digits
+  const timestamp = Date.now().toString().slice(-8) // Last 8 digits of timestamp
+  const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0') // 5 random digits
+  return timestamp + random // 13 digits total
+}
+
 // Function to mask sensitive data in logs
 function maskSensitiveData(obj: any): any {
   if (!obj) return obj
@@ -201,8 +209,17 @@ serve(async (req) => {
     
     // Get environment variables
     const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID')
+    const creditorDocument = Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT')
+    const creditorName = Deno.env.get('QUITA_MAIS_CREDITOR_NAME')
+    
     if (!merchantId) {
       throw { status: 400, message: 'Missing required QUITA_MAIS_MERCHANT_ID secret' }
+    }
+    if (!creditorDocument) {
+      throw { status: 400, message: 'Missing required QUITA_MAIS_CREDITOR_DOCUMENT secret' }
+    }
+    if (!creditorName) {
+      throw { status: 400, message: 'Missing required QUITA_MAIS_CREDITOR_NAME secret' }
     }
 
     // ====== CONTRATO CANÔNICO QUITA+ ======
@@ -242,9 +259,9 @@ serve(async (req) => {
           "name": uiData.payer?.name || ""
         },
         "bankslip": {
-          "number": uiData.bankslip?.number?.replace(/\D/g, '') || "",
-          "creditorDocument": uiData.bankslip?.creditorDocument?.replace(/\D/g, '') || "",
-          "creditorName": uiData.bankslip?.creditorName || ""
+          "number": uiData.bankslip?.number?.replace(/\D/g, '') || generateBankslipNumber(),
+          "creditorDocument": creditorDocument.replace(/\D/g, ''),
+          "creditorName": creditorName
         },
         "checkout": {
           "maskFee": uiData.checkout?.maskFee === true,
