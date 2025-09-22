@@ -72,6 +72,9 @@ verify_jwt = false
 [functions.send-mock-message]
 verify_jwt = false
 
+[functions.recurrences-manager]
+verify_jwt = false
+
 [functions.refunds-scheduler]
 verify_jwt = false
 

@@ -19,7 +19,8 @@ import {
   User,
   MessageSquare,
   CreditCard,
-  RefreshCw
+  RefreshCw,
+  Repeat
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -54,7 +55,8 @@ export function Layout({ children }: LayoutProps) {
     { name: 'Mensagens', href: '/message-queue', icon: MessageSquare },
     ...(isAdmin ? [
       { name: 'Usuários', href: '/admin/users', icon: Users },
-      { name: 'Estornos', href: '/admin/refunds', icon: RefreshCw }
+      { name: 'Estornos', href: '/admin/refunds', icon: RefreshCw },
+      { name: 'Recorrentes', href: '/admin/recurrences', icon: Repeat }
     ] : []),
   ];
 

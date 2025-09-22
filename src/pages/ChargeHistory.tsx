@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
+import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { Loader2, Eye, RefreshCw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -297,6 +298,8 @@ export default function ChargeHistory() {
                 chargeId={selectedCharge.id} 
                 hasBoletoLink={selectedCharge.has_boleto_link}
               />
+
+              <ChargeExecutions chargeId={selectedCharge.id} />
             </div>
           )}
         </DialogContent>

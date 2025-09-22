@@ -16,42 +16,60 @@ export type Database = {
     Tables: {
       charge_executions: {
         Row: {
+          attempts: number | null
           charge_id: string
           created_at: string
+          dispatched_at: string | null
           error_details: Json | null
           execution_date: string
           execution_log: Json | null
+          finished_at: string | null
           id: string
           idempotency_key: string | null
+          last_error: string | null
           payment_link_id: string | null
           payment_link_url: string | null
+          planned_at: string | null
           quita_guid: string | null
+          scheduled_for: string | null
           status: Database["public"]["Enums"]["charge_status"]
         }
         Insert: {
+          attempts?: number | null
           charge_id: string
           created_at?: string
+          dispatched_at?: string | null
           error_details?: Json | null
           execution_date?: string
           execution_log?: Json | null
+          finished_at?: string | null
           id?: string
           idempotency_key?: string | null
+          last_error?: string | null
           payment_link_id?: string | null
           payment_link_url?: string | null
+          planned_at?: string | null
           quita_guid?: string | null
+          scheduled_for?: string | null
           status: Database["public"]["Enums"]["charge_status"]
         }
         Update: {
+          attempts?: number | null
           charge_id?: string
           created_at?: string
+          dispatched_at?: string | null
           error_details?: Json | null
           execution_date?: string
           execution_log?: Json | null
+          finished_at?: string | null
           id?: string
           idempotency_key?: string | null
+          last_error?: string | null
           payment_link_id?: string | null
           payment_link_url?: string | null
+          planned_at?: string | null
           quita_guid?: string | null
+          scheduled_for?: string | null
           status?: Database["public"]["Enums"]["charge_status"]
         }
         Relationships: [
