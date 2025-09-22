@@ -51,7 +51,7 @@ export default function SubscriptionManagement() {
   const [loading, setLoading] = useState(true);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
   const [editData, setEditData] = useState<EditSubscriptionData>({
-    status: '',
+    status: 'ACTIVE',
     grace_days: 7,
     current_period_end: '',
     plan_code: ''
