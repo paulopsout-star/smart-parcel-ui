@@ -18,6 +18,8 @@ import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { useSubscription } from "@/hooks/useSubscription";
+import { createPaymentLinkForCharge } from "@/lib/payment-link-utils";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const formSchema = z.object({
   // Dados do pagador
@@ -86,6 +88,8 @@ export default function NewCharge() {
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(true);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState('');
   const { profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -354,6 +358,25 @@ export default function NewCharge() {
             ? "Link de pagamento gerado com sucesso."
             : `Cobrança recorrente configurada (${data.recurrence_type}).`,
         });
+      }
+
+      // Para cobranças pontuais sem boleto, criar payment link e redirecionar para checkout
+      if (data.recurrence_type === 'pontual' && !data.has_boleto && !data.has_boleto_link) {
+        try {
+          const paymentLink = await createPaymentLinkForCharge(charge.id);
+          if (paymentLink) {
+            setCheckoutUrl(paymentLink.link_url);
+            setShowCheckoutModal(true);
+            return; // Não navegar para /charges ainda
+          }
+        } catch (error) {
+          console.error('Error creating payment link:', error);
+          toast({
+            title: "Erro ao gerar checkout",
+            description: "A cobrança foi criada, mas houve erro ao gerar o link de pagamento.",
+            variant: "destructive"
+          });
+        }
       }
 
       navigate('/charges');
@@ -811,12 +834,42 @@ export default function NewCharge() {
                          </>
                        )}
                      </Button>
-                  </CardContent>
-                </Card>
-              </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+                   </CardContent>
+                 </Card>
+               </div>
+           </div>
+         </form>
+       </div>
+
+       {/* Modal de Checkout */}
+       <AlertDialog open={showCheckoutModal} onOpenChange={setShowCheckoutModal}>
+         <AlertDialogContent>
+           <AlertDialogHeader>
+             <AlertDialogTitle>Cobrança Criada!</AlertDialogTitle>
+             <AlertDialogDescription>
+               A cobrança foi criada com sucesso. Deseja abrir o checkout para teste?
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+           <AlertDialogFooter>
+             <AlertDialogCancel
+               onClick={() => {
+                 setShowCheckoutModal(false);
+                 navigate('/charges');
+               }}
+             >
+               Ir para Cobranças
+             </AlertDialogCancel>
+             <AlertDialogAction
+               onClick={() => {
+                 window.open(checkoutUrl, '_blank');
+                 navigate('/charges');
+               }}
+             >
+               Abrir Checkout
+             </AlertDialogAction>
+           </AlertDialogFooter>
+         </AlertDialogContent>
+       </AlertDialog>
+     </div>
+   );
+ }

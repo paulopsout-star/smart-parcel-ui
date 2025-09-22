@@ -19,18 +19,81 @@ interface Charge {
   created_at: string;
 }
 
+interface PublicCheckoutData {
+  id: string;
+  charge_id: string;
+  amount: number;
+  description: string;
+  installments: number;
+  mask_fee: boolean;
+  payer_name: string;
+  payer_email_masked: string;
+  has_boleto_link: boolean;
+  status: string;
+}
+
 export default function Payment() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [charge, setCharge] = useState<Charge | null>(null);
   const [loading, setLoading] = useState(true);
   const [paymentCompleted, setPaymentCompleted] = useState(false);
+  const [checkoutData, setCheckoutData] = useState<PublicCheckoutData | null>(null);
   const { toast } = useToast();
 
   const chargeId = searchParams.get('charge');
   const token = searchParams.get('token');
 
   const loadCharge = async () => {
+    // Se tiver token, usar a edge function pública
+    if (token) {
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?token=${token}`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        setCheckoutData(data);
+        
+        // Criar objeto charge compatível para renderização
+        const chargeData: Charge = {
+          id: data.charge_id,
+          payer_name: data.payer_name,
+          payer_email: data.payer_email_masked,
+          amount: data.amount,
+          description: data.description,
+          status: data.status,
+          has_boleto_link: data.has_boleto_link,
+          created_at: data.created_at
+        };
+        setCharge(chargeData);
+        
+        if (data.status === 'completed') {
+          setPaymentCompleted(true);
+          setTimeout(() => {
+            navigate(`/thank-you?pl=${token}`);
+          }, 1000);
+        }
+      } catch (error: any) {
+        console.error('Error loading public checkout data:', error);
+        toast({
+          title: 'Link inválido ou expirado',
+          description: 'Não foi possível carregar os dados do checkout.',
+          variant: 'destructive',
+        });
+        navigate('/');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Fallback para carregamento direto por chargeId (modo interno)
     if (!chargeId) {
       toast({
         title: 'Link inválido',
@@ -54,7 +117,6 @@ export default function Payment() {
 
       if (data.status === 'completed') {
         setPaymentCompleted(true);
-        // Se já estava completo, redirecionar imediatamente
         if (token) {
           setTimeout(() => {
             navigate(`/thank-you?pl=${token}`);
