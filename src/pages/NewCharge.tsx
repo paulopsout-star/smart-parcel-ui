@@ -362,6 +362,21 @@ export default function NewCharge() {
 
       // Para cobranças pontuais sem boleto, criar payment link e redirecionar para checkout
       if (data.recurrence_type === 'pontual' && !data.has_boleto && !data.has_boleto_link) {
+        try {
+          // Mock checkout URL generation 
+          const mockCheckoutUrl = `https://checkout.autonegocie.com.br/mock/${charge.id}`;
+          setCheckoutUrl(mockCheckoutUrl);
+          setShowCheckoutModal(true);
+          return; // Não navegar para /charges ainda
+        } catch (error) {
+          console.error('Erro ao gerar checkout:', error);
+          toast({
+            title: "Erro ao gerar checkout",
+            description: "A cobrança foi criada, mas houve erro ao gerar o link de pagamento.",
+            variant: "destructive"
+          });
+        }
+      }
         // Mock checkout URL generation 
         const mockCheckoutUrl = `https://checkout.autonegocie.com.br/mock/${charge.id}`;
         setCheckoutUrl(mockCheckoutUrl);
@@ -858,8 +873,23 @@ export default function NewCharge() {
                Abrir Checkout
              </AlertDialogAction>
            </AlertDialogFooter>
-         </AlertDialogContent>
-       </AlertDialog>
-     </div>
-   );
- }
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Checkout Success Modal */}
+        <CheckoutSuccessModal
+          open={showCheckoutModal}
+          onOpenChange={setShowCheckoutModal}
+          checkoutData={{
+            chargeId: '12345',
+            checkoutUrl: checkoutUrl,
+            amount: 10000,
+            payerName: 'Cliente Teste', 
+            description: 'Cobrança de teste',
+            status: 'PENDENTE'
+          }}
+        />
+      </div>
+    </div>
+  );
+}
