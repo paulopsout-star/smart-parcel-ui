@@ -25,6 +25,8 @@ interface Charge {
   has_boleto_link: boolean;
   created_at: string;
   next_charge_date: string | null;
+  checkout_url?: string;
+  checkout_link_id?: string;
   executions: Array<{
     id: string;
     execution_date: string;
@@ -119,41 +121,90 @@ export default function ChargeHistory() {
   const CheckoutButtons = ({ charge }: { charge: Charge }) => {
     const [paymentLink, setPaymentLink] = useState<any>(null);
     const [linkChecked, setLinkChecked] = useState(false);
+    const [localLoading, setLocalLoading] = useState(false);
 
     useEffect(() => {
-      if (!linkChecked) {
-        getPaymentLink(charge.id).then(link => {
-          setPaymentLink(link);
-          setLinkChecked(true);
-        });
-      }
-    }, [charge.id, linkChecked]);
+      let mounted = true;
+
+      const checkForLink = async () => {
+        if (!linkChecked && !localLoading) {
+          setLocalLoading(true);
+          try {
+            // Check if we have a stored checkout_url first
+            if (charge.checkout_url && charge.checkout_link_id) {
+              const storedLink = {
+                id: charge.checkout_link_id,
+                token: charge.checkout_link_id,
+                url: charge.checkout_url,
+                absolute_url: charge.checkout_url,
+                status: 'active'
+              };
+              if (mounted) {
+                setPaymentLink(storedLink);
+                setLinkChecked(true);
+                setLocalLoading(false);
+              }
+              return;
+            }
+
+            // If no stored link, try to get from remote
+            const link = await getPaymentLink(charge.id);
+            if (mounted) {
+              setPaymentLink(link);
+              setLinkChecked(true);
+            }
+          } catch (error) {
+            console.error('Error checking payment link:', error);
+            if (mounted) {
+              setLinkChecked(true);
+            }
+          } finally {
+            if (mounted) {
+              setLocalLoading(false);
+            }
+          }
+        }
+      };
+
+      checkForLink();
+
+      return () => {
+        mounted = false;
+      };
+    }, [charge.id, charge.checkout_url, charge.checkout_link_id, linkChecked, localLoading]);
 
     const handleGenerateLink = async () => {
-      const newLink = await generatePaymentLink(charge.id);
-      if (newLink) {
-        setPaymentLink(newLink);
-        
-        // Open ModalCheckoutLink with the generated link
-        const event = new CustomEvent('openCheckoutModal', {
-          detail: {
-            checkoutUrl: newLink.absolute_url,
-            linkId: newLink.id,
-            chargeId: charge.id,
-            amount: charge.amount,
-            payerName: charge.payer_name,
-            description: charge.description
-          }
-        });
-        window.dispatchEvent(event);
+      setLocalLoading(true);
+      try {
+        const newLink = await generatePaymentLink(charge.id);
+        if (newLink) {
+          setPaymentLink(newLink);
+          
+          // Open ModalCheckoutLink with the generated link
+          const event = new CustomEvent('openCheckoutModal', {
+            detail: {
+              checkoutUrl: newLink.absolute_url,
+              linkId: newLink.id,
+              chargeId: charge.id,
+              amount: charge.amount,
+              payerName: charge.payer_name,
+              description: charge.description
+            }
+          });
+          window.dispatchEvent(event);
+        }
+      } finally {
+        setLocalLoading(false);
       }
     };
 
-    if (!linkChecked) {
+    if (!linkChecked || localLoading) {
       return (
         <div className="flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm text-muted-foreground">Verificando...</span>
+          <span className="text-sm text-muted-foreground">
+            {localLoading ? 'Carregando...' : 'Verificando...'}
+          </span>
         </div>
       );
     }
@@ -177,7 +228,7 @@ export default function ChargeHistory() {
               }
               openPaymentLink(paymentLink.absolute_url);
             }}
-            disabled={linksLoading}
+            disabled={linksLoading || localLoading}
           >
             <ExternalLink className="w-4 h-4 mr-1" />
             Abrir
@@ -186,7 +237,7 @@ export default function ChargeHistory() {
             size="sm"
             variant="outline"
             onClick={() => copyToClipboard(paymentLink.absolute_url)}
-            disabled={linksLoading}
+            disabled={linksLoading || localLoading}
           >
             <Copy className="w-4 h-4 mr-1" />
             Copiar
@@ -195,7 +246,7 @@ export default function ChargeHistory() {
             size="sm"
             variant="outline"
             onClick={handleGenerateLink}
-            disabled={linksLoading}
+            disabled={linksLoading || localLoading}
           >
             <Plus className="w-4 h-4 mr-1" />
             Abrir Modal
@@ -209,7 +260,7 @@ export default function ChargeHistory() {
         size="sm"
         variant="outline"
         onClick={handleGenerateLink}
-        disabled={linksLoading}
+        disabled={linksLoading || localLoading}
       >
         <Plus className="w-4 h-4 mr-1" />
         Gerar Link

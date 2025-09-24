@@ -370,7 +370,22 @@ export default function NewCharge() {
       // Para cobranças pontuais sem boleto, criar payment link mock
       if (data.recurrence_type === 'pontual' && !data.has_boleto && !data.has_boleto_link) {
         try {
-          const mockCheckoutUrl = `https://checkout.autonegocie.com.br/mock/${charge.id}`;
+          const mockCheckoutUrl = `https://checkout.autonegocie/mock/${charge.id}`;
+          const mockLinkId = crypto.randomUUID();
+          
+          // Save the checkout URL to the charge record
+          const { error: updateError } = await supabase
+            .from('charges')
+            .update({
+              checkout_url: mockCheckoutUrl,
+              checkout_link_id: mockLinkId
+            })
+            .eq('id', charge.id);
+          
+          if (updateError) {
+            console.error('Error saving checkout URL:', updateError);
+          }
+          
           setCheckoutUrl(mockCheckoutUrl);
           setShowCheckoutModal(true);
           return;

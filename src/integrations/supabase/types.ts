@@ -138,6 +138,8 @@ export type Database = {
           amount: number
           boleto_barcode: string | null
           boleto_linha_digitavel: string | null
+          checkout_link_id: string | null
+          checkout_url: string | null
           created_at: string
           created_by: string
           description: string | null
@@ -165,6 +167,8 @@ export type Database = {
           amount: number
           boleto_barcode?: string | null
           boleto_linha_digitavel?: string | null
+          checkout_link_id?: string | null
+          checkout_url?: string | null
           created_at?: string
           created_by: string
           description?: string | null
@@ -192,6 +196,8 @@ export type Database = {
           amount?: number
           boleto_barcode?: string | null
           boleto_linha_digitavel?: string | null
+          checkout_link_id?: string | null
+          checkout_url?: string | null
           created_at?: string
           created_by?: string
           description?: string | null

@@ -27,6 +27,54 @@ export function useChargeLinks() {
   // Fallback to mock when edge functions fail
   const mockHooks = useChargeLinksMock();
 
+  const savePaymentLinkToCharge = async (chargeId: string, paymentLink: PaymentLink): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('charges')
+        .update({
+          checkout_url: paymentLink.absolute_url,
+          checkout_link_id: paymentLink.id
+        })
+        .eq('id', chargeId);
+
+      if (error) {
+        console.error('Error saving payment link to charge:', error);
+      }
+    } catch (error) {
+      console.error('Error updating charge with payment link:', error);
+    }
+  };
+
+  const getStoredPaymentLink = async (chargeId: string): Promise<PaymentLink | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('charges')
+        .select('checkout_url, checkout_link_id')
+        .eq('id', chargeId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error getting stored payment link:', error);
+        return null;
+      }
+
+      if (data?.checkout_url && data?.checkout_link_id) {
+        return {
+          id: data.checkout_link_id,
+          token: data.checkout_link_id,
+          url: data.checkout_url,
+          absolute_url: data.checkout_url,
+          status: 'active'
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching stored payment link:', error);
+      return null;
+    }
+  };
+
   const handleEdgeFunctionError = (error: any, operation: string) => {
     console.error(`Edge Function error in ${operation}:`, error);
     
@@ -34,7 +82,6 @@ export function useChargeLinks() {
     let message = 'Erro desconhecido';
     
     if (error?.message) {
-      // Try to extract status and message from error
       const errorStr = error.message;
       const statusMatch = errorStr.match(/status[:\s]*(\d+)/i);
       if (statusMatch) {
@@ -58,6 +105,14 @@ export function useChargeLinks() {
   const getPaymentLink = async (chargeId: string): Promise<PaymentLink | null> => {
     try {
       setLoading(true);
+      
+      // First, check if we have a stored link
+      const storedLink = await getStoredPaymentLink(chargeId);
+      if (storedLink) {
+        return storedLink;
+      }
+
+      // If no stored link, try to get from edge function
       const { data, error } = await supabase.functions.invoke('charge-links', {
         body: { 
           chargeId: chargeId,
@@ -74,14 +129,20 @@ export function useChargeLinks() {
         
         // For other errors, fallback to mock
         handleEdgeFunctionError(error, 'buscar link');
-        setLoading(false);
         return await mockHooks.getPaymentLink(chargeId);
       }
-      return data?.link || null;
+      
+      const paymentLink = data?.link;
+      if (paymentLink) {
+        // Save the link to the database for future use
+        await savePaymentLinkToCharge(chargeId, paymentLink);
+        return paymentLink;
+      }
+
+      return null;
     } catch (error: any) {
       console.error('Error getting payment link:', error);
       handleEdgeFunctionError(error, 'buscar link');
-      setLoading(false);
       return await mockHooks.getPaymentLink(chargeId);
     } finally {
       setLoading(false);
@@ -91,6 +152,8 @@ export function useChargeLinks() {
   const generatePaymentLink = async (chargeId: string): Promise<PaymentLink | null> => {
     try {
       setLoading(true);
+
+      // Try edge function first
       const { data, error } = await supabase.functions.invoke('charge-links', {
         body: { 
           chargeId: chargeId,
@@ -113,24 +176,38 @@ export function useChargeLinks() {
         
         // For other errors, fallback to mock
         handleEdgeFunctionError(error, 'gerar link');
-        setLoading(false);
-        return await mockHooks.generatePaymentLink(chargeId);
+        const mockLink = await mockHooks.generatePaymentLink(chargeId);
+        if (mockLink) {
+          await savePaymentLinkToCharge(chargeId, mockLink);
+        }
+        return mockLink;
       }
 
       if (data?.link) {
+        const paymentLink = data.link;
+        await savePaymentLinkToCharge(chargeId, paymentLink);
+        
         toast({
           title: "Link gerado com sucesso",
           description: "O link de pagamento foi criado e está pronto para uso",
         });
-        return data.link;
+        return paymentLink;
       }
 
-      return null;
+      // If edge function fails, use mock
+      const mockLink = await mockHooks.generatePaymentLink(chargeId);
+      if (mockLink) {
+        await savePaymentLinkToCharge(chargeId, mockLink);
+      }
+      return mockLink;
     } catch (error: any) {
       console.error('Error generating payment link:', error);
       handleEdgeFunctionError(error, 'gerar link');
-      setLoading(false);
-      return await mockHooks.generatePaymentLink(chargeId);
+      const mockLink = await mockHooks.generatePaymentLink(chargeId);
+      if (mockLink) {
+        await savePaymentLinkToCharge(chargeId, mockLink);
+      }
+      return mockLink;
     } finally {
       setLoading(false);
     }
