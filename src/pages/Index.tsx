@@ -20,7 +20,7 @@ import {
 
 export default function Index() {
   return (
-    <div className="min-h-screen bg-surface-alt text-ink">
+    <div className="min-h-screen bg-background text-foreground">
       {/* SEO Meta Tags */}
       <title>Autonegocie - Hub de Pagamentos | Plataforma Completa de Cobrança</title>
       <meta name="description" content="Hub de Pagamentos Autonegocie - Plataforma completa para gestão de cobranças, parcelamentos flexíveis e recebimento garantido. Transforme sua negociação com clientes." />
@@ -30,24 +30,24 @@ export default function Index() {
       <meta name="robots" content="index, follow" />
       
       {/* Header */}
-      <header className="border-b bg-surface/95 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b bg-background/95 backdrop-blur-sm sticky top-0 z-50 shadow-sm">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <div className="text-2xl font-bold bg-gradient-brand bg-clip-text text-transparent">
                 Autonegocie
               </div>
-              <Badge variant="secondary" className="text-xs bg-brand/20 text-ink">Hub de Pagamentos</Badge>
+              <Badge variant="secondary" className="text-xs bg-brand/10 text-brand">Hub de Pagamentos</Badge>
             </div>
             <nav className="hidden md:flex items-center space-x-6">
-              <a href="#recursos" className="text-ink-secondary hover:text-brand transition-colors">Recursos</a>
-              <a href="#como-funciona" className="text-ink-secondary hover:text-brand transition-colors">Como funciona</a>
-              <a href="#casos-de-uso" className="text-ink-secondary hover:text-brand transition-colors">Casos de uso</a>
-              <a href="#faq" className="text-ink-secondary hover:text-brand transition-colors">FAQ</a>
+              <a href="#recursos" className="text-muted-foreground hover:text-brand transition-colors">Recursos</a>
+              <a href="#como-funciona" className="text-muted-foreground hover:text-brand transition-colors">Como funciona</a>
+              <a href="#casos-de-uso" className="text-muted-foreground hover:text-brand transition-colors">Casos de uso</a>
+              <a href="#faq" className="text-muted-foreground hover:text-brand transition-colors">FAQ</a>
             </nav>
             <div className="flex items-center space-x-3">
               <Link to="/login">
-                <Button variant="ghost" className="text-ink hover:text-brand">
+                <Button variant="ghost" className="text-muted-foreground hover:text-brand">
                   Login
                 </Button>
               </Link>
@@ -63,9 +63,8 @@ export default function Index() {
 
       <main>
         {/* Hero Section */}
-        <section className="relative py-20 md:py-32 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-hero opacity-10"></div>
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj4KPGcgZmlsbD0iIzAwZmY4OCIgZmlsbC1vcGFjaXR5PSIwLjAzIj4KPGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMSIvPgo8L2c+CjwvZz4KPC9zdmc+')] opacity-20"></div>
+        <section className="relative py-20 md:py-32 overflow-hidden bg-gradient-to-br from-background to-surface">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGcgZmlsbD0ibm9uZSIgZmlsbC1ydWxlPSJldmVub2RkIj4KPGcgZmlsbD0iIzAwZDY3OCIgZmlsbC1vcGFjaXR5PSIwLjAzIj4KPGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMSIvPgo8L2c+CjwvZz4KPC9zdmc+')] opacity-40"></div>
           
           <div className="container mx-auto px-4 relative">
             <div className="text-center max-w-4xl mx-auto">
@@ -77,13 +76,13 @@ export default function Index() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
                 <Link to="/register">
-                  <Button size="lg" className="bg-brand hover:bg-brand-dark text-brand-foreground px-8 py-6 text-lg">
+                  <Button size="lg" className="bg-brand hover:bg-brand-dark text-brand-foreground px-8 py-6 text-lg shadow-lg">
                     Começar Agora
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
                 <Link to="/payment">
-                  <Button variant="outline" size="lg" className="px-8 py-6 text-lg border-brand text-brand hover:bg-brand-light">
+                  <Button variant="outline" size="lg" className="px-8 py-6 text-lg border-brand text-brand hover:bg-brand/5">
                     <Play className="mr-2 h-5 w-5" />
                     Ver Demo
                   </Button>
@@ -110,25 +109,25 @@ export default function Index() {
         </section>
 
         {/* Recursos Section */}
-        <section id="recursos" className="py-20 bg-surface-light">
+        <section id="recursos" className="py-20 bg-surface">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-ink">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
                 Recursos que <span className="text-brand">garantem resultados</span>
               </h2>
-              <p className="text-xl text-ink-secondary max-w-2xl mx-auto">
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
                 Ferramentas poderosas para otimizar sua gestão de cobranças e aumentar a conversão
               </p>
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <Card className="border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-surface">
+              <Card className="border border-border shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-card">
                 <CardHeader>
-                  <div className="w-12 h-12 bg-brand/20 rounded-lg flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 bg-brand/10 rounded-lg flex items-center justify-center mb-4">
                     <CreditCard className="h-6 w-6 text-brand" />
                   </div>
-                  <CardTitle className="text-ink">Parcelamento Flexível</CardTitle>
-                  <CardDescription className="text-ink-secondary">
+                  <CardTitle className="text-card-foreground">Parcelamento Flexível</CardTitle>
+                  <CardDescription className="text-muted-foreground">
                     Ofereça até 21x no cartão com recebimento integral à vista em 1 dia útil
                   </CardDescription>
                 </CardHeader>
@@ -136,27 +135,27 @@ export default function Index() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Até 9 cartões diferentes</span>
+                      <span className="text-muted-foreground">Até 9 cartões diferentes</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Sem desconto de taxas</span>
+                      <span className="text-muted-foreground">Sem desconto de taxas</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Aprovação automática</span>
+                      <span className="text-muted-foreground">Aprovação automática</span>
                     </li>
                   </ul>
                 </CardContent>
               </Card>
 
-              <Card className="border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-surface">
+              <Card className="border border-border shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-card">
                 <CardHeader>
-                  <div className="w-12 h-12 bg-brand/20 rounded-lg flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 bg-brand/10 rounded-lg flex items-center justify-center mb-4">
                     <Shield className="h-6 w-6 text-brand" />
                   </div>
-                  <CardTitle className="text-ink">Segurança Total</CardTitle>
-                  <CardDescription className="text-ink-secondary">
+                  <CardTitle className="text-card-foreground">Segurança Total</CardTitle>
+                  <CardDescription className="text-muted-foreground">
                     Zero chargeback e total proteção contra fraudes
                   </CardDescription>
                 </CardHeader>
@@ -164,27 +163,27 @@ export default function Index() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Antifraude avançado</span>
+                      <span className="text-muted-foreground">Antifraude avançado</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Proteção garantida</span>
+                      <span className="text-muted-foreground">Proteção garantida</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Dados criptografados</span>
+                      <span className="text-muted-foreground">Dados criptografados</span>
                     </li>
                   </ul>
                 </CardContent>
               </Card>
 
-              <Card className="border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-surface">
+              <Card className="border border-border shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 bg-card">
                 <CardHeader>
-                  <div className="w-12 h-12 bg-brand/20 rounded-lg flex items-center justify-center mb-4">
+                  <div className="w-12 h-12 bg-brand/10 rounded-lg flex items-center justify-center mb-4">
                     <BarChart3 className="h-6 w-6 text-brand" />
                   </div>
-                  <CardTitle className="text-ink">Gestão Inteligente</CardTitle>
-                  <CardDescription className="text-ink-secondary">
+                  <CardTitle className="text-card-foreground">Gestão Inteligente</CardTitle>
+                  <CardDescription className="text-muted-foreground">
                     Dashboard completo com relatórios e analytics em tempo real
                   </CardDescription>
                 </CardHeader>
@@ -192,15 +191,15 @@ export default function Index() {
                   <ul className="space-y-2 text-sm">
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Relatórios detalhados</span>
+                      <span className="text-muted-foreground">Relatórios detalhados</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Métricas de conversão</span>
+                      <span className="text-muted-foreground">Métricas de conversão</span>
                     </li>
                     <li className="flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-brand" />
-                      <span className="text-ink-secondary">Exportação de dados</span>
+                      <span className="text-muted-foreground">Exportação de dados</span>
                     </li>
                   </ul>
                 </CardContent>
@@ -210,13 +209,13 @@ export default function Index() {
         </section>
 
         {/* Como Funciona Section */}
-        <section id="como-funciona" className="py-20 bg-surface">
+        <section id="como-funciona" className="py-20 bg-background">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-ink">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
                 Como funciona o <span className="text-brand">Hub de Pagamentos</span>
               </h2>
-              <p className="text-xl text-ink-secondary max-w-2xl mx-auto">
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
                 Processo simples e eficiente em poucos passos
               </p>
             </div>
@@ -226,8 +225,8 @@ export default function Index() {
                 <div className="w-16 h-16 bg-brand rounded-full flex items-center justify-center text-brand-foreground text-2xl font-bold mb-4 mx-auto">
                   1
                 </div>
-                <h3 className="text-xl font-semibold mb-2 text-ink">Crie seu Link</h3>
-                <p className="text-ink-secondary">
+                <h3 className="text-xl font-semibold mb-2 text-foreground">Crie seu Link</h3>
+                <p className="text-muted-foreground">
                   Gere links de pagamento personalizados com suas condições e valores
                 </p>
               </div>
@@ -236,8 +235,8 @@ export default function Index() {
                 <div className="w-16 h-16 bg-brand rounded-full flex items-center justify-center text-brand-foreground text-2xl font-bold mb-4 mx-auto">
                   2
                 </div>
-                <h3 className="text-xl font-semibold mb-2 text-ink">Envie ao Cliente</h3>
-                <p className="text-ink-secondary">
+                <h3 className="text-xl font-semibold mb-2 text-foreground">Envie ao Cliente</h3>
+                <p className="text-muted-foreground">
                   Compartilhe via WhatsApp, email ou SMS. Cliente escolhe a melhor forma de pagar
                 </p>
               </div>
@@ -246,8 +245,8 @@ export default function Index() {
                 <div className="w-16 h-16 bg-brand rounded-full flex items-center justify-center text-brand-foreground text-2xl font-bold mb-4 mx-auto">
                   3
                 </div>
-                <h3 className="text-xl font-semibold mb-2 text-ink">Receba em 1 Dia</h3>
-                <p className="text-ink-secondary">
+                <h3 className="text-xl font-semibold mb-2 text-foreground">Receba em 1 Dia</h3>
+                <p className="text-muted-foreground">
                   Valor integral creditado em sua conta em 1 dia útil, sem descontos
                 </p>
               </div>
@@ -256,61 +255,61 @@ export default function Index() {
         </section>
 
         {/* Casos de Uso Section */}
-        <section id="casos-de-uso" className="py-20 bg-surface-light">
+        <section id="casos-de-uso" className="py-20 bg-surface">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-ink">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
                 Casos de <span className="text-brand">uso ideais</span>
               </h2>
-              <p className="text-xl text-ink-secondary max-w-2xl mx-auto">
+              <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
                 Solução perfeita para diversos segmentos e necessidades
               </p>
             </div>
 
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card className="text-center border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-surface">
+              <Card className="text-center border border-border shadow-lg hover:shadow-xl transition-all duration-300 bg-card">
                 <CardHeader>
                   <FileText className="h-12 w-12 text-brand mx-auto mb-4" />
-                  <CardTitle className="text-lg text-ink">Escritórios de Advocacia</CardTitle>
+                  <CardTitle className="text-lg text-card-foreground">Escritórios de Advocacia</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-ink-secondary">
+                  <p className="text-sm text-muted-foreground">
                     Negociação de dívidas e acordos judiciais com parcelamento flexível
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="text-center border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-surface">
+              <Card className="text-center border border-border shadow-lg hover:shadow-xl transition-all duration-300 bg-card">
                 <CardHeader>
                   <Users className="h-12 w-12 text-brand mx-auto mb-4" />
-                  <CardTitle className="text-lg text-ink">Empresas de Cobrança</CardTitle>
+                  <CardTitle className="text-lg text-card-foreground">Empresas de Cobrança</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-ink-secondary">
+                  <p className="text-sm text-muted-foreground">
                     Recuperação de crédito com opções atrativas de pagamento
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="text-center border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-surface">
+              <Card className="text-center border border-border shadow-lg hover:shadow-xl transition-all duration-300 bg-card">
                 <CardHeader>
                   <Zap className="h-12 w-12 text-brand mx-auto mb-4" />
-                  <CardTitle className="text-lg text-ink">Concessionárias</CardTitle>
+                  <CardTitle className="text-lg text-card-foreground">Concessionárias</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-ink-secondary">
+                  <p className="text-sm text-muted-foreground">
                     Negociação de débitos de energia, água e telecomunicações
                   </p>
                 </CardContent>
               </Card>
 
-              <Card className="text-center border border-brand/20 shadow-lg hover:shadow-xl transition-all duration-300 bg-surface">
+              <Card className="text-center border border-border shadow-lg hover:shadow-xl transition-all duration-300 bg-card">
                 <CardHeader>
                   <HeadphonesIcon className="h-12 w-12 text-brand mx-auto mb-4" />
-                  <CardTitle className="text-lg text-ink">Call Centers</CardTitle>
+                  <CardTitle className="text-lg text-card-foreground">Call Centers</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-ink-secondary">
+                  <p className="text-sm text-muted-foreground">
                     Fechamento de acordos telefônicos com confirmação imediata
                   </p>
                 </CardContent>
@@ -320,7 +319,7 @@ export default function Index() {
         </section>
 
         {/* Depoimentos Section */}
-        <section className="py-20">
+        <section className="py-20 bg-background">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
               <h2 className="text-3xl md:text-4xl font-bold mb-4">
@@ -387,10 +386,10 @@ export default function Index() {
         </section>
 
         {/* FAQ Section */}
-        <section id="faq" className="py-20 bg-muted/30">
+        <section id="faq" className="py-20 bg-surface">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
                 Perguntas <span className="text-brand">Frequentes</span>
               </h2>
               <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
@@ -400,8 +399,8 @@ export default function Index() {
 
             <div className="max-w-3xl mx-auto">
               <Accordion type="single" collapsible className="space-y-4">
-                <AccordionItem value="item-1" className="bg-white rounded-lg px-6 border-0 shadow-sm">
-                  <AccordionTrigger className="text-left hover:no-underline">
+                <AccordionItem value="item-1" className="bg-card rounded-lg px-6 border-0 shadow-sm">
+                  <AccordionTrigger className="text-left hover:no-underline text-card-foreground">
                     Como funciona o recebimento em 1 dia útil?
                   </AccordionTrigger>
                   <AccordionContent className="text-muted-foreground">
@@ -409,8 +408,8 @@ export default function Index() {
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="item-2" className="bg-white rounded-lg px-6 border-0 shadow-sm">
-                  <AccordionTrigger className="text-left hover:no-underline">
+                <AccordionItem value="item-2" className="bg-card rounded-lg px-6 border-0 shadow-sm">
+                  <AccordionTrigger className="text-left hover:no-underline text-card-foreground">
                     Existe limite de parcelamento?
                   </AccordionTrigger>
                   <AccordionContent className="text-muted-foreground">
@@ -418,8 +417,8 @@ export default function Index() {
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="item-3" className="bg-white rounded-lg px-6 border-0 shadow-sm">
-                  <AccordionTrigger className="text-left hover:no-underline">
+                <AccordionItem value="item-3" className="bg-card rounded-lg px-6 border-0 shadow-sm">
+                  <AccordionTrigger className="text-left hover:no-underline text-card-foreground">
                     Como é garantida a segurança das transações?
                   </AccordionTrigger>
                   <AccordionContent className="text-muted-foreground">
@@ -427,8 +426,8 @@ export default function Index() {
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="item-4" className="bg-white rounded-lg px-6 border-0 shadow-sm">
-                  <AccordionTrigger className="text-left hover:no-underline">
+                <AccordionItem value="item-4" className="bg-card rounded-lg px-6 border-0 shadow-sm">
+                  <AccordionTrigger className="text-left hover:no-underline text-card-foreground">
                     Posso integrar com meu sistema atual?
                   </AccordionTrigger>
                   <AccordionContent className="text-muted-foreground">
@@ -436,8 +435,8 @@ export default function Index() {
                   </AccordionContent>
                 </AccordionItem>
 
-                <AccordionItem value="item-5" className="bg-white rounded-lg px-6 border-0 shadow-sm">
-                  <AccordionTrigger className="text-left hover:no-underline">
+                <AccordionItem value="item-5" className="bg-card rounded-lg px-6 border-0 shadow-sm">
+                  <AccordionTrigger className="text-left hover:no-underline text-card-foreground">
                     Existe custo de adesão ou mensalidade?
                   </AccordionTrigger>
                   <AccordionContent className="text-muted-foreground">
@@ -483,7 +482,7 @@ export default function Index() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-background border-t py-8">
+      <footer className="bg-surface border-t py-8">
         <div className="container mx-auto px-4">
           <div className="text-center text-muted-foreground">
             <p>&copy; 2024 Autonegocie Hub de Pagamentos. Todos os direitos reservados.</p>

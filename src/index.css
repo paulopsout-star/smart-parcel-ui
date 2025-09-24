@@ -8,25 +8,26 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 142 71% 45%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 178 60% 50%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 142 71% 45%;
+    /* Light theme colors based on Quita+ */
+    --background: 0 0% 100%; /* white */
+    --foreground: 0 0% 15%; /* dark gray */
+    --card: 0 0% 100%; /* white */
+    --card-foreground: 0 0% 15%; /* dark gray */
+    --popover: 0 0% 100%; /* white */
+    --popover-foreground: 0 0% 15%; /* dark gray */
+    --primary: 152 100% 42%; /* #00D678 */
+    --primary-foreground: 0 0% 100%; /* white */
+    --secondary: 0 0% 96%; /* light gray */
+    --secondary-foreground: 0 0% 15%; /* dark gray */
+    --muted: 0 0% 96%; /* light gray */
+    --muted-foreground: 0 0% 45%; /* medium gray */
+    --accent: 150 100% 48%; /* #00F586 */
+    --accent-foreground: 0 0% 15%; /* dark gray */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%; /* light gray */
+    --input: 0 0% 90%; /* light gray */
+    --ring: 152 100% 42%; /* brand */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -38,9 +39,9 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 48 96% 89%;
     --payment-card: 0 0% 100%;
-    --payment-selected: 142 71% 45%;
-    --payment-hover: 142 71% 91%;
-    --payment-border: 0 0% 89.8%;
+    --payment-selected: 152 100% 42%;
+    --payment-hover: 152 100% 95%;
+    --payment-border: 0 0% 90%;
     --payment-shadow: 0 0% 0% / 0.1;
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -50,23 +51,33 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 10.6% 64.9%;
-    --brand: 152 100% 42%;
-    --brand-foreground: 0 0% 100%;
-    --brand-light: 152 77% 54%;
-    --brand-dark: 152 100% 36%;
-    --accent: 150 100% 48%;
-    --accent-foreground: 0 0% 100%;
-    --accent-light: 150 89% 67%;
-    --accent-dark: 150 100% 40%;
-    --ink: 0 0% 100%;
-    --ink-secondary: 0 0% 90%;
-    --ink-muted: 0 0% 70%;
-    --surface: 209 52% 24%;
-    --surface-alt: 209 61% 15%;
-    --surface-light: 209 48% 31%;
+    
+    /* Brand colors */
+    --brand: 152 100% 42%; /* #00D678 */
+    --brand-foreground: 0 0% 100%; /* white */
+    --brand-light: 152 77% 54%; /* #33E194 */
+    --brand-dark: 152 100% 36%; /* #00B865 */
+    
+    /* Accent colors */
+    --accent: 150 100% 48%; /* #00F586 */
+    --accent-foreground: 0 0% 15%; /* dark gray */
+    --accent-light: 150 89% 67%; /* #66F7A8 */
+    --accent-dark: 150 100% 40%; /* #00CC73 */
+    
+    /* Text/Ink colors for light theme */
+    --ink: 0 0% 15%; /* dark gray */
+    --ink-secondary: 0 0% 45%; /* medium gray */
+    --ink-muted: 0 0% 70%; /* light gray */
+    
+    /* Surface colors for light theme */
+    --surface: 0 0% 98%; /* very light gray */
+    --surface-alt: 0 0% 96%; /* light gray */
+    --surface-light: 0 0% 100%; /* white */
+    
+    /* Gradients for light theme */
     --gradient-brand: linear-gradient(135deg, hsl(152 100% 42%), hsl(150 100% 48%));
-    --gradient-hero: linear-gradient(135deg, hsl(209 61% 15%) 0%, hsl(209 52% 24%) 100%);
-    --gradient-surface: linear-gradient(180deg, hsl(209 61% 15%) 0%, hsl(209 52% 24%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(0 0% 98%) 100%);
+    --gradient-surface: linear-gradient(180deg, hsl(0 0% 98%) 0%, hsl(0 0% 96%) 100%);
   }
 
   .dark {
