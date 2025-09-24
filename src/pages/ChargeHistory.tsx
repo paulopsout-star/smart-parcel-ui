@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
+import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
@@ -43,6 +44,10 @@ export default function ChargeHistory() {
     chargeName: ''
   });
   const [executions, setExecutions] = useState<any[]>([]);
+  
+  // Checkout modal state
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutModalData, setCheckoutModalData] = useState<any>(null);
   
   const { 
     loading: linksLoading, 
@@ -128,6 +133,19 @@ export default function ChargeHistory() {
       const newLink = await generatePaymentLink(charge.id);
       if (newLink) {
         setPaymentLink(newLink);
+        
+        // Open ModalCheckoutLink with the generated link
+        const event = new CustomEvent('openCheckoutModal', {
+          detail: {
+            checkoutUrl: newLink.absolute_url,
+            linkId: newLink.id,
+            chargeId: charge.id,
+            amount: charge.amount,
+            payerName: charge.payer_name,
+            description: charge.description
+          }
+        });
+        window.dispatchEvent(event);
       }
     };
 
@@ -146,7 +164,19 @@ export default function ChargeHistory() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => openPaymentLink(paymentLink.absolute_url)}
+            onClick={() => {
+              // Validate URL before opening
+              if (!paymentLink.absolute_url || (!paymentLink.absolute_url.startsWith('http://') && !paymentLink.absolute_url.startsWith('https://'))) {
+                toast({
+                  title: "Link inválido",
+                  description: "URL de checkout inválida. Gerando nova...",
+                  variant: "destructive",
+                });
+                handleGenerateLink();
+                return;
+              }
+              openPaymentLink(paymentLink.absolute_url);
+            }}
             disabled={linksLoading}
           >
             <ExternalLink className="w-4 h-4 mr-1" />
@@ -160,6 +190,15 @@ export default function ChargeHistory() {
           >
             <Copy className="w-4 h-4 mr-1" />
             Copiar
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleGenerateLink}
+            disabled={linksLoading}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Abrir Modal
           </Button>
         </div>
       );
@@ -182,6 +221,26 @@ export default function ChargeHistory() {
     if (isOperador) {
       fetchCharges();
     }
+
+    // Listen for custom event to open checkout modal
+    const handleOpenCheckoutModal = (event: any) => {
+      const data = event.detail;
+      setCheckoutModalData({
+        chargeId: data.chargeId,
+        checkoutUrl: data.checkoutUrl,
+        amount: data.amount,
+        payerName: data.payerName,
+        description: data.description,
+        status: 'PENDENTE'
+      });
+      setShowCheckoutModal(true);
+    };
+
+    window.addEventListener('openCheckoutModal', handleOpenCheckoutModal);
+    
+    return () => {
+      window.removeEventListener('openCheckoutModal', handleOpenCheckoutModal);
+    };
   }, [isOperador]);
 
   if (!isOperador) {
@@ -477,6 +536,15 @@ export default function ChargeHistory() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Checkout Success Modal */}
+      {checkoutModalData && (
+        <CheckoutSuccessModal
+          open={showCheckoutModal}
+          onOpenChange={setShowCheckoutModal}
+          checkoutData={checkoutModalData}
+        />
+      )}
     </div>
   );
 }

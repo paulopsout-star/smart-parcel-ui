@@ -850,11 +850,11 @@ export default function NewCharge() {
             open={showCheckoutModal}
             onOpenChange={setShowCheckoutModal}
             checkoutData={{
-              chargeId: '12345',
+              chargeId: watch('payer_name') ? crypto.randomUUID() : 'temp-id',
               checkoutUrl: checkoutUrl,
-              amount: 10000,
-              payerName: 'Cliente Teste', 
-              description: 'Cobrança de teste',
+              amount: watch('amount') ? parseInt(watch('amount').replace(/[^\d]/g, '')) : 0,
+              payerName: watch('payer_name') || 'Cliente', 
+              description: watch('description') || 'Nova cobrança',
               status: 'PENDENTE'
             }}
           />

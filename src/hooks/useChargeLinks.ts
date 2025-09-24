@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { useChargeLinksMock } from './useChargeLinksMock';
 
 interface PaymentLink {
   id: string;
@@ -22,6 +23,37 @@ interface ChargeExecution {
 export function useChargeLinks() {
   const [loading, setLoading] = useState(false);
   const [executionsLoading, setExecutionsLoading] = useState(false);
+  
+  // Fallback to mock when edge functions fail
+  const mockHooks = useChargeLinksMock();
+
+  const handleEdgeFunctionError = (error: any, operation: string) => {
+    console.error(`Edge Function error in ${operation}:`, error);
+    
+    let status = 'unknown';
+    let message = 'Erro desconhecido';
+    
+    if (error?.message) {
+      // Try to extract status and message from error
+      const errorStr = error.message;
+      const statusMatch = errorStr.match(/status[:\s]*(\d+)/i);
+      if (statusMatch) {
+        status = statusMatch[1];
+      }
+      
+      if (errorStr.includes('non-2xx status code')) {
+        message = `Edge Function retornou status ${status}`;
+      } else {
+        message = errorStr;
+      }
+    }
+    
+    toast({
+      title: `Erro ao ${operation}`,
+      description: `${status !== 'unknown' ? status + ': ' : ''}${message}. Usando fallback mock.`,
+      variant: "destructive",
+    });
+  };
 
   const getPaymentLink = async (chargeId: string): Promise<PaymentLink | null> => {
     try {
@@ -39,12 +71,18 @@ export function useChargeLinks() {
         if (error.message?.includes('404') || data?.code === 'NOT_FOUND') {
           return null;
         }
-        return null;
+        
+        // For other errors, fallback to mock
+        handleEdgeFunctionError(error, 'buscar link');
+        setLoading(false);
+        return await mockHooks.getPaymentLink(chargeId);
       }
       return data?.link || null;
     } catch (error: any) {
       console.error('Error getting payment link:', error);
-      return null;
+      handleEdgeFunctionError(error, 'buscar link');
+      setLoading(false);
+      return await mockHooks.getPaymentLink(chargeId);
     } finally {
       setLoading(false);
     }
@@ -73,7 +111,10 @@ export function useChargeLinks() {
           return null;
         }
         
-        throw new Error(error.message || 'Failed to generate payment link');
+        // For other errors, fallback to mock
+        handleEdgeFunctionError(error, 'gerar link');
+        setLoading(false);
+        return await mockHooks.generatePaymentLink(chargeId);
       }
 
       if (data?.link) {
@@ -87,12 +128,9 @@ export function useChargeLinks() {
       return null;
     } catch (error: any) {
       console.error('Error generating payment link:', error);
-      toast({
-        title: "Erro ao gerar link",
-        description: error.message || "Não foi possível gerar o link de pagamento",
-        variant: "destructive",
-      });
-      return null;
+      handleEdgeFunctionError(error, 'gerar link');
+      setLoading(false);
+      return await mockHooks.generatePaymentLink(chargeId);
     } finally {
       setLoading(false);
     }
@@ -129,16 +167,17 @@ export function useChargeLinks() {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        handleEdgeFunctionError(error, 'carregar execuções');
+        setExecutionsLoading(false);
+        return await mockHooks.getChargeExecutions(chargeId);
+      }
       return data?.executions || [];
     } catch (error: any) {
       console.error('Error getting executions:', error);
-      toast({
-        title: "Erro ao carregar execuções",
-        description: error.message || "Não foi possível carregar as execuções",
-        variant: "destructive",
-      });
-      return [];
+      handleEdgeFunctionError(error, 'carregar execuções');
+      setExecutionsLoading(false);
+      return await mockHooks.getChargeExecutions(chargeId);
     } finally {
       setExecutionsLoading(false);
     }
