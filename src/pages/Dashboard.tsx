@@ -97,15 +97,15 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
-      <div className="flex justify-between items-center">
+    <div className="w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground">
             Bem-vindo, {profile?.full_name}
           </p>
         </div>
-        <Badge variant={profile?.role === 'admin' ? 'default' : 'secondary'}>
+        <Badge variant={profile?.role === 'admin' ? 'default' : 'secondary'} className="w-fit">
           {profile?.role === 'admin' ? 'Administrador' : 'Operador'}
         </Badge>
       </div>
@@ -113,15 +113,15 @@ export default function Dashboard() {
       <SubscriptionBanner />
 
       {/* Quick Actions */}
-      <div className="flex gap-4">
-        <Button asChild size="lg">
+      <div className="flex flex-col sm:flex-row gap-4">
+        <Button asChild size="lg" className="w-full sm:w-auto">
           <Link to="/new-charge">
             <Plus className="w-4 h-4 mr-2" />
             Nova Cobrança
           </Link>
         </Button>
         
-        <Button variant="outline" asChild size="lg">
+        <Button variant="outline" asChild size="lg" className="w-full sm:w-auto">
           <Link to="/charge-history">
             <BarChart3 className="w-4 h-4 mr-2" />
             Histórico
@@ -129,8 +129,8 @@ export default function Dashboard() {
         </Button>
       </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total de Cobranças</CardTitle>

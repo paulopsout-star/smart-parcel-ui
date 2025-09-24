@@ -75,15 +75,15 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-8">
-              <Link to="/dashboard" className="text-xl font-bold">
+      <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+        <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center space-x-8 min-w-0 flex-1">
+              <Link to="/dashboard" className="text-xl font-bold whitespace-nowrap">
                 Sistema de Cobrança
               </Link>
               
-              <nav className="hidden md:flex space-x-4">
+              <nav className="hidden lg:flex items-center space-x-1 overflow-x-auto">
                 {navigation.map((item) => {
                   const Icon = item.icon;
                   const isActive = location.pathname === item.href;
@@ -91,13 +91,13 @@ export function Layout({ children }: LayoutProps) {
                     <Link
                       key={item.name}
                       to={item.href}
-                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                      className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                         isActive
                           ? 'bg-primary text-primary-foreground'
                           : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                       }`}
                     >
-                      <Icon className="w-4 h-4 mr-2" />
+                      <Icon className="w-4 h-4 mr-2 flex-shrink-0" />
                       {item.name}
                     </Link>
                   );
@@ -105,7 +105,7 @@ export function Layout({ children }: LayoutProps) {
               </nav>
             </div>
 
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 flex-shrink-0">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -116,7 +116,7 @@ export function Layout({ children }: LayoutProps) {
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuContent className="w-56 bg-card border shadow-lg" align="end" forceMount>
                   <div className="flex flex-col space-y-1 p-2">
                     <p className="text-sm font-medium">{profile?.full_name}</p>
                     <p className="text-xs text-muted-foreground">{user?.email}</p>
