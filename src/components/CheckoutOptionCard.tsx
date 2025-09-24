@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { PaymentOption } from '@/pages/Checkout';
 import { formatCurrency } from '@/lib/utils';
 import { validateCustomPayment, distributeCentsInInstallments } from '@/lib/checkout-utils';
-import { CheckCircle, Circle } from 'lucide-react';
+import { Clock, Zap, TrendingUp, DollarSign } from 'lucide-react';
 
 interface CheckoutOptionCardProps {
   option: PaymentOption;
@@ -55,126 +55,151 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
       const validation = validateCustomPayment(amountCents, installments);
       
       return (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="custom-amount" className="text-sm font-medium text-ink">
-                Valor Total (R$)
-              </Label>
-              <Input
-                id="custom-amount"
-                type="text"
-                placeholder="0,00"
-                value={localAmount}
-                onChange={(e) => handleAmountChange(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label htmlFor="custom-installments" className="text-sm font-medium text-ink">
-                Parcelas
-              </Label>
-              <Input
-                id="custom-installments"
-                type="number"
-                min="1"
-                max="12"
-                placeholder="1"
-                value={localInstallments}
-                onChange={(e) => handleInstallmentsChange(e.target.value)}
-                className="mt-1"
-              />
-            </div>
+        <div className="space-y-3">
+          <div className="text-2xl font-bold text-ink">
+            {validation.valid && amountCents > 0 ? (
+              formatCurrency(amountCents)
+            ) : (
+              'R$ 0,00'
+            )}
           </div>
           
-          {!validation.valid && (
-            <div className="text-sm text-destructive">
-              {validation.errors.map((error, index) => (
-                <div key={index}>• {error}</div>
-              ))}
-            </div>
-          )}
+          <div className="text-sm text-ink-secondary">
+            Digite o valor da parcela desejada
+          </div>
           
-          {validation.valid && amountCents > 0 && (
-            <div className="text-sm text-ink-secondary">
-              <div>
-                <strong>{installments}x</strong> de{' '}
-                <strong>{formatCurrency(Math.floor(amountCents / installments))}</strong>
+          <div className="space-y-3">
+            <Input
+              type="text"
+              placeholder="Digite o valor da parcela desejada"
+              value={localAmount}
+              onChange={(e) => handleAmountChange(e.target.value)}
+              className="text-sm bg-gray-50 border-gray-200"
+            />
+            
+            {!validation.valid && validation.errors.length > 0 && (
+              <div className="text-sm text-destructive">
+                {validation.errors.map((error, index) => (
+                  <div key={index}>• {error}</div>
+                ))}
               </div>
-              {installments > 1 && (
-                <div className="text-xs text-ink-muted mt-1">
-                  * Última parcela: {formatCurrency(amountCents - Math.floor(amountCents / installments) * (installments - 1))}
+            )}
+            
+            {validation.valid && amountCents > 0 && (
+              <div className="text-sm text-ink-secondary">
+                <div>
+                  <strong>{installments}x</strong> de{' '}
+                  <strong>{formatCurrency(Math.floor(amountCents / installments))}</strong>
                 </div>
-              )}
-            </div>
-          )}
+                {installments > 1 && (
+                  <div className="text-xs text-ink-muted mt-1">
+                    * Última parcela: {formatCurrency(amountCents - Math.floor(amountCents / installments) * (installments - 1))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       );
     }
 
     return (
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-lg font-semibold text-ink">
-              {option.installments === 1 ? (
-                formatCurrency(option.totalCents)
-              ) : (
-                `${option.installments}x de ${formatCurrency(option.installmentValueCents)}`
-              )}
-            </div>
-            {option.installments > 1 && (
-              <div className="text-sm text-ink-secondary">
-                Total: {formatCurrency(option.totalCents)}
-              </div>
+        <div className="flex flex-col">
+          <div className="text-2xl font-bold text-ink mb-1">
+            {option.installments === 1 ? (
+              formatCurrency(option.totalCents)
+            ) : (
+              <>
+                {formatCurrency(option.installmentValueCents)}{' '}
+                <span className="text-base font-normal text-ink-secondary">
+                  em {option.installments}x
+                </span>
+              </>
             )}
           </div>
+          
+          {option.installments > 1 && (
+            <div className="text-sm text-ink-secondary">
+              Total: {formatCurrency(option.totalCents)}
+            </div>
+          )}
+          
           {option.discountCents && (
-            <Badge variant="default" className="bg-success text-success-foreground">
+            <div className="text-sm text-primary font-medium mt-1">
               Economize {formatCurrency(option.discountCents)}
-            </Badge>
+            </div>
           )}
         </div>
-        
-        {option.type === 'popular' && (
-          <Badge variant="secondary" className="text-xs">
-            Mais Popular
-          </Badge>
-        )}
-        
-        {option.type === 'minimum' && (
-          <Badge variant="outline" className="text-xs">
-            Menor Parcela
-          </Badge>
-        )}
       </div>
     );
   };
 
+  const getOptionIcon = () => {
+    switch (option.type) {
+      case 'minimum':
+        return <Clock className="w-5 h-5 text-white" />;
+      case 'single':
+        return <Zap className="w-5 h-5 text-white" />;
+      case 'popular':
+        return <TrendingUp className="w-5 h-5 text-white" />;
+      case 'custom':
+        return <DollarSign className="w-5 h-5 text-white" />;
+      default:
+        return <DollarSign className="w-5 h-5 text-white" />;
+    }
+  };
+
+  const getOptionDescription = () => {
+    switch (option.type) {
+      case 'minimum':
+        return 'Parcele em mais vezes e pague menos por mês';
+      case 'single':
+        return 'Pagamento único com desconto especial';
+      case 'popular':
+        return 'A opção mais escolhida pelos nossos clientes';
+      case 'custom':
+        return 'Escolha o valor da parcela que cabe no seu bolso';
+      default:
+        return '';
+    }
+  };
+
   return (
     <Card
-      className={`p-6 cursor-pointer transition-all duration-200 border-2 ${
+      className={`p-6 cursor-pointer transition-all duration-200 border ${
         isSelected
-          ? 'border-primary bg-primary/5 shadow-lg'
-          : 'border-border hover:border-primary/50 hover:shadow-md'
-      }`}
+          ? 'border-primary bg-white shadow-lg ring-2 ring-primary/20'
+          : 'border-gray-200 hover:border-primary/50 hover:shadow-md bg-white'
+      } ${option.type === 'popular' ? 'relative' : ''}`}
       onClick={onSelect}
     >
+      {option.type === 'popular' && (
+        <div className="absolute -top-3 left-6">
+          <Badge className="bg-orange-500 text-white px-3 py-1 text-xs font-medium">
+            Mais Escolhido
+          </Badge>
+        </div>
+      )}
+      
       <div className="flex items-start gap-4">
-        <div className="mt-1">
-          {isSelected ? (
-            <CheckCircle className="w-5 h-5 text-primary" />
-          ) : (
-            <Circle className="w-5 h-5 text-ink-muted" />
-          )}
+        <div className="flex-shrink-0 mt-1">
+          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+            {getOptionIcon()}
+          </div>
         </div>
         
-        <div className="flex-1">
-          <div className="font-medium text-ink mb-3">
-            {option.title}
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-col">
+            <h3 className="font-semibold text-lg text-ink mb-1">
+              {option.title}
+            </h3>
+            <p className="text-sm text-ink-secondary mb-4">
+              {getOptionDescription()}
+            </p>
+            
+            {renderOptionContent()}
           </div>
-          
-          {renderOptionContent()}
         </div>
       </div>
     </Card>

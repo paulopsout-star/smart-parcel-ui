@@ -128,31 +128,14 @@ const Checkout = () => {
   }
 
   return (
-    <div className="min-h-screen bg-surface">
-      {/* Header */}
-      <div className="bg-card border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-ink">{charge.title}</h1>
-              <p className="text-ink-secondary mt-1">{charge.description}</p>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-ink-secondary">
-              <Shield className="w-4 h-4" />
-              <span>Transação Segura</span>
-              <Lock className="w-4 h-4" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Payment Options */}
+          {/* Payment Options - Left Side */}
           <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-xl font-semibold text-ink mb-6">
-              Escolha sua forma de pagamento
-            </h2>
+            <p className="text-ink-secondary text-sm mb-6">
+              Selecione a opção que melhor se adequa ao seu perfil
+            </p>
             
             {options.map((option) => (
               <CheckoutOptionCard
@@ -165,9 +148,20 @@ const Checkout = () => {
                 customInstallments={customInstallments}
               />
             ))}
+            
+            {/* Security Badge at Bottom */}
+            <div className="flex items-center gap-2 mt-8 text-sm text-ink-secondary">
+              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
+                <Lock className="w-3 h-3 text-primary" />
+              </div>
+              <div>
+                <div className="font-medium text-ink">Pagamento 100% Seguro</div>
+                <div className="text-xs">Seus dados são protegidos por criptografia SSL</div>
+              </div>
+            </div>
           </div>
 
-          {/* Summary Sidebar */}
+          {/* Summary Sidebar - Right Side */}
           <div className="lg:col-span-1">
             <div className="sticky top-8">
               <CheckoutSummary
@@ -176,28 +170,6 @@ const Checkout = () => {
                 onContinue={handleContinueToCheckout}
                 disabled={!selectedOption}
               />
-              
-              {/* SSL Badge */}
-              <div className="mt-6 text-center">
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-success/10 text-success rounded-lg text-sm">
-                  <Lock className="w-4 h-4" />
-                  <span>Certificado SSL 256-bit</span>
-                </div>
-              </div>
-
-              {/* Terms */}
-              <div className="mt-4 text-xs text-ink-muted text-center">
-                <p>
-                  Ao continuar, você concorda com nossos{' '}
-                  <a href="#" className="text-primary hover:underline">
-                    Termos de Uso
-                  </a>{' '}
-                  e{' '}
-                  <a href="#" className="text-primary hover:underline">
-                    Política de Privacidade
-                  </a>
-                </p>
-              </div>
             </div>
           </div>
         </div>
