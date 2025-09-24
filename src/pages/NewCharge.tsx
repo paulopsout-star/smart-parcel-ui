@@ -21,6 +21,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { createPaymentLinkForCharge } from "@/lib/payment-link-utils";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const formSchema = z.object({
   // Dados do pagador
@@ -94,7 +95,7 @@ export default function NewCharge() {
   const { profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { checkSubscriptionOrThrow, isAllowed } = useSubscription();
+  const { checkSubscriptionOrThrow, isAllowed, revalidateOnNewCharge } = useSubscription();
 
   const {
     register,
@@ -126,6 +127,9 @@ export default function NewCharge() {
     const loadData = async () => {
       if (!profile) return;
       
+      // Revalidate subscription when opening this page
+      revalidateOnNewCharge();
+      
       setLoadingTemplates(true);
       setCheckingPayoutAccount(true);
 
@@ -139,7 +143,7 @@ export default function NewCharge() {
           .order('created_at', { ascending: false });
 
         if (templatesError) throw templatesError;
-        setMessageTemplates(templatesData || []);
+        setMessageTemplates(templatesData ?? []);
 
         // Verificar conta PIX ativa
         const { data: payoutData, error: payoutError } = await supabase
@@ -150,7 +154,7 @@ export default function NewCharge() {
           .limit(1);
 
         if (payoutError) throw payoutError;
-        setHasPayoutAccount((payoutData || []).length > 0);
+        setHasPayoutAccount((payoutData ?? []).length > 0);
 
       } catch (error) {
         console.error('Error loading data:', error);
@@ -161,7 +165,7 @@ export default function NewCharge() {
     };
 
     loadData();
-  }, [profile]);
+  }, [profile, revalidateOnNewCharge]);
 
   const formatAmount = (value: string) => {
     // Convert string to cents (integer)
@@ -268,9 +272,9 @@ export default function NewCharge() {
         if (template) {
           messageTemplateSnapshot = {
             id: template.id,
-            name: template.name,
-            content: template.content,
-            variables: template.variables
+            name: template.name ?? '',
+            content: template.content ?? '',
+            variables: template.variables ?? []
           };
         }
       }
@@ -410,17 +414,18 @@ export default function NewCharge() {
   };
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Nova Cobrança</h1>
-        <p className="text-muted-foreground">
-          Crie uma cobrança pontual ou recorrente
-        </p>
-      </div>
-      
-      <SubscriptionBanner />
-      
-        <div className="max-w-4xl mx-auto">
+    <ErrorBoundary>
+      <div className="container mx-auto p-6">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold">Nova Cobrança</h1>
+          <p className="text-muted-foreground">
+            Crie uma cobrança pontual ou recorrente
+          </p>
+        </div>
+        
+        <SubscriptionBanner />
+        
+          <div className="max-w-4xl mx-auto">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
             <div className="grid lg:grid-cols-3 gap-8">
               {/* Main Form */}
@@ -875,5 +880,6 @@ export default function NewCharge() {
           />
         </div>
       </div>
-    );
-  }
+    </ErrorBoundary>
+  );
+}

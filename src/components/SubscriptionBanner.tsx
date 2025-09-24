@@ -2,30 +2,34 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useAuth } from "@/contexts/AuthContext";
-import { AlertTriangle, CheckCircle, Clock, XCircle } from "lucide-react";
+import { AlertTriangle, Clock, XCircle } from "lucide-react";
 
 export function SubscriptionBanner() {
   const { subscription, loading } = useSubscription();
   const { isAdmin } = useAuth();
 
-  if (loading || !subscription) {
-    return null;
+  // Show skeleton while loading
+  if (loading) {
+    return (
+      <div className="mb-6">
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
   }
 
-  // Não mostrar banner se está ativo
-  if (subscription.status === 'ACTIVE') {
+  // Only show banner when status is explicitly 'canceled'
+  if (!subscription || subscription.status !== 'canceled') {
     return null;
   }
 
   const getIcon = () => {
     switch (subscription.status) {
-      case 'ACTIVE':
-        return <CheckCircle className="h-4 w-4" />;
-      case 'PAST_DUE':
-        return subscription.allowed ? <Clock className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />;
-      case 'CANCELED':
+      case 'past_due':
+        return <Clock className="h-4 w-4" />;
+      case 'canceled':
         return <XCircle className="h-4 w-4" />;
       default:
         return <AlertTriangle className="h-4 w-4" />;
@@ -34,11 +38,9 @@ export function SubscriptionBanner() {
 
   const getVariant = () => {
     switch (subscription.status) {
-      case 'ACTIVE':
+      case 'past_due':
         return 'default';
-      case 'PAST_DUE':
-        return subscription.allowed ? 'default' : 'destructive';
-      case 'CANCELED':
+      case 'canceled':
         return 'destructive';
       default:
         return 'destructive';
@@ -47,18 +49,9 @@ export function SubscriptionBanner() {
 
   const getMessage = () => {
     switch (subscription.status) {
-      case 'PAST_DUE':
-        if (subscription.allowed && subscription.grace_until) {
-          const graceDate = new Date(subscription.grace_until);
-          return `Assinatura em atraso — uso permitido até ${graceDate.toLocaleDateString('pt-BR', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            timeZone: 'America/Sao_Paulo'
-          })}`;
-        }
-        return 'Assinatura inativa — algumas ações estão bloqueadas';
-      case 'CANCELED':
+      case 'past_due':
+        return 'Assinatura em atraso — algumas ações podem estar limitadas';
+      case 'canceled':
         return 'Assinatura cancelada — algumas ações estão bloqueadas';
       default:
         return 'Status da assinatura requer atenção';
@@ -74,7 +67,7 @@ export function SubscriptionBanner() {
             <span>{getMessage()}</span>
             <div className="flex items-center gap-2">
               <Badge variant="outline">
-                {subscription.plan_code || 'Sem plano'}
+                {subscription.plan || 'Sem plano'}
               </Badge>
               {isAdmin && (
                 <Button variant="outline" size="sm" asChild>
