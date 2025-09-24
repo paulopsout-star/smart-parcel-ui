@@ -25,7 +25,7 @@ interface PaymentMethod {
   maskFee?: boolean;
 }
 
-interface PaymentSplitsProps {
+interface PaymentSplitsNewProps {
   totalAmount: number; // in cents
   onSplitsChange?: (splits: PaymentMethod[]) => void;
   onValidChange?: (isValid: boolean) => void;
@@ -68,13 +68,13 @@ const DEFAULT_TEMPLATES: SplitTemplate[] = [
   }
 ];
 
-export function PaymentSplits({ 
+export function PaymentSplitsNew({ 
   totalAmount, 
   onSplitsChange, 
   onValidChange, 
   className, 
   disabled = false 
-}: PaymentSplitsProps) {
+}: PaymentSplitsNewProps) {
   const [splitType, setSplitType] = useState<'percentage' | 'amount'>('percentage');
   const [methods, setMethods] = useState<PaymentMethod[]>([
     { id: 'PIX', label: 'PIX', icon: QrCode, enabled: false, amount: 0, percentage: 0 },

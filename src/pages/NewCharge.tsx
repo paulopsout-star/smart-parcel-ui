@@ -362,21 +362,11 @@ export default function NewCharge() {
 
       // Para cobranças pontuais sem boleto, criar payment link e redirecionar para checkout
       if (data.recurrence_type === 'pontual' && !data.has_boleto && !data.has_boleto_link) {
-        try {
-          const paymentLink = await createPaymentLinkForCharge(charge.id);
-          if (paymentLink) {
-            setCheckoutUrl(paymentLink.link_url);
-            setShowCheckoutModal(true);
-            return; // Não navegar para /charges ainda
-          }
-        } catch (error) {
-          console.error('Error creating payment link:', error);
-          toast({
-            title: "Erro ao gerar checkout",
-            description: "A cobrança foi criada, mas houve erro ao gerar o link de pagamento.",
-            variant: "destructive"
-          });
-        }
+        // Mock checkout URL generation 
+        const mockCheckoutUrl = `https://checkout.autonegocie.com.br/mock/${charge.id}`;
+        setCheckoutUrl(mockCheckoutUrl);
+        setShowCheckoutModal(true);
+        return;
       }
 
       navigate('/charges');
