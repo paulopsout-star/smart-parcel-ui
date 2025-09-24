@@ -20,6 +20,7 @@ import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { useSubscription } from "@/hooks/useSubscription";
 import { createPaymentLinkForCharge } from "@/lib/payment-link-utils";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 
 const formSchema = z.object({
   // Dados do pagador
@@ -211,6 +212,12 @@ export default function NewCharge() {
   };
 
   const onSubmit = async (data: FormData) => {
+    console.log('✅ Iniciando criação de cobrança:', {
+      tipo: data.recurrence_type,
+      valor: data.amount,
+      pagador: data.payer_name
+    });
+    
     if (!profile) return;
     
     // Verificar assinatura antes de criar cobrança
@@ -360,14 +367,13 @@ export default function NewCharge() {
         });
       }
 
-      // Para cobranças pontuais sem boleto, criar payment link e redirecionar para checkout
+      // Para cobranças pontuais sem boleto, criar payment link mock
       if (data.recurrence_type === 'pontual' && !data.has_boleto && !data.has_boleto_link) {
         try {
-          // Mock checkout URL generation 
           const mockCheckoutUrl = `https://checkout.autonegocie.com.br/mock/${charge.id}`;
           setCheckoutUrl(mockCheckoutUrl);
           setShowCheckoutModal(true);
-          return; // Não navegar para /charges ainda
+          return;
         } catch (error) {
           console.error('Erro ao gerar checkout:', error);
           toast({
@@ -376,12 +382,6 @@ export default function NewCharge() {
             variant: "destructive"
           });
         }
-      }
-        // Mock checkout URL generation 
-        const mockCheckoutUrl = `https://checkout.autonegocie.com.br/mock/${charge.id}`;
-        setCheckoutUrl(mockCheckoutUrl);
-        setShowCheckoutModal(true);
-        return;
       }
 
       navigate('/charges');
@@ -841,55 +841,24 @@ export default function NewCharge() {
                      </Button>
                    </CardContent>
                  </Card>
-               </div>
-           </div>
-         </form>
-       </div>
+                </div>
+            </div>
+          </form>
 
-       {/* Modal de Checkout */}
-       <AlertDialog open={showCheckoutModal} onOpenChange={setShowCheckoutModal}>
-         <AlertDialogContent>
-           <AlertDialogHeader>
-             <AlertDialogTitle>Cobrança Criada!</AlertDialogTitle>
-             <AlertDialogDescription>
-               A cobrança foi criada com sucesso. Deseja abrir o checkout para teste?
-             </AlertDialogDescription>
-           </AlertDialogHeader>
-           <AlertDialogFooter>
-             <AlertDialogCancel
-               onClick={() => {
-                 setShowCheckoutModal(false);
-                 navigate('/charges');
-               }}
-             >
-               Ir para Cobranças
-             </AlertDialogCancel>
-             <AlertDialogAction
-               onClick={() => {
-                 window.open(checkoutUrl, '_blank');
-                 navigate('/charges');
-               }}
-             >
-               Abrir Checkout
-             </AlertDialogAction>
-           </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Checkout Success Modal */}
-        <CheckoutSuccessModal
-          open={showCheckoutModal}
-          onOpenChange={setShowCheckoutModal}
-          checkoutData={{
-            chargeId: '12345',
-            checkoutUrl: checkoutUrl,
-            amount: 10000,
-            payerName: 'Cliente Teste', 
-            description: 'Cobrança de teste',
-            status: 'PENDENTE'
-          }}
-        />
+          {/* Checkout Success Modal */}
+          <CheckoutSuccessModal
+            open={showCheckoutModal}
+            onOpenChange={setShowCheckoutModal}
+            checkoutData={{
+              chargeId: '12345',
+              checkoutUrl: checkoutUrl,
+              amount: 10000,
+              payerName: 'Cliente Teste', 
+              description: 'Cobrança de teste',
+              status: 'PENDENTE'
+            }}
+          />
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
