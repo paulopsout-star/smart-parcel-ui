@@ -300,10 +300,13 @@ export default function Payment() {
             {/* Payment Splits */}
             <div className="lg:col-span-2">
               <PaymentSplits
-                chargeId={charge.id}
                 totalAmount={charge.amount}
-                hasBoletoLink={charge.has_boleto_link}
-                onPaymentComplete={handlePaymentComplete}
+                onSplitsChange={(splits) => {
+                  console.log('Payment splits configured:', splits);
+                }}
+                onValidChange={(isValid) => {
+                  console.log('Split validation changed:', isValid);
+                }}
               />
             </div>
 
