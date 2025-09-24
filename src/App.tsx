@@ -30,6 +30,7 @@ import RecurrenceManagement from "./pages/admin/RecurrenceManagement";
 import Reports from "./pages/admin/Reports";
 import ThankYou from "./pages/ThankYou";
 import SubscriptionManagement from "./pages/admin/SubscriptionManagement";
+import Checkout from "./pages/Checkout";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +45,7 @@ const App = () => (
             {/* Public routes */}
             <Route path="/" element={<Index />} />
             <Route path="/payment" element={<Payment />} />
+            <Route path="/checkout/:id" element={<Checkout />} />
             <Route path="/thank-you" element={<ThankYou />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
