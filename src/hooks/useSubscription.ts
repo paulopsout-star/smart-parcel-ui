@@ -3,18 +3,18 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface SubscriptionData {
-  status: 'loading' | 'active' | 'canceled' | 'past_due';
-  plan?: string;
-  ends_at?: string;
-  canceled_at?: string;
-  orgId: string;
+  canonicalStatus: 'active' | 'trialing' | 'past_due' | 'canceled';
+  raw: any;
+  companyId: string;
+  userId: string;
+  computedAt: string;
 }
 
-export function useSubscription(orgId?: string) {
+export function useSubscription(companyId?: string) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   
-  const currentOrgId = orgId || user?.id || '';
+  const currentCompanyId = companyId || user?.id || '';
 
   const {
     data: subscription,
@@ -22,17 +22,11 @@ export function useSubscription(orgId?: string) {
     error,
     refetch: loadSubscription
   } = useQuery({
-    queryKey: ['subscription', currentOrgId],
+    queryKey: ['subscription', currentCompanyId],
     queryFn: async (): Promise<SubscriptionData> => {
-      if (!user || !currentOrgId) {
-        throw new Error('No user or orgId available');
+      if (!user || !currentCompanyId) {
+        throw new Error('No user or companyId available');
       }
-
-      console.log('🔍 Fetching subscription status:', {
-        orgId: currentOrgId,
-        userId: user.id,
-        fetchedAt: new Date().toISOString()
-      });
 
       const { data: session } = await supabase.auth.getSession();
       if (!session.session?.access_token) {
@@ -40,7 +34,7 @@ export function useSubscription(orgId?: string) {
       }
 
       const functionUrl = `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/subscription-status`;
-      const response = await fetch(`${functionUrl}?orgId=${currentOrgId}`, {
+      const response = await fetch(`${functionUrl}?companyId=${currentCompanyId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.session.access_token}`,
@@ -55,7 +49,7 @@ export function useSubscription(orgId?: string) {
           statusText: response.statusText,
           body: errorData
         });
-        throw new Error(`API error: ${response.status} - ${response.statusText}. ${errorData}`);
+        throw new Error(`API error: ${response.status} - ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -63,56 +57,47 @@ export function useSubscription(orgId?: string) {
         throw new Error(data.message || data.error);
       }
 
-      console.log('✅ Subscription fetched:', {
-        orgId: currentOrgId,
-        status: data.status,
-        plan: data.plan,
-        fetchedAt: new Date().toISOString()
-      });
-
       return data;
     },
-    enabled: !!user && !!currentOrgId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: !!user && !!currentCompanyId,
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: (failureCount, error) => {
-      // Don't retry on 401/403 errors
       if (error instanceof Error && error.message.includes('401')) return false;
       if (error instanceof Error && error.message.includes('403')) return false;
       return failureCount < 3;
     }
   });
 
-  // Revalidate subscription when opening "Nova Cobrança"
   const revalidateOnNewCharge = () => {
-    queryClient.invalidateQueries({ queryKey: ['subscription', currentOrgId] });
+    queryClient.invalidateQueries({ queryKey: ['subscription', currentCompanyId] });
   };
 
   const checkSubscriptionOrThrow = async (): Promise<void> => {
-    // Force refetch if subscription is not loaded
     if (loading || !subscription) {
       const result = await loadSubscription();
-      if (!result.data || result.data.status === 'canceled') {
+      if (!result.data || result.data.canonicalStatus === 'canceled') {
         throw new Error('ASSINATURA_INATIVA: A assinatura da sua empresa não permite esta operação.');
       }
       return;
     }
 
-    if (subscription.status === 'canceled') {
+    if (subscription.canonicalStatus === 'canceled') {
       throw new Error('ASSINATURA_INATIVA: A assinatura da sua empresa não permite esta operação.');
     }
   };
 
   const isAllowed = () => {
     if (loading || !subscription) return false;
-    return subscription.status === 'active' || subscription.status === 'past_due';
+    return subscription.canonicalStatus !== 'canceled';
   };
 
   const getStatusBadgeVariant = () => {
     if (loading || !subscription) return 'secondary';
     
-    switch (subscription.status) {
+    switch (subscription.canonicalStatus) {
       case 'active':
+      case 'trialing':
         return 'default';
       case 'past_due':
         return 'secondary';
@@ -127,9 +112,11 @@ export function useSubscription(orgId?: string) {
     if (loading) return 'Carregando status...';
     if (!subscription) return 'Status indisponível';
 
-    switch (subscription.status) {
+    switch (subscription.canonicalStatus) {
       case 'active':
         return 'Assinatura ativa';
+      case 'trialing':
+        return 'Período de teste';
       case 'past_due':
         return 'Assinatura em atraso';
       case 'canceled':

@@ -7,11 +7,11 @@ const corsHeaders = {
 }
 
 interface SubscriptionData {
-  status: 'loading' | 'active' | 'canceled' | 'past_due';
-  plan?: string;
-  ends_at?: string;
-  canceled_at?: string;
-  orgId: string;
+  canonicalStatus: 'active' | 'trialing' | 'past_due' | 'canceled';
+  raw: any;
+  companyId: string;
+  userId: string;
+  computedAt: string;
 }
 
 serve(async (req) => {
@@ -43,16 +43,19 @@ serve(async (req) => {
     }
 
     const url = new URL(req.url)
-    const orgId = url.searchParams.get('orgId') || user.id
+    const companyId = url.searchParams.get('companyId') || user.id
 
-    // Query subscription from database
+    // Query subscription from database - single source of truth
     const { data: subscription, error } = await supabaseClient
       .from('subscriptions')
       .select('status, plan_code, current_period_end, canceled_at, grace_days')
-      .eq('company_id', orgId)
+      .eq('company_id', companyId)
+      .eq('owner_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
       .single()
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+    if (error && error.code !== 'PGRST116') {
       console.error('Database error:', error)
       return new Response(
         JSON.stringify({ error: 'Database error' }),
@@ -60,52 +63,49 @@ serve(async (req) => {
       )
     }
 
-    let result: SubscriptionData
+    // Calculate canonical status on server (single source of truth)
+    let canonicalStatus: 'active' | 'trialing' | 'past_due' | 'canceled'
+    let raw = null
 
     if (!subscription) {
-      // No subscription found - default to canceled
-      result = {
-        status: 'canceled',
-        orgId
-      }
+      canonicalStatus = 'canceled'
     } else {
+      raw = subscription
       const now = new Date()
-      const endsAt = subscription.current_period_end ? new Date(subscription.current_period_end) : null
-      const canceledAt = subscription.canceled_at ? new Date(subscription.canceled_at) : null
+      const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end) : null
+      const expired = periodEnd && periodEnd <= now
+      const graceDays = subscription.grace_days ?? 7
+      const withinGrace = expired && graceDays > 0 && 
+                         periodEnd && 
+                         now <= new Date(periodEnd.getTime() + (graceDays * 86400000))
 
-      // Apply business rules for active status
-      const isActive = ['active', 'trialing'].includes(subscription.status?.toLowerCase() || '') &&
-                      (!endsAt || endsAt > now) &&
-                      !canceledAt
-
-      let status: 'active' | 'canceled' | 'past_due'
-      
-      if (isActive) {
-        status = 'active'
-      } else if (subscription.status?.toLowerCase() === 'past_due') {
-        // Check if within grace period
-        const graceDays = subscription.grace_days || 7
-        const graceEnd = endsAt ? new Date(endsAt.getTime() + (graceDays * 24 * 60 * 60 * 1000)) : null
-        status = (graceEnd && now <= graceEnd) ? 'past_due' : 'canceled'
+      if (subscription.canceled_at) {
+        canonicalStatus = 'canceled'
+      } else if (expired && !withinGrace) {
+        canonicalStatus = 'canceled'
+      } else if (expired && withinGrace) {
+        canonicalStatus = 'past_due'
+      } else if (subscription.status?.toLowerCase() === 'trialing') {
+        canonicalStatus = 'trialing'
       } else {
-        status = 'canceled'
-      }
-
-      result = {
-        status,
-        plan: subscription.plan_code,
-        ends_at: subscription.current_period_end,
-        canceled_at: subscription.canceled_at,
-        orgId
+        canonicalStatus = 'active'
       }
     }
 
-    // Log for telemetry
-    console.log(`Subscription status check: ${JSON.stringify({
-      orgId,
+    const result = {
+      canonicalStatus,
+      raw,
+      companyId,
       userId: user.id,
-      status: result.status,
-      fetchedAt: new Date().toISOString()
+      computedAt: new Date().toISOString()
+    }
+
+    // Audit log
+    console.log(`Subscription canonical status: ${JSON.stringify({
+      companyId,
+      userId: user.id,
+      canonicalStatus,
+      computedAt: result.computedAt
     })}`)
 
     return new Response(

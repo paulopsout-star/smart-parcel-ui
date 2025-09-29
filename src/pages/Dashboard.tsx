@@ -17,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
 import { SubscriptionBanner } from '@/components/SubscriptionBanner';
+import { useSubscription } from '@/hooks/useSubscription';
 
 interface DashboardStats {
   totalCharges: number;
@@ -27,8 +28,9 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, user } = useAuth();
   const { toast } = useToast();
+  const { subscription } = useSubscription();
   const [stats, setStats] = useState<DashboardStats>({
     totalCharges: 0,
     activeCharges: 0,
@@ -41,6 +43,18 @@ export default function Dashboard() {
   useEffect(() => {
     loadDashboardStats();
   }, []);
+
+  // Audit log for subscription status on Dashboard mount
+  useEffect(() => {
+    if (subscription && user) {
+      console.log('📊 Dashboard Subscription Audit:', {
+        companyId: subscription.companyId,
+        userId: subscription.userId,
+        canonicalStatus: subscription.canonicalStatus,
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, [subscription, user]);
 
   const loadDashboardStats = async () => {
     try {

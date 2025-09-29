@@ -5,81 +5,51 @@ import { Link } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useAuth } from "@/contexts/AuthContext";
-import { AlertTriangle, Clock, XCircle } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 
 export function SubscriptionBanner() {
-  const { subscription, loading } = useSubscription();
-  const { isAdmin } = useAuth();
+  const { subscription, loading, getStatusMessage } = useSubscription();
+  const { profile } = useAuth();
 
-  // Show skeleton while loading
+  // Show skeleton while loading - never assume canceled during loading
   if (loading) {
     return (
-      <div className="mb-6">
+      <div className="w-full">
         <Skeleton className="h-16 w-full" />
       </div>
     );
   }
 
-  // Only show banner when status is explicitly 'canceled'
-  if (!subscription || subscription.status !== 'canceled') {
+  // Only show banner when canonicalStatus is explicitly 'canceled'
+  if (!subscription || subscription.canonicalStatus !== 'canceled') {
     return null;
   }
 
-  const getIcon = () => {
-    switch (subscription.status) {
-      case 'past_due':
-        return <Clock className="h-4 w-4" />;
-      case 'canceled':
-        return <XCircle className="h-4 w-4" />;
-      default:
-        return <AlertTriangle className="h-4 w-4" />;
-    }
-  };
-
-  const getVariant = () => {
-    switch (subscription.status) {
-      case 'past_due':
-        return 'default';
-      case 'canceled':
-        return 'destructive';
-      default:
-        return 'destructive';
-    }
-  };
-
-  const getMessage = () => {
-    switch (subscription.status) {
-      case 'past_due':
-        return 'Assinatura em atraso — algumas ações podem estar limitadas';
-      case 'canceled':
-        return 'Assinatura cancelada — algumas ações estão bloqueadas';
-      default:
-        return 'Status da assinatura requer atenção';
-    }
-  };
-
   return (
-    <Alert variant={getVariant()} className="mb-6">
-      <div className="flex items-center gap-2">
-        {getIcon()}
+    <Alert variant="destructive" className="mb-6">
+      <AlertTriangle className="h-5 w-5" />
+      <AlertDescription className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <AlertDescription className="flex items-center justify-between">
-            <span>{getMessage()}</span>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">
-                {subscription.plan || 'Sem plano'}
-              </Badge>
-              {isAdmin && (
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/admin/subscriptions">
-                    Gerenciar Assinatura
-                  </Link>
-                </Button>
-              )}
+          <div className="space-y-1">
+            <div className="font-semibold">{getStatusMessage()}</div>
+            <div className="text-sm">
+              Entre em contato com o suporte para reativar sua assinatura e continuar usando todas as funcionalidades.
             </div>
-          </AlertDescription>
+          </div>
+          {subscription.raw?.plan_code && (
+            <div className="text-sm mt-2">
+              Plano: <span className="font-medium">{subscription.raw.plan_code}</span>
+            </div>
+          )}
         </div>
-      </div>
+        {profile?.role === 'admin' && (
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/admin/subscriptions">
+              Gerenciar Assinatura
+            </Link>
+          </Button>
+        )}
+      </AlertDescription>
     </Alert>
   );
 }
