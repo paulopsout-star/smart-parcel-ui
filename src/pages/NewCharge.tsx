@@ -23,6 +23,7 @@ import { createPaymentLinkForCharge } from "@/lib/payment-link-utils";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useMessageTemplates } from '@/hooks/useMessageTemplates';
 
 const formSchema = z.object({
   // Dados do pagador
@@ -87,8 +88,6 @@ interface FormData {
 export default function NewCharge() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [messageTemplates, setMessageTemplates] = useState<any[]>([]);
-  const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(true);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -98,6 +97,9 @@ export default function NewCharge() {
   const navigate = useNavigate();
   const { checkSubscriptionOrThrow, isAllowed, revalidateOnNewCharge } = useSubscription();
   const { readOnly, canonicalStatus } = useSubscriptionContext();
+  
+  // Hook to load message templates scoped by company_id
+  const { data: messageTemplates = [], isLoading: loadingTemplates, isError: templatesError } = useMessageTemplates(profile?.id);
 
   const {
     register,
@@ -124,7 +126,7 @@ export default function NewCharge() {
   const watchHasBoletoLink = watch("has_boleto_link");
   const watchBoletoLinhaDigitavel = watch("boleto_linha_digitavel");
 
-  // Carregar templates de mensagem e verificar conta PIX
+  // Verificar conta PIX e revalidar assinatura
   useEffect(() => {
     const loadData = async () => {
       if (!profile) return;
@@ -132,21 +134,9 @@ export default function NewCharge() {
       // Revalidate subscription when opening this page
       revalidateOnNewCharge();
       
-      setLoadingTemplates(true);
       setCheckingPayoutAccount(true);
 
       try {
-        // Carregar templates
-        const { data: templatesData, error: templatesError } = await supabase
-          .from('message_templates')
-          .select('*')
-          .eq('user_id', profile.id)
-          .eq('is_active', true)
-          .order('created_at', { ascending: false });
-
-        if (templatesError) throw templatesError;
-        setMessageTemplates(templatesData ?? []);
-
         // Verificar conta PIX ativa
         const { data: payoutData, error: payoutError } = await supabase
           .from('payout_accounts')
@@ -159,9 +149,8 @@ export default function NewCharge() {
         setHasPayoutAccount((payoutData ?? []).length > 0);
 
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('Error loading payout account:', error);
       } finally {
-        setLoadingTemplates(false);
         setCheckingPayoutAccount(false);
       }
     };
@@ -671,19 +660,35 @@ export default function NewCharge() {
                         render={({ field }) => (
                           <Select
                             onValueChange={field.onChange}
-                            value={field.value}
-                            disabled={loadingTemplates}
+                            value={field.value ?? ''}
+                            disabled={loadingTemplates || templatesError}
                           >
                             <SelectTrigger>
-                              <SelectValue placeholder={loadingTemplates ? "Carregando..." : "Selecione um template"} />
+                              <SelectValue 
+                                placeholder={
+                                  loadingTemplates 
+                                    ? "Carregando..." 
+                                    : templatesError 
+                                      ? "Erro ao carregar" 
+                                      : "Selecione um template"
+                                } 
+                              />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="none">Nenhum template</SelectItem>
-                              {messageTemplates.map((template) => (
-                                <SelectItem key={template.id} value={template.id}>
-                                  {template.name}
-                                </SelectItem>
-                              ))}
+                              {messageTemplates.length === 0 && !loadingTemplates && !templatesError ? (
+                                <div className="px-3 py-2 text-muted-foreground text-sm">
+                                  Nenhum template ativo
+                                </div>
+                              ) : (
+                                <>
+                                  <SelectItem value="none">Nenhum template</SelectItem>
+                                  {messageTemplates.map((template) => (
+                                    <SelectItem key={template.id} value={template.id}>
+                                      {template.name}
+                                    </SelectItem>
+                                  ))}
+                                </>
+                              )}
                             </SelectContent>
                           </Select>
                         )}
@@ -694,6 +699,11 @@ export default function NewCharge() {
                           Gerenciar templates
                         </Link>
                       </p>
+                      {templatesError && (
+                        <p className="text-sm text-destructive mt-1">
+                          Erro ao carregar templates. Você pode continuar sem selecionar um template.
+                        </p>
+                      )}
                     </div>
 
                     {/* Alert for PIX account requirement - only for charges without boleto link */}
