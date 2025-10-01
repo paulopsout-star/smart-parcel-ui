@@ -9,13 +9,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useCheckoutStore } from '@/hooks/useCheckoutStore';
 import { generateMockCheckoutUrl } from '@/hooks/useCheckoutMocks';
 import { formatCurrency } from '@/lib/utils';
+import { PaymentForm } from '@/components/PaymentForm';
 import { 
   CreditCard, 
   Smartphone, 
   FileText, 
   QrCode,
   Calculator,
-  CheckCircle 
+  CheckCircle,
+  ArrowLeft
 } from 'lucide-react';
 
 interface SplitModalProps {
@@ -50,10 +52,12 @@ export const SplitModal: React.FC<SplitModalProps> = ({
     { method: 'PIX', amountCents: totalCents, percentage: 100 }
   ]);
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<'splits' | 'payment'>('splits');
 
   useEffect(() => {
     if (totalCents > 0) {
       setSplits([{ method: 'PIX', amountCents: totalCents, percentage: 100 }]);
+      setStep('splits');
     }
   }, [totalCents]);
 
@@ -109,7 +113,7 @@ export const SplitModal: React.FC<SplitModalProps> = ({
     return { valid: true };
   };
 
-  const handleConfirm = async () => {
+  const handleConfirmSplits = () => {
     const validation = validateSplits();
     
     if (!validation.valid) {
@@ -121,35 +125,45 @@ export const SplitModal: React.FC<SplitModalProps> = ({
       return;
     }
 
+    // Store splits and move to payment step
+    setPaymentSplits(splits);
+    setStep('payment');
+  };
+
+  const handlePaymentSuccess = async (transactionId: string) => {
     setLoading(true);
     
     try {
       // Mock processing delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 800));
       
       // Generate mock checkout URL
       const mockUrl = generateMockCheckoutUrl(chargeId);
-      
-      // Store splits and URL
-      setPaymentSplits(splits);
       setCheckoutUrl(mockUrl);
       
       toast({
-        title: "Split processado!",
-        description: `${splits.length} método(s) de pagamento configurados com sucesso.`
+        title: "Pagamento processado!",
+        description: `Transação ${transactionId} realizada com sucesso.`
       });
       
       onClose();
       
+      // Reset to splits step for next time
+      setTimeout(() => setStep('splits'), 500);
+      
     } catch (error) {
       toast({
         title: "Erro",
-        description: "Falha ao processar split de pagamento",
+        description: "Falha ao processar pagamento",
         variant: "destructive"
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBack = () => {
+    setStep('splits');
   };
 
   const totalSplitAmount = splits.reduce((sum, split) => sum + split.amountCents, 0);
@@ -161,12 +175,32 @@ export const SplitModal: React.FC<SplitModalProps> = ({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Calculator className="w-5 h-5" />
-            Divisão de Pagamento
+            {step === 'payment' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleBack}
+                className="mr-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            )}
+            {step === 'splits' ? (
+              <>
+                <Calculator className="w-5 h-5" />
+                Divisão de Pagamento
+              </>
+            ) : (
+              <>
+                <CreditCard className="w-5 h-5" />
+                Dados do Pagamento
+              </>
+            )}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        {step === 'splits' ? (
+          <div className="space-y-6">
           <div className="bg-surface p-4 rounded-lg">
             <div className="flex justify-between items-center">
               <span className="text-ink-secondary">Total a dividir:</span>
@@ -307,24 +341,35 @@ export const SplitModal: React.FC<SplitModalProps> = ({
             </div>
           </Card>
 
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              onClick={onClose}
-              className="flex-1"
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleConfirm}
-              className="flex-1 bg-primary hover:bg-primary/90"
-              disabled={!validation.valid || loading}
-            >
-              {loading ? 'Processando...' : 'Confirmar Split'}
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={onClose}
+                className="flex-1"
+                disabled={loading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleConfirmSplits}
+                className="flex-1 bg-primary hover:bg-primary/90"
+                disabled={!validation.valid || loading}
+              >
+                Continuar para Pagamento
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-4">
+            <PaymentForm
+              amount={totalCents / 100}
+              installments={1}
+              productName="Pagamento"
+              onSuccess={handlePaymentSuccess}
+              onCancel={handleBack}
+            />
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
