@@ -45,6 +45,35 @@ serve(async (req) => {
     const url = new URL(req.url)
     const companyId = url.searchParams.get('companyId') || user.id
 
+    // Check if user is admin - admins always have active subscription
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profile?.role === 'admin') {
+      const result = {
+        canonicalStatus: 'active' as const,
+        raw: { status: 'active', plan_code: 'admin-plan', role: 'admin' },
+        companyId,
+        userId: user.id,
+        computedAt: new Date().toISOString()
+      }
+
+      console.log(`Admin subscription (always active): ${JSON.stringify({
+        companyId,
+        userId: user.id,
+        canonicalStatus: 'active',
+        computedAt: result.computedAt
+      })}`)
+
+      return new Response(
+        JSON.stringify(result),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     // Query subscription from database - single source of truth
     const { data: subscription, error } = await supabaseClient
       .from('subscriptions')
