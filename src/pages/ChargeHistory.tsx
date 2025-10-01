@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, MessageSquare } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -37,6 +37,88 @@ interface Charge {
   }>;
 }
 
+// Executions Dialog Component
+const ExecutionsDialogContent = ({ 
+  executionsDialog, 
+  setExecutionsDialog, 
+  getStatusBadge, 
+  openPaymentLink, 
+  copyToClipboard 
+}: any) => {
+  const { getChargeExecutions } = useChargeLinks();
+  const executionsQuery = getChargeExecutions(executionsDialog.chargeId);
+
+  return (
+    <Dialog open={executionsDialog.open} onOpenChange={(open) => setExecutionsDialog((prev: any) => ({ ...prev, open }))}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Execuções - {executionsDialog.chargeName}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {executionsQuery.isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+          ) : executionsQuery.data && executionsQuery.data.length > 0 ? (
+            <div className="space-y-2">
+              {executionsQuery.data.map((execution: any) => (
+                <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      {getStatusBadge(execution.status)}
+                      <span className="font-medium">
+                        {execution.scheduled_for ? 
+                          format(new Date(execution.scheduled_for), 'dd/MM/yyyy HH:mm', { locale: ptBR }) :
+                          format(new Date(execution.execution_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })
+                        }
+                      </span>
+                    </div>
+                    {execution.last_error && (
+                      <p className="text-sm text-destructive">Erro: {execution.last_error}</p>
+                    )}
+                  </div>
+                  {execution.status === 'READY' && execution.payment_link_id && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const baseUrl = window.location.origin;
+                          const url = `${baseUrl}/payment?execution=${execution.id}`;
+                          openPaymentLink(url);
+                        }}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        Abrir
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const baseUrl = window.location.origin;
+                          const url = `${baseUrl}/payment?execution=${execution.id}`;
+                          copyToClipboard(url);
+                        }}
+                      >
+                        <Copy className="w-4 h-4 mr-1" />
+                        Copiar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              Nenhuma execução encontrada para esta cobrança.
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 export default function ChargeHistory() {
   const { isOperador } = useAuth();
   const { readOnly } = useSubscriptionContext();
@@ -48,20 +130,14 @@ export default function ChargeHistory() {
     chargeId: '',
     chargeName: ''
   });
-  const [executions, setExecutions] = useState<any[]>([]);
   
   // Checkout modal state
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [checkoutModalData, setCheckoutModalData] = useState<any>(null);
   
-  const { 
-    loading: linksLoading, 
-    executionsLoading,
-    getPaymentLink, 
-    generatePaymentLink, 
-    copyToClipboard, 
-    openPaymentLink,
-    getChargeExecutions
+  const {
+    copyToClipboard,
+    openPaymentLink
   } = useChargeLinks();
 
   const fetchCharges = async () => {
@@ -115,79 +191,23 @@ export default function ChargeHistory() {
     }
   };
 
-  const handleViewExecutions = async (chargeId: string, chargeName: string) => {
+  const handleViewExecutions = (chargeId: string, chargeName: string) => {
     setExecutionsDialog({ open: true, chargeId, chargeName });
-    const executionsList = await getChargeExecutions(chargeId);
-    setExecutions(executionsList);
   };
 
   const CheckoutButtons = ({ charge }: { charge: Charge }) => {
-    const [paymentLink, setPaymentLink] = useState<any>(null);
-    const [linkChecked, setLinkChecked] = useState(false);
-    const [localLoading, setLocalLoading] = useState(false);
-
-    useEffect(() => {
-      let mounted = true;
-
-      const checkForLink = async () => {
-        if (!linkChecked && !localLoading) {
-          setLocalLoading(true);
-          try {
-            // Check if we have a stored checkout_url first
-            if (charge.checkout_url && charge.checkout_link_id) {
-              const storedLink = {
-                id: charge.checkout_link_id,
-                token: charge.checkout_link_id,
-                url: charge.checkout_url,
-                absolute_url: charge.checkout_url,
-                status: 'active'
-              };
-              if (mounted) {
-                setPaymentLink(storedLink);
-                setLinkChecked(true);
-                setLocalLoading(false);
-              }
-              return;
-            }
-
-            // If no stored link, try to get from remote
-            const link = await getPaymentLink(charge.id);
-            if (mounted) {
-              setPaymentLink(link);
-              setLinkChecked(true);
-            }
-          } catch (error) {
-            console.error('Error checking payment link:', error);
-            if (mounted) {
-              setLinkChecked(true);
-            }
-          } finally {
-            if (mounted) {
-              setLocalLoading(false);
-            }
-          }
-        }
-      };
-
-      checkForLink();
-
-      return () => {
-        mounted = false;
-      };
-    }, [charge.id, charge.checkout_url, charge.checkout_link_id, linkChecked, localLoading]);
+    const { getExistingLink, generateLink, isGenerating, resetLinkState } = useChargeLinks();
+    const linkQuery = getExistingLink(charge.id);
 
     const handleGenerateLink = async () => {
-      setLocalLoading(true);
       try {
-        const newLink = await generatePaymentLink(charge.id);
-        if (newLink) {
-          setPaymentLink(newLink);
-          
+        const newLink = await generateLink(charge.id);
+        if (newLink?.url) {
           // Open ModalCheckoutLink with the generated link
           const event = new CustomEvent('openCheckoutModal', {
             detail: {
-              checkoutUrl: newLink.absolute_url,
-              linkId: newLink.id,
+              checkoutUrl: newLink.url,
+              linkId: newLink.linkId,
               chargeId: charge.id,
               amount: charge.amount,
               payerName: charge.payer_name,
@@ -196,78 +216,77 @@ export default function ChargeHistory() {
           });
           window.dispatchEvent(event);
         }
-      } finally {
-        setLocalLoading(false);
+      } catch (error) {
+        console.error('Error generating link:', error);
       }
     };
 
-    if (!linkChecked || localLoading) {
+    if (linkQuery.isLoading) {
       return (
         <div className="flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm text-muted-foreground">
-            {localLoading ? 'Carregando...' : 'Verificando...'}
-          </span>
+          <span className="text-sm text-muted-foreground">Carregando...</span>
         </div>
       );
     }
 
-    if (paymentLink) {
+    if (linkQuery.isError || !linkQuery.data?.url) {
       return (
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
+        <div className="flex flex-wrap gap-2">
+          <span className="text-sm text-muted-foreground">Indisponível</span>
+          <Button 
+            onClick={() => { resetLinkState(charge.id); linkQuery.refetch(); }} 
+            size="sm" 
             variant="outline"
-            onClick={() => {
-              // Validate URL before opening
-              if (!paymentLink.absolute_url || (!paymentLink.absolute_url.startsWith('http://') && !paymentLink.absolute_url.startsWith('https://'))) {
-                toast({
-                  title: "Link inválido",
-                  description: "URL de checkout inválida. Gerando nova...",
-                  variant: "destructive",
-                });
-                handleGenerateLink();
-                return;
-              }
-              openPaymentLink(paymentLink.absolute_url);
-            }}
-            disabled={linksLoading || localLoading || readOnly}
+            disabled={readOnly}
           >
-            <ExternalLink className="w-4 h-4 mr-1" />
-            Abrir
+            Tentar novamente
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => copyToClipboard(paymentLink.absolute_url)}
-            disabled={linksLoading || localLoading || readOnly}
-          >
-            <Copy className="w-4 h-4 mr-1" />
-            Copiar
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleGenerateLink}
-            disabled={linksLoading || localLoading || readOnly}
+          <Button 
+            onClick={handleGenerateLink} 
+            size="sm" 
+            variant="default" 
+            disabled={isGenerating || readOnly}
           >
             <Plus className="w-4 h-4 mr-1" />
-            Abrir Modal
+            Gerar Link
           </Button>
         </div>
       );
     }
 
+    const checkoutUrl = linkQuery.data.url;
+
     return (
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={handleGenerateLink}
-        disabled={linksLoading || localLoading}
-      >
-        <Plus className="w-4 h-4 mr-1" />
-        Gerar Link
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => openPaymentLink(checkoutUrl)}
+          disabled={readOnly}
+        >
+          <ExternalLink className="w-4 h-4 mr-1" />
+          Abrir
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => copyToClipboard(checkoutUrl)}
+          disabled={readOnly}
+        >
+          <Copy className="w-4 h-4 mr-1" />
+          Copiar
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleGenerateLink}
+          disabled={isGenerating || readOnly}
+        >
+          <Plus className="w-4 h-4 mr-1" />
+          Abrir Modal
+        </Button>
+      </div>
     );
   };
 
@@ -523,73 +542,13 @@ export default function ChargeHistory() {
       </Dialog>
 
       {/* Executions Dialog for Recurring Charges */}
-      <Dialog open={executionsDialog.open} onOpenChange={(open) => setExecutionsDialog(prev => ({ ...prev, open }))}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Execuções - {executionsDialog.chargeName}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {executionsLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-8 h-8 animate-spin" />
-              </div>
-            ) : executions.length > 0 ? (
-              <div className="space-y-2">
-                {executions.map((execution) => (
-                  <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        {getStatusBadge(execution.status)}
-                        <span className="font-medium">
-                          {execution.scheduled_for ? 
-                            format(new Date(execution.scheduled_for), 'dd/MM/yyyy HH:mm', { locale: ptBR }) :
-                            format(new Date(execution.execution_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })
-                          }
-                        </span>
-                      </div>
-                      {execution.last_error && (
-                        <p className="text-sm text-destructive">Erro: {execution.last_error}</p>
-                      )}
-                    </div>
-                    {execution.status === 'READY' && execution.payment_link_id && (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const baseUrl = window.location.origin;
-                            const url = `${baseUrl}/payment?execution=${execution.id}`;
-                            openPaymentLink(url);
-                          }}
-                        >
-                          <ExternalLink className="w-4 h-4 mr-1" />
-                          Abrir
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const baseUrl = window.location.origin;
-                            const url = `${baseUrl}/payment?execution=${execution.id}`;
-                            copyToClipboard(url);
-                          }}
-                        >
-                          <Copy className="w-4 h-4 mr-1" />
-                          Copiar
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                Nenhuma execução encontrada para esta cobrança.
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ExecutionsDialogContent 
+        executionsDialog={executionsDialog}
+        setExecutionsDialog={setExecutionsDialog}
+        getStatusBadge={getStatusBadge}
+        openPaymentLink={openPaymentLink}
+        copyToClipboard={copyToClipboard}
+      />
 
       {/* Checkout Success Modal */}
       {checkoutModalData && (
