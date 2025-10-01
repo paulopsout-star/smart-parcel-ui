@@ -58,7 +58,7 @@ export function useChargeLinks() {
         throw new Error(data?.message || 'Link não encontrado');
       }
 
-      if (!data?.link?.absolute_url) {
+      if (!data?.link?.url) {
         throw new Error('Link inválido');
       }
 
@@ -66,12 +66,12 @@ export function useChargeLinks() {
       await supabase
         .from('charges')
         .update({
-          checkout_url: data.link.absolute_url,
-          checkout_link_id: data.link.id
+          checkout_url: data.link.url,
+          checkout_link_id: data.link.linkId
         })
         .eq('id', chargeId);
 
-      return { url: data.link.absolute_url, linkId: data.link.id };
+      return { url: data.link.url, linkId: data.link.linkId };
     }
   });
 
@@ -85,20 +85,11 @@ export function useChargeLinks() {
       if (data?.code === 'SUBSCRIPTION_BLOCKED') {
         throw new Error('Assinatura necessária para gerar novos links');
       }
-      if (!data?.link?.absolute_url) {
+      if (!data?.link?.url) {
         throw new Error('Link inválido');
       }
 
-      // Save to DB
-      await supabase
-        .from('charges')
-        .update({
-          checkout_url: data.link.absolute_url,
-          checkout_link_id: data.link.id
-        })
-        .eq('id', chargeId);
-
-      return { url: data.link.absolute_url, linkId: data.link.id };
+      return { url: data.link.url, linkId: data.link.linkId };
     },
     onSuccess: (data, chargeId) => {
       queryClient.setQueryData(['charge-link', chargeId], data);

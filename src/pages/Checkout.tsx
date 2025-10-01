@@ -4,11 +4,10 @@ import { CheckoutOptionCard } from '@/components/CheckoutOptionCard';
 import { CheckoutSummary } from '@/components/CheckoutSummary';
 import { SplitModal } from '@/components/SplitModal';
 import { useCheckoutStore } from '@/hooks/useCheckoutStore';
-import { getCheckoutCharge } from '@/hooks/useCheckoutMocks';
 import { calculatePaymentOptions } from '@/lib/checkout-utils';
-import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface PaymentOption {
   id: string;
@@ -46,17 +45,36 @@ const Checkout = () => {
       
       try {
         setLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 500)); // Mock latency
         
-        const chargeData = await getCheckoutCharge(id);
-        if (!chargeData) {
+        // First try to fetch from database by checkout_link_id or charge id
+        const { data, error } = await supabase
+          .from('charges')
+          .select('id, amount, description, payer_name')
+          .or(`checkout_link_id.eq.${id},id.eq.${id}`)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Error fetching charge:', error);
           toast({
             title: "Erro",
-            description: "Cobrança não encontrada",
+            description: "Falha ao carregar dados da cobrança",
             variant: "destructive"
           });
           return;
         }
+
+        if (!data) {
+          // No charge found
+          setCharge(null);
+          return;
+        }
+
+        const chargeData = {
+          id: data.id,
+          totalCents: data.amount,
+          title: `Cobrança - ${data.payer_name || 'Cliente'}`,
+          description: data.description || 'Pagamento de cobrança'
+        };
 
         setCharge(chargeData);
         const paymentOptions = calculatePaymentOptions(chargeData.totalCents);
@@ -119,9 +137,10 @@ const Checkout = () => {
   if (!charge) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-ink mb-4">Cobrança não encontrada</h2>
-          <p className="text-ink-secondary">Verifique o link e tente novamente</p>
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-bold text-ink">Link inválido ou expirado</h2>
+          <p className="text-ink-secondary">Este link de pagamento não está mais disponível ou não existe.</p>
+          <p className="text-sm text-ink-secondary">Entre em contato com o responsável pela cobrança para obter um novo link.</p>
         </div>
       </div>
     );

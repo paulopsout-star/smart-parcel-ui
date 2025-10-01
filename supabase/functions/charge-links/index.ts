@@ -114,16 +114,16 @@ serve(async (req) => {
         });
       }
 
-      const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
-      const absoluteUrl = `${baseUrl}${existingLink.url}`;
+      // Generate canonical checkout URL
+      const origin = Deno.env.get('APP_ORIGIN') || new URL(req.url).origin;
+      const checkoutId = existingLink.id;
+      const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
 
       return new Response(JSON.stringify({
         link: {
           id: existingLink.id,
-          token: existingLink.token,
-          url: existingLink.url,
-          absolute_url: absoluteUrl,
-          status: existingLink.status
+          url: checkoutUrl,
+          linkId: checkoutId
         }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -191,16 +191,28 @@ serve(async (req) => {
 
       if (existingLink) {
         console.log(`Returning existing payment link for charge ${chargeId}`);
-        const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
-        const absoluteUrl = `${baseUrl}${existingLink.url}`;
+        
+        // Generate canonical checkout URL
+        const origin = Deno.env.get('APP_ORIGIN') || new URL(req.url).origin;
+        const checkoutId = existingLink.id;
+        const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
+        
+        // Update charge with checkout URL if not set
+        if (!charge.checkout_url || !charge.checkout_link_id) {
+          await supabase
+            .from('charges')
+            .update({
+              checkout_url: checkoutUrl,
+              checkout_link_id: checkoutId
+            })
+            .eq('id', chargeId);
+        }
 
         return new Response(JSON.stringify({
           link: {
             id: existingLink.id,
-            token: existingLink.token,
-            url: existingLink.url,
-            absolute_url: absoluteUrl,
-            status: existingLink.status
+            url: checkoutUrl,
+            linkId: checkoutId
           }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -238,16 +250,25 @@ serve(async (req) => {
             .maybeSingle();
           
           if (existingAfterRace) {
-            const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
-            const absoluteUrl = `${baseUrl}${existingAfterRace.url}`;
+            // Generate canonical checkout URL
+            const origin = Deno.env.get('APP_ORIGIN') || new URL(req.url).origin;
+            const checkoutId = existingAfterRace.id;
+            const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
+            
+            // Update charge with checkout URL and link ID
+            await supabase
+              .from('charges')
+              .update({
+                checkout_url: checkoutUrl,
+                checkout_link_id: checkoutId
+              })
+              .eq('id', chargeId);
             
             return new Response(JSON.stringify({
               link: {
                 id: existingAfterRace.id,
-                token: existingAfterRace.token,
-                url: existingAfterRace.url,
-                absolute_url: absoluteUrl,
-                status: existingAfterRace.status
+                url: checkoutUrl,
+                linkId: checkoutId
               }
             }), {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -265,16 +286,26 @@ serve(async (req) => {
       }
 
       console.log(`Created new payment link for charge ${chargeId}`);
-      const baseUrl = Deno.env.get('BASE_URL') || 'http://localhost:3000';
-      const absoluteUrl = `${baseUrl}${newLink.url}`;
+      
+      // Generate canonical checkout URL
+      const origin = Deno.env.get('APP_ORIGIN') || new URL(req.url).origin;
+      const checkoutId = newLink.id;
+      const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
+      
+      // Update charge with checkout URL and link ID
+      await supabase
+        .from('charges')
+        .update({
+          checkout_url: checkoutUrl,
+          checkout_link_id: checkoutId
+        })
+        .eq('id', chargeId);
 
       return new Response(JSON.stringify({
         link: {
           id: newLink.id,
-          token: newLink.token,
-          url: newLink.url,
-          absolute_url: absoluteUrl,
-          status: newLink.status
+          url: checkoutUrl,
+          linkId: checkoutId
         }
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
