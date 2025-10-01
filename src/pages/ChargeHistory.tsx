@@ -13,6 +13,8 @@ import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useSubscriptionContext } from '@/contexts/SubscriptionContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface Charge {
   id: string;
@@ -37,6 +39,7 @@ interface Charge {
 
 export default function ChargeHistory() {
   const { isOperador } = useAuth();
+  const { readOnly } = useSubscriptionContext();
   const [charges, setCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
@@ -228,7 +231,7 @@ export default function ChargeHistory() {
               }
               openPaymentLink(paymentLink.absolute_url);
             }}
-            disabled={linksLoading || localLoading}
+            disabled={linksLoading || localLoading || readOnly}
           >
             <ExternalLink className="w-4 h-4 mr-1" />
             Abrir
@@ -237,7 +240,7 @@ export default function ChargeHistory() {
             size="sm"
             variant="outline"
             onClick={() => copyToClipboard(paymentLink.absolute_url)}
-            disabled={linksLoading || localLoading}
+            disabled={linksLoading || localLoading || readOnly}
           >
             <Copy className="w-4 h-4 mr-1" />
             Copiar
@@ -246,7 +249,7 @@ export default function ChargeHistory() {
             size="sm"
             variant="outline"
             onClick={handleGenerateLink}
-            disabled={linksLoading || localLoading}
+            disabled={linksLoading || localLoading || readOnly}
           >
             <Plus className="w-4 h-4 mr-1" />
             Abrir Modal

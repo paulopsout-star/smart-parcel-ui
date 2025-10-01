@@ -1,6 +1,11 @@
 import { Navigate } from 'react-router-dom';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/hooks/useSubscription';
+import { SubscriptionProvider } from '@/contexts/SubscriptionContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -8,9 +13,11 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
+  const { subscription, loading: subLoading } = useSubscription(user?.id);
 
-  if (loading) {
+  // Show loading while auth or subscription is loading
+  if (authLoading || subLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin" />
@@ -18,10 +25,12 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     );
   }
 
+  // Check authentication
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
+  // Check profile and active status
   if (!profile || !profile.is_active) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -33,6 +42,7 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     );
   }
 
+  // Check role-based access
   if (requiredRole === 'admin' && profile.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -44,5 +54,55 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     );
   }
 
-  return <>{children}</>;
+  // Check subscription status
+  const canonicalStatus = subscription?.canonicalStatus || 'loading';
+  
+  // Block access if subscription is canceled
+  if (canonicalStatus === 'canceled') {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <Alert variant="destructive">
+            <AlertTriangle className="h-5 w-5" />
+            <AlertDescription className="mt-2">
+              <div className="space-y-3">
+                <div>
+                  <div className="font-semibold">Assinatura Inativa</div>
+                  <div className="text-sm mt-1">
+                    Sua assinatura está cancelada. Entre em contato com o suporte para reativar 
+                    e continuar usando o sistema.
+                  </div>
+                </div>
+                {profile.role === 'admin' && (
+                  <Button variant="outline" size="sm" asChild className="w-full">
+                    <Link to="/admin/subscriptions">
+                      Gerenciar Assinatura
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
+
+  // Determine if user should have read-only access
+  const readOnly = canonicalStatus === 'past_due';
+
+  // Log subscription status for audit
+  console.log('ProtectedRoute - Subscription Check:', {
+    userId: user.id,
+    companyId: profile.id,
+    canonicalStatus,
+    readOnly,
+  });
+
+  // Wrap children with SubscriptionProvider to propagate readOnly state
+  return (
+    <SubscriptionProvider readOnly={readOnly} canonicalStatus={canonicalStatus}>
+      {children}
+    </SubscriptionProvider>
+  );
 }

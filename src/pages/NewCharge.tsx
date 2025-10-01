@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useSubscriptionContext } from "@/contexts/SubscriptionContext";
 import { createPaymentLinkForCharge } from "@/lib/payment-link-utils";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
@@ -96,6 +97,7 @@ export default function NewCharge() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { checkSubscriptionOrThrow, isAllowed, revalidateOnNewCharge } = useSubscription();
+  const { readOnly, canonicalStatus } = useSubscriptionContext();
 
   const {
     register,
@@ -842,10 +844,18 @@ export default function NewCharge() {
                       </Alert>
                     )}
 
+                    {readOnly && canonicalStatus === 'past_due' && (
+                      <Alert>
+                        <AlertDescription>
+                          Sua assinatura está em atraso. Você pode visualizar cobranças, mas não pode criar novas.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                      <Button
                        type="submit"
                        className="w-full"
-                       disabled={isLoading || !isAllowed()}
+                       disabled={isLoading || !isAllowed() || readOnly}
                      >
                        {isLoading ? (
                          <>

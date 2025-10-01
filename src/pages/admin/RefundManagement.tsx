@@ -12,6 +12,8 @@ import { Loader2, Play, RefreshCw, Calendar, DollarSign, AlertTriangle } from 'l
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useSubscriptionContext } from '@/contexts/SubscriptionContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface RefundJob {
   id: string;
@@ -42,6 +44,7 @@ interface SchedulerStats {
 
 export default function RefundManagement() {
   const { isAdmin } = useAuth();
+  const { readOnly } = useSubscriptionContext();
   const [jobs, setJobs] = useState<RefundJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningScheduler, setRunningScheduler] = useState(false);
@@ -192,6 +195,14 @@ export default function RefundManagement() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="space-y-6">
+        {readOnly && (
+          <Alert>
+            <AlertDescription>
+              Sua assinatura está em atraso. Você pode visualizar estornos, mas não pode executar novos.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Gestão de Estornos (24h)</h1>
@@ -201,7 +212,7 @@ export default function RefundManagement() {
           </div>
           <Button 
             onClick={runScheduler} 
-            disabled={runningScheduler}
+            disabled={runningScheduler || readOnly}
             className="gap-2"
           >
             {runningScheduler ? (
@@ -403,7 +414,7 @@ export default function RefundManagement() {
                               size="sm"
                               variant="outline"
                               onClick={() => executeJob(job.id)}
-                              disabled={executingJob === job.id}
+                              disabled={executingJob === job.id || readOnly}
                             >
                               {executingJob === job.id ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />

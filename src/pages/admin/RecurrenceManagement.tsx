@@ -11,6 +11,8 @@ import { Loader2, Play, Calendar, Clock, BarChart3, AlertTriangle } from 'lucide
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useSubscriptionContext } from '@/contexts/SubscriptionContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface PlannerStats {
   charges_analyzed: number;
@@ -45,6 +47,7 @@ interface RecentExecution {
 
 export default function RecurrenceManagement() {
   const { isAdmin } = useAuth();
+  const { readOnly } = useSubscriptionContext();
   const [loading, setLoading] = useState(false);
   const [plannerStats, setPlannerStats] = useState<PlannerStats | null>(null);
   const [dispatcherStats, setDispatcherStats] = useState<DispatcherStats | null>(null);
@@ -202,6 +205,14 @@ export default function RecurrenceManagement() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="space-y-6">
+        {readOnly && (
+          <Alert>
+            <AlertDescription>
+              Sua assinatura está em atraso. Você pode visualizar recorrências, mas não pode executar ações.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Gestão de Recorrentes</h1>
@@ -236,7 +247,7 @@ export default function RecurrenceManagement() {
                 </p>
               </div>
               
-              <Button onClick={runPlanner} disabled={loading} className="w-full">
+              <Button onClick={runPlanner} disabled={loading || readOnly} className="w-full">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
                 Executar Planner
               </Button>
@@ -291,7 +302,7 @@ export default function RecurrenceManagement() {
                 </p>
               </div>
 
-              <Button onClick={runDispatcher} disabled={loading} className="w-full">
+              <Button onClick={runDispatcher} disabled={loading || readOnly} className="w-full">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
                 Executar Dispatcher
               </Button>
