@@ -10,9 +10,10 @@ export interface CheckoutCharge {
 }
 
 export interface PaymentSplit {
-  method: 'PIX' | 'CARD' | 'QUITA' | 'BOLETO';
+  method: 'PIX' | 'CARD';
   amountCents: number;
   percentage: number;
+  installments?: number;
 }
 
 interface CheckoutState {

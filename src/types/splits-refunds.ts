@@ -1,6 +1,6 @@
 // Types for payment splits and refund jobs
 
-export type PaymentMethod = 'PIX' | 'CARD' | 'QUITA';
+export type PaymentMethod = 'PIX' | 'CARD';
 
 export interface PaymentSplit {
   id: string;

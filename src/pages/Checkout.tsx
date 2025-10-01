@@ -72,16 +72,25 @@ const Checkout = () => {
         const chargeData = {
           id: data.id,
           totalCents: data.amount,
-          title: `Cobrança - ${data.payer_name || 'Cliente'}`,
+          title: data.description || `Cobrança - ${data.payer_name || 'Cliente'}`,
           description: data.description || 'Pagamento de cobrança'
         };
 
         setCharge(chargeData);
         const paymentOptions = calculatePaymentOptions(chargeData.totalCents);
-        setOptions(paymentOptions);
+        
+        // Reorder: minimum (12x), single, popular (6x), custom
+        const orderedOptions = [
+          paymentOptions.find(opt => opt.type === 'minimum'),
+          paymentOptions.find(opt => opt.type === 'single'),
+          paymentOptions.find(opt => opt.type === 'popular'),
+          paymentOptions.find(opt => opt.type === 'custom')
+        ].filter(Boolean) as PaymentOption[];
+        
+        setOptions(orderedOptions);
         
         // Auto-select popular option
-        const popularOption = paymentOptions.find(opt => opt.type === 'popular');
+        const popularOption = orderedOptions.find(opt => opt.type === 'popular');
         if (popularOption) {
           setSelectedOption(popularOption);
         }

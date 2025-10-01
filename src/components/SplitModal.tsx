@@ -28,16 +28,15 @@ interface SplitModalProps {
 }
 
 interface PaymentSplit {
-  method: 'PIX' | 'CARD' | 'QUITA' | 'BOLETO';
+  method: 'PIX' | 'CARD';
   amountCents: number;
   percentage: number;
+  installments?: number;
 }
 
 const paymentMethods = [
   { id: 'PIX' as const, name: 'PIX', icon: QrCode, color: 'bg-primary' },
-  { id: 'CARD' as const, name: 'Cartão', icon: CreditCard, color: 'bg-blue-500' },
-  { id: 'QUITA' as const, name: 'Quita+', icon: Smartphone, color: 'bg-purple-500' },
-  { id: 'BOLETO' as const, name: 'Boleto', icon: FileText, color: 'bg-orange-500' }
+  { id: 'CARD' as const, name: 'Cartão', icon: CreditCard, color: 'bg-blue-500' }
 ];
 
 export const SplitModal: React.FC<SplitModalProps> = ({
@@ -56,7 +55,7 @@ export const SplitModal: React.FC<SplitModalProps> = ({
 
   useEffect(() => {
     if (totalCents > 0) {
-      setSplits([{ method: 'PIX', amountCents: totalCents, percentage: 100 }]);
+      setSplits([{ method: 'PIX', amountCents: totalCents, percentage: 100, installments: 1 }]);
       setStep('splits');
     }
   }, [totalCents]);
@@ -76,8 +75,9 @@ export const SplitModal: React.FC<SplitModalProps> = ({
   };
 
   const addSplit = () => {
-    if (splits.length < 4) {
-      setSplits([...splits, { method: 'CARD', amountCents: 0, percentage: 0 }]);
+    if (splits.length < 2) {
+      const nextMethod = splits.find(s => s.method === 'PIX') ? 'CARD' : 'PIX';
+      setSplits([...splits, { method: nextMethod as 'PIX' | 'CARD', amountCents: 0, percentage: 0, installments: 1 }]);
     }
   };
 
@@ -89,19 +89,29 @@ export const SplitModal: React.FC<SplitModalProps> = ({
 
   const validateSplits = (): { valid: boolean; error?: string } => {
     const totalAmount = splits.reduce((sum, split) => sum + split.amountCents, 0);
-    const totalPercentage = splits.reduce((sum, split) => sum + split.percentage, 0);
     
-    // Allow ±1 cent tolerance
-    if (Math.abs(totalAmount - totalCents) > 1) {
+    // STRICT: Must equal total exactly (0 cents tolerance)
+    if (totalAmount !== totalCents) {
       return { 
         valid: false, 
-        error: `Soma dos valores (${formatCurrency(totalAmount)}) deve igual ao total (${formatCurrency(totalCents)})` 
+        error: `Soma dos valores (${formatCurrency(totalAmount)}) deve ser exatamente ${formatCurrency(totalCents)}` 
       };
     }
     
-    // Check for empty splits
-    if (splits.some(split => split.amountCents <= 0)) {
-      return { valid: false, error: 'Todos os splits devem ter valor maior que zero' };
+    // Check minimum R$ 1,00 per method
+    const minCents = 100;
+    if (splits.some(split => split.amountCents < minCents)) {
+      return { valid: false, error: 'Cada método deve ter no mínimo R$ 1,00' };
+    }
+    
+    // Check card installment minimum R$ 10,00
+    const minInstallmentCents = 1000;
+    const cardSplit = splits.find(s => s.method === 'CARD');
+    if (cardSplit && cardSplit.installments && cardSplit.installments > 1) {
+      const installmentValue = Math.floor(cardSplit.amountCents / cardSplit.installments);
+      if (installmentValue < minInstallmentCents) {
+        return { valid: false, error: 'Parcela do cartão deve ser no mínimo R$ 10,00' };
+      }
     }
     
     // Check for duplicate methods
@@ -167,7 +177,6 @@ export const SplitModal: React.FC<SplitModalProps> = ({
   };
 
   const totalSplitAmount = splits.reduce((sum, split) => sum + split.amountCents, 0);
-  const totalSplitPercentage = splits.reduce((sum, split) => sum + split.percentage, 0);
   const validation = validateSplits();
 
   return (
@@ -255,49 +264,77 @@ export const SplitModal: React.FC<SplitModalProps> = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm text-ink-secondary">Valor (R$)</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={(split.amountCents / 100).toFixed(2)}
-                        onChange={(e) => {
-                          const cents = Math.round(parseFloat(e.target.value || '0') * 100);
-                          updateSplit(index, 'amountCents', cents);
-                        }}
-                        className="mt-1"
-                      />
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm text-ink-secondary">Valor (R$)</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="0.01"
+                          value={(split.amountCents / 100).toFixed(2)}
+                          onChange={(e) => {
+                            const cents = Math.round(parseFloat(e.target.value || '0') * 100);
+                            updateSplit(index, 'amountCents', cents);
+                          }}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-sm text-ink-secondary">Percentual (%)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          value={split.percentage.toFixed(1)}
+                          onChange={(e) => {
+                            const percentage = parseFloat(e.target.value || '0');
+                            updateSplit(index, 'percentage', percentage);
+                          }}
+                          className="mt-1"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label className="text-sm text-ink-secondary">Percentual (%)</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.1"
-                        value={split.percentage.toFixed(1)}
-                        onChange={(e) => {
-                          const percentage = parseFloat(e.target.value || '0');
-                          updateSplit(index, 'percentage', percentage);
-                        }}
-                        className="mt-1"
-                      />
-                    </div>
+                    
+                    {split.method === 'CARD' && (
+                      <div>
+                        <Label className="text-sm text-ink-secondary">Parcelas do Cartão</Label>
+                        <select
+                          value={split.installments || 1}
+                          onChange={(e) => {
+                            const newSplits = [...splits];
+                            newSplits[index].installments = parseInt(e.target.value);
+                            setSplits(newSplits);
+                          }}
+                          className="w-full mt-1 border rounded px-3 py-2 text-sm bg-background text-ink"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map(n => {
+                            const installmentValue = Math.floor(split.amountCents / n);
+                            const lastInstallment = split.amountCents - (installmentValue * (n - 1));
+                            return (
+                              <option key={n} value={n}>
+                                {n}x de {formatCurrency(installmentValue)}
+                                {n > 1 && ` (última: ${formatCurrency(lastInstallment)})`}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>
             ))}
           </div>
 
-          {splits.length < 4 && (
+          {splits.length < 2 && (
             <Button
               variant="outline"
               onClick={addSplit}
               className="w-full"
             >
-              + Adicionar Método de Pagamento
+              + Adicionar Método de Pagamento (PIX ou Cartão)
             </Button>
           )}
 
@@ -307,7 +344,7 @@ export const SplitModal: React.FC<SplitModalProps> = ({
               <div className="flex justify-between items-center">
                 <span className="text-ink-secondary">Total dos splits:</span>
                 <span className={`font-semibold ${
-                  Math.abs(totalSplitAmount - totalCents) <= 1 
+                  totalSplitAmount === totalCents 
                     ? 'text-success' 
                     : 'text-destructive'
                 }`}>
@@ -316,13 +353,21 @@ export const SplitModal: React.FC<SplitModalProps> = ({
               </div>
               
               <div className="flex justify-between items-center text-sm">
-                <span className="text-ink-secondary">Percentual total:</span>
-                <span className={`${
-                  Math.abs(totalSplitPercentage - 100) < 0.1 
+                <span className="text-ink-secondary">Requerido:</span>
+                <span className="font-semibold text-primary">
+                  {formatCurrency(totalCents)}
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-ink-secondary">Diferença:</span>
+                <span className={`font-semibold ${
+                  totalSplitAmount === totalCents 
                     ? 'text-success' 
                     : 'text-destructive'
                 }`}>
-                  {totalSplitPercentage.toFixed(1)}%
+                  {formatCurrency(Math.abs(totalSplitAmount - totalCents))}
+                  {totalSplitAmount !== totalCents && (totalSplitAmount > totalCents ? ' a mais' : ' a menos')}
                 </span>
               </div>
               
