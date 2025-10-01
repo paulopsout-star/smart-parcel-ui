@@ -1,6 +1,7 @@
 import { CheckoutCharge } from './useCheckoutStore';
+import { supabase } from '@/integrations/supabase/client';
 
-// Mock data for charges
+// Mock data for charges (fallback only)
 const mockCharges: Record<string, CheckoutCharge> = {
   '1': {
     id: '1',
@@ -23,7 +24,27 @@ const mockCharges: Record<string, CheckoutCharge> = {
 };
 
 export const getCheckoutCharge = async (id: string): Promise<CheckoutCharge | null> => {
-  // Simulate API delay
+  // Try to fetch from database first
+  try {
+    const { data, error } = await supabase
+      .from('charges')
+      .select('id, amount, description, payer_name')
+      .eq('id', id)
+      .single();
+
+    if (!error && data) {
+      return {
+        id: data.id,
+        totalCents: data.amount,
+        title: `Cobrança - ${data.payer_name || 'Cliente'}`,
+        description: data.description || 'Pagamento de cobrança'
+      };
+    }
+  } catch (error) {
+    console.error('Error fetching charge:', error);
+  }
+  
+  // Simulate API delay for mock data
   await new Promise(resolve => setTimeout(resolve, 300));
   
   // Return mock data or fallback
@@ -36,5 +57,7 @@ export const getCheckoutCharge = async (id: string): Promise<CheckoutCharge | nu
 };
 
 export const generateMockCheckoutUrl = (chargeId: string): string => {
-  return `https://checkout.autonegocie/mock/${chargeId}`;
+  // Generate a real URL pointing to the checkout page in the current application
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://checkout.autonegocie';
+  return `${baseUrl}/checkout/${chargeId}`;
 };
