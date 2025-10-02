@@ -400,9 +400,9 @@ export default function NewCharge() {
             chargeId: charge.id,
             checkoutUrl: linkData.link.url,
             linkId: linkData.link.id,
-            amount: Math.round(parseFloat(data.amount.replace(',', '.')) * 100), // converter para centavos
-            payerName: data.payer_name,
-            description: data.description || undefined,
+            amount: charge.amount, // já está em centavos do banco
+            payerName: charge.payer_name,
+            description: charge.description || undefined,
             status: 'PENDENTE' as const
           };
 
