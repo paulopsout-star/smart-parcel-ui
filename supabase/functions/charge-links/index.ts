@@ -115,7 +115,10 @@ serve(async (req) => {
       }
 
       // Generate canonical checkout URL
-      const origin = Deno.env.get('APP_ORIGIN') || new URL(req.url).origin;
+      const origin = Deno.env.get('APP_ORIGIN') 
+        || req.headers.get('origin') 
+        || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
+        || new URL(req.url).origin;
       const checkoutId = existingLink.id;
       const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
 
@@ -137,20 +140,41 @@ serve(async (req) => {
       // Check subscription status first
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (user) {
-        const { data: subscriptionStatus } = await supabase.functions.invoke('subscription-manager', {
-          body: { action: 'check_status', company_id: user.id }
+      if (!user) {
+        return new Response(JSON.stringify({ 
+          code: 'UNAUTHORIZED',
+          error: 'Authentication required' 
+        }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
+      }
 
-        if (!subscriptionStatus?.allowed) {
-          return new Response(JSON.stringify({ 
-            code: 'SUBSCRIPTION_BLOCKED',
-            error: 'Subscription required to generate new payment links' 
-          }), {
-            status: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
+      const { data: subscriptionStatus, error: subError } = await supabase.functions.invoke('subscription-status', {
+        body: { userId: user.id, companyId: user.id }
+      });
+
+      if (subError) {
+        console.error('Error checking subscription:', subError);
+        return new Response(JSON.stringify({ 
+          code: 'SUBSCRIPTION_CHECK_FAILED',
+          error: 'Failed to check subscription status' 
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      const allowed = ['active', 'trialing'].includes(subscriptionStatus?.canonicalStatus);
+      if (!allowed) {
+        console.log(`Subscription blocked - Status: ${subscriptionStatus?.canonicalStatus}`);
+        return new Response(JSON.stringify({ 
+          code: 'SUBSCRIPTION_BLOCKED',
+          error: 'Active subscription required to generate new payment links' 
+        }), {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // Check if charge exists and user has access
@@ -193,7 +217,10 @@ serve(async (req) => {
         console.log(`Returning existing payment link for charge ${chargeId}`);
         
         // Generate canonical checkout URL
-        const origin = Deno.env.get('APP_ORIGIN') || new URL(req.url).origin;
+        const origin = Deno.env.get('APP_ORIGIN') 
+          || req.headers.get('origin') 
+          || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
+          || new URL(req.url).origin;
         const checkoutId = existingLink.id;
         const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
         
@@ -251,7 +278,10 @@ serve(async (req) => {
           
           if (existingAfterRace) {
             // Generate canonical checkout URL
-            const origin = Deno.env.get('APP_ORIGIN') || new URL(req.url).origin;
+            const origin = Deno.env.get('APP_ORIGIN') 
+              || req.headers.get('origin') 
+              || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
+              || new URL(req.url).origin;
             const checkoutId = existingAfterRace.id;
             const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
             
@@ -288,7 +318,10 @@ serve(async (req) => {
       console.log(`Created new payment link for charge ${chargeId}`);
       
       // Generate canonical checkout URL
-      const origin = Deno.env.get('APP_ORIGIN') || new URL(req.url).origin;
+      const origin = Deno.env.get('APP_ORIGIN') 
+        || req.headers.get('origin') 
+        || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
+        || new URL(req.url).origin;
       const checkoutId = newLink.id;
       const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
       
