@@ -246,7 +246,16 @@ serve(async (req) => {
         });
       }
 
-      // Create new payment link - trigger will populate token/url
+      // Generate mock values for required NOT NULL fields
+      const tmpLinkId = crypto.randomUUID();
+      const tmpGuid = crypto.randomUUID();
+      const origin = Deno.env.get('APP_ORIGIN') 
+        || req.headers.get('origin') 
+        || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
+        || new URL(req.url).origin;
+      const tmpLinkUrl = new URL(`/checkout/${tmpLinkId}`, origin).toString();
+
+      // Create new payment link with all required fields
       const { data: newLink, error: insertError } = await supabase
         .from('payment_links')
         .insert({
@@ -260,13 +269,22 @@ serve(async (req) => {
           installments: charge.installments || 1,
           mask_fee: charge.mask_fee || false,
           status: 'active',
-          order_type: 'credit_card'
+          order_type: 'credit_card',
+          link_id: tmpLinkId,
+          link_url: tmpLinkUrl,
+          guid: tmpGuid
         })
         .select('id, token, url, status')
         .single();
 
       if (insertError) {
         console.error('Error creating payment link:', insertError);
+        
+        // Log NOT NULL violations for debugging
+        if (insertError.code === '23502') {
+          console.error('NOT NULL constraint violation:', insertError.message, insertError.details);
+        }
+        
         // Handle unique constraint violations (race condition)
         if (insertError.code === '23505') {
           const { data: existingAfterRace } = await supabase
@@ -317,11 +335,7 @@ serve(async (req) => {
 
       console.log(`Created new payment link for charge ${chargeId}`);
       
-      // Generate canonical checkout URL
-      const origin = Deno.env.get('APP_ORIGIN') 
-        || req.headers.get('origin') 
-        || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
-        || new URL(req.url).origin;
+      // Use the canonical checkout URL (already calculated in origin above)
       const checkoutId = newLink.id;
       const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
       
