@@ -350,16 +350,20 @@ export default function NewCharge() {
         // Don't throw - the charge was created successfully
         toast({
           title: "Cobrança criada!",
-          description: "A cobrança foi criada, mas houve um problema ao gerar o link. Tente novamente em alguns minutos.",
-          variant: "destructive"
+          description: "A cobrança foi criada, mas houve um problema ao processar. Tente gerar o link manualmente.",
+          variant: "default"
         });
       } else {
-        toast({
-          title: "Cobrança criada com sucesso!",
-          description: data.recurrence_type === 'pontual' 
-            ? "Link de pagamento gerado com sucesso."
-            : `Cobrança recorrente configurada (${data.recurrence_type}).`,
-        });
+        // Para cobranças recorrentes ou com boleto, sucesso já está completo
+        if (data.recurrence_type !== 'pontual' || data.has_boleto || data.has_boleto_link) {
+          toast({
+            title: "Cobrança criada com sucesso!",
+            description: data.recurrence_type === 'pontual' 
+              ? "Cobrança criada com sucesso."
+              : `Cobrança recorrente configurada (${data.recurrence_type}).`,
+          });
+        }
+        // Para cobrança pontual sem boleto, aguardar geração do link
       }
 
       // Para cobranças pontuais sem boleto, gerar link via edge function
@@ -383,17 +387,29 @@ export default function NewCharge() {
           
           console.log('[NewCharge] Link gerado com sucesso:', linkData.link.url);
           
+          // Toast de sucesso
+          toast({
+            title: "Link de pagamento gerado!",
+            description: "O link foi criado com sucesso e está pronto para ser compartilhado.",
+          });
+          
           // URL já foi salva no DB pela edge function
           setCheckoutUrl(linkData.link.url);
           setShowCheckoutModal(true);
+          
+          // Não navegar para /charges, ficar para mostrar o modal
           return;
         } catch (error) {
           console.error('[NewCharge] Erro ao gerar checkout:', error);
           toast({
-            title: "Erro ao gerar checkout",
-            description: error instanceof Error ? error.message : "Falha ao gerar link de pagamento.",
-            variant: "destructive"
+            title: "Cobrança criada com aviso",
+            description: "A cobrança foi criada, mas o link de pagamento não pôde ser gerado automaticamente. Use 'Gerar Link' no histórico.",
+            variant: "default"
           });
+          
+          // Navegar para o histórico mesmo com erro
+          setTimeout(() => navigate('/charges'), 2000);
+          return;
         }
       }
 
