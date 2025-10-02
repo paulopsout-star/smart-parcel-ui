@@ -362,33 +362,36 @@ export default function NewCharge() {
         });
       }
 
-      // Para cobranças pontuais sem boleto, criar payment link mock
+      // Para cobranças pontuais sem boleto, gerar link via edge function
       if (data.recurrence_type === 'pontual' && !data.has_boleto && !data.has_boleto_link) {
         try {
-          const mockCheckoutUrl = `https://checkout.autonegocie/mock/${charge.id}`;
-          const mockLinkId = crypto.randomUUID();
+          console.log('[NewCharge] Gerando link de checkout via charge-links...');
           
-          // Save the checkout URL to the charge record
-          const { error: updateError } = await supabase
-            .from('charges')
-            .update({
-              checkout_url: mockCheckoutUrl,
-              checkout_link_id: mockLinkId
-            })
-            .eq('id', charge.id);
+          const { data: linkData, error: linkError } = await supabase.functions.invoke('charge-links', {
+            body: { chargeId: charge.id, action: 'create' }
+          });
           
-          if (updateError) {
-            console.error('Error saving checkout URL:', updateError);
+          if (linkError) {
+            console.error('[NewCharge] Erro ao invocar charge-links:', linkError);
+            throw new Error(linkError.message || 'Falha ao gerar link');
           }
           
-          setCheckoutUrl(mockCheckoutUrl);
+          if (!linkData?.link?.url) {
+            console.error('[NewCharge] Link não retornado:', linkData);
+            throw new Error('Link não foi gerado');
+          }
+          
+          console.log('[NewCharge] Link gerado com sucesso:', linkData.link.url);
+          
+          // URL já foi salva no DB pela edge function
+          setCheckoutUrl(linkData.link.url);
           setShowCheckoutModal(true);
           return;
         } catch (error) {
-          console.error('Erro ao gerar checkout:', error);
+          console.error('[NewCharge] Erro ao gerar checkout:', error);
           toast({
             title: "Erro ao gerar checkout",
-            description: "A cobrança foi criada, mas houve erro ao gerar o link de pagamento.",
+            description: error instanceof Error ? error.message : "Falha ao gerar link de pagamento.",
             variant: "destructive"
           });
         }

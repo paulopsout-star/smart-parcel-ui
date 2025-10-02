@@ -23,7 +23,11 @@ serve(async (req) => {
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
 
+    console.log('[public-payment-link] Requisição recebida');
+    console.log('[public-payment-link] ID solicitado:', id);
+
     if (!id) {
+      console.log('[public-payment-link] ID não fornecido');
       return new Response(JSON.stringify({ error: 'ID required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -36,6 +40,8 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    console.log('[public-payment-link] Buscando payment_link no DB...');
+
     // Find payment link by id
     const { data: paymentLink, error: linkError } = await supabase
       .from('payment_links')
@@ -44,7 +50,14 @@ serve(async (req) => {
       .eq('status', 'active')
       .single();
 
+    console.log('[public-payment-link] Resultado da query:', {
+      found: !!paymentLink,
+      error: linkError?.message,
+      amount: paymentLink?.amount
+    });
+
     if (linkError || !paymentLink) {
+      console.log('[public-payment-link] Payment link não encontrado ou inativo');
       return new Response(JSON.stringify({ error: 'Payment link not found or inactive' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -54,14 +67,21 @@ serve(async (req) => {
     // Return only necessary data for checkout (no sensitive PII)
     const checkoutData = {
       id: paymentLink.id,
-      charge_id: paymentLink.order_id,
+      charge_id: paymentLink.charge_id || paymentLink.order_id,
       title: paymentLink.description || 'Pagamento',
       description: paymentLink.description || '',
       amount_cents: paymentLink.amount,
       payer_name: paymentLink.payer_name || 'Cliente'
     };
 
+    console.log('[public-payment-link] Retornando checkout data:', {
+      id: checkoutData.id,
+      amount_cents: checkoutData.amount_cents,
+      has_charge_id: !!checkoutData.charge_id
+    });
+
     return new Response(JSON.stringify(checkoutData), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 

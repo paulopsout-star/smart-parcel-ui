@@ -46,20 +46,46 @@ const Checkout = () => {
       try {
         setLoading(true);
         
-        // Call public endpoint to get payment link data
-        const response = await fetch(
-          `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`
-        );
+        const url = `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`;
+        console.log('[Checkout] Iniciando fetch para id:', id);
+        console.log('[Checkout] URL:', url);
+        
+        // Timeout de 10 segundos
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await fetch(url, { 
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        console.log('[Checkout] Response status:', response.status, 'ok:', response.ok);
 
         if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[Checkout] Erro HTTP:', response.status, errorText);
+          toast({
+            title: "Erro ao carregar",
+            description: `Código HTTP: ${response.status}`,
+            variant: "destructive"
+          });
           setCharge(null);
           setLoading(false);
           return;
         }
 
         const data = await response.json();
+        console.log('[Checkout] Data recebido:', data);
 
         if (data.error) {
+          console.error('[Checkout] API Error:', data.error);
+          toast({
+            title: "Link inválido",
+            description: "Este link de pagamento não está disponível",
+            variant: "destructive"
+          });
           setCharge(null);
           setLoading(false);
           return;
@@ -72,6 +98,7 @@ const Checkout = () => {
           description: data.description || ''
         };
 
+        console.log('[Checkout] Charge data processado:', chargeData);
         setCharge(chargeData);
         const paymentOptions = calculatePaymentOptions(chargeData.totalCents);
         
@@ -90,8 +117,24 @@ const Checkout = () => {
         if (popularOption) {
           setSelectedOption(popularOption);
         }
-      } catch (error) {
-        console.error('Error loading charge:', error);
+      } catch (error: any) {
+        console.error('[Checkout] Erro capturado:', error);
+        
+        if (error.name === 'AbortError') {
+          console.error('[Checkout] Timeout na requisição');
+          toast({
+            title: "Timeout",
+            description: "A requisição demorou muito para responder",
+            variant: "destructive"
+          });
+        } else {
+          console.error('[Checkout] Erro de rede:', error);
+          toast({
+            title: "Erro de conexão",
+            description: error.message || "Falha ao conectar com o servidor",
+            variant: "destructive"
+          });
+        }
         setCharge(null);
       } finally {
         setLoading(false);
