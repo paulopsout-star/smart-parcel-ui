@@ -91,7 +91,15 @@ export default function NewCharge() {
   const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(true);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [checkoutUrl, setCheckoutUrl] = useState('');
+  const [checkoutData, setCheckoutData] = useState<{
+    chargeId: string;
+    checkoutUrl: string;
+    linkId: string;
+    amount: number;
+    payerName: string;
+    description?: string;
+    status: 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'ERRO';
+  } | null>(null);
   const { profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -387,14 +395,27 @@ export default function NewCharge() {
           
           console.log('[NewCharge] Link gerado com sucesso:', linkData.link.url);
           
+          // Construir checkoutData completo com os dados da cobrança criada
+          const fullCheckoutData = {
+            chargeId: charge.id,
+            checkoutUrl: linkData.link.url,
+            linkId: linkData.link.id,
+            amount: Math.round(parseFloat(data.amount.replace(',', '.')) * 100), // converter para centavos
+            payerName: data.payer_name,
+            description: data.description || undefined,
+            status: 'PENDENTE' as const
+          };
+
+          console.log('[NewCharge] Checkout data completo:', fullCheckoutData);
+
           // Toast de sucesso
           toast({
             title: "Link de pagamento gerado!",
             description: "O link foi criado com sucesso e está pronto para ser compartilhado.",
           });
           
-          // URL já foi salva no DB pela edge function
-          setCheckoutUrl(linkData.link.url);
+          // Setar dados completos
+          setCheckoutData(fullCheckoutData);
           setShowCheckoutModal(true);
           
           // Não navegar para /charges, ficar para mostrar o modal
@@ -905,18 +926,19 @@ export default function NewCharge() {
           </form>
 
           {/* Checkout Success Modal */}
-          <CheckoutSuccessModal
-            open={showCheckoutModal}
-            onOpenChange={setShowCheckoutModal}
-            checkoutData={{
-              chargeId: watch('payer_name') ? crypto.randomUUID() : 'temp-id',
-              checkoutUrl: checkoutUrl,
-              amount: watch('amount') ? parseInt(watch('amount').replace(/[^\d]/g, '')) : 0,
-              payerName: watch('payer_name') || 'Cliente', 
-              description: watch('description') || 'Nova cobrança',
-              status: 'PENDENTE'
-            }}
-          />
+          {showCheckoutModal && checkoutData && (
+            <CheckoutSuccessModal
+              open={showCheckoutModal}
+              onOpenChange={(open) => {
+                setShowCheckoutModal(open);
+                if (!open) {
+                  setCheckoutData(null);
+                  navigate('/charges');
+                }
+              }}
+              checkoutData={checkoutData}
+            />
+          )}
         </div>
       </div>
     </ErrorBoundary>
