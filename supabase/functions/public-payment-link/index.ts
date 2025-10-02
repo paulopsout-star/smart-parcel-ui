@@ -21,10 +21,10 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const token = url.searchParams.get('token');
+    const id = url.searchParams.get('id');
 
-    if (!token) {
-      return new Response(JSON.stringify({ error: 'Token required' }), {
+    if (!id) {
+      return new Response(JSON.stringify({ error: 'ID required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -36,11 +36,11 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Find payment link by token
+    // Find payment link by id
     const { data: paymentLink, error: linkError } = await supabase
       .from('payment_links')
       .select('*')
-      .eq('link_id', token)
+      .eq('id', id)
       .eq('status', 'active')
       .single();
 
@@ -51,21 +51,14 @@ serve(async (req) => {
       });
     }
 
-    // Return only necessary data for checkout (no PII)
+    // Return only necessary data for checkout (no sensitive PII)
     const checkoutData = {
       id: paymentLink.id,
       charge_id: paymentLink.order_id,
-      amount: paymentLink.amount,
-      description: paymentLink.description,
-      installments: paymentLink.installments,
-      mask_fee: paymentLink.mask_fee,
-      // Safe payer data (first name only, masked email/document)
-      payer_name: paymentLink.payer_name ? paymentLink.payer_name.split(' ')[0] : 'Cliente',
-      payer_email_masked: paymentLink.payer_email ? 
-        paymentLink.payer_email.replace(/(.{2})(.*)(@.*)/, '$1***$3') : '',
-      has_boleto_link: paymentLink.ui_snapshot?.has_boleto_link || false,
-      status: paymentLink.status,
-      created_at: paymentLink.created_at
+      title: paymentLink.description || 'Pagamento',
+      description: paymentLink.description || '',
+      amount_cents: paymentLink.amount,
+      payer_name: paymentLink.payer_name || 'Cliente'
     };
 
     return new Response(JSON.stringify(checkoutData), {

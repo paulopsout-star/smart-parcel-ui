@@ -7,7 +7,7 @@ import { useCheckoutStore } from '@/hooks/useCheckoutStore';
 import { calculatePaymentOptions } from '@/lib/checkout-utils';
 import { useToast } from '@/hooks/use-toast';
 import { Lock } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
+
 
 export interface PaymentOption {
   id: string;
@@ -46,34 +46,30 @@ const Checkout = () => {
       try {
         setLoading(true);
         
-        // First try to fetch from database by checkout_link_id or charge id
-        const { data, error } = await supabase
-          .from('charges')
-          .select('id, amount, description, payer_name')
-          .or(`checkout_link_id.eq.${id},id.eq.${id}`)
-          .maybeSingle();
+        // Call public endpoint to get payment link data
+        const response = await fetch(
+          `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`
+        );
 
-        if (error) {
-          console.error('Error fetching charge:', error);
-          toast({
-            title: "Erro",
-            description: "Falha ao carregar dados da cobrança",
-            variant: "destructive"
-          });
+        if (!response.ok) {
+          setCharge(null);
+          setLoading(false);
           return;
         }
 
-        if (!data) {
-          // No charge found
+        const data = await response.json();
+
+        if (data.error) {
           setCharge(null);
+          setLoading(false);
           return;
         }
 
         const chargeData = {
           id: data.id,
-          totalCents: data.amount,
-          title: data.description || `Cobrança - ${data.payer_name || 'Cliente'}`,
-          description: data.description || 'Pagamento de cobrança'
+          totalCents: data.amount_cents,
+          title: data.title || 'Pagamento',
+          description: data.description || ''
         };
 
         setCharge(chargeData);
@@ -96,11 +92,7 @@ const Checkout = () => {
         }
       } catch (error) {
         console.error('Error loading charge:', error);
-        toast({
-          title: "Erro",
-          description: "Falha ao carregar dados da cobrança",
-          variant: "destructive"
-        });
+        setCharge(null);
       } finally {
         setLoading(false);
       }
