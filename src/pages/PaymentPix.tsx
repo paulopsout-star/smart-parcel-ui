@@ -26,7 +26,7 @@ export default function PaymentPix() {
 
       const { data: splitData, error } = await supabase
         .from('payment_splits')
-        .select('*, charges(*)')
+        .select('*')
         .eq('payment_link_id', id)
         .order('order_index');
 
@@ -40,10 +40,26 @@ export default function PaymentPix() {
         return;
       }
 
-      const charge = splitData[0].charges;
+      // Buscar payment_link separadamente
+      const { data: paymentLink, error: linkError } = await supabase
+        .from('payment_links')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (linkError || !paymentLink) {
+        toast({
+          title: 'Erro',
+          description: 'Dados do pagamento não encontrados.',
+          variant: 'destructive',
+        });
+        navigate('/');
+        return;
+      }
+
       const pixSplit = splitData.find((s: any) => s.method === 'pix');
       
-      setCharge({ ...charge, payment_splits: splitData });
+      setCharge({ ...paymentLink, payment_splits: splitData });
       setPixAmount(pixSplit?.amount_cents || 0);
       
       setLoading(false);

@@ -22,7 +22,7 @@ export default function PaymentCard() {
 
       const { data: splitData, error } = await supabase
         .from('payment_splits')
-        .select('*, charges(*)')
+        .select('*')
         .eq('payment_link_id', id)
         .order('order_index');
 
@@ -36,7 +36,23 @@ export default function PaymentCard() {
         return;
       }
 
-      const charge = splitData[0].charges;
+      // Buscar payment_link separadamente
+      const { data: paymentLink, error: linkError } = await supabase
+        .from('payment_links')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (linkError || !paymentLink) {
+        toast({
+          title: 'Erro',
+          description: 'Dados do pagamento não encontrados.',
+          variant: 'destructive',
+        });
+        navigate('/');
+        return;
+      }
+
       const cardSplit = splitData.find((s: any) => s.method === 'credit_card');
 
       if (!cardSplit) {
@@ -49,7 +65,7 @@ export default function PaymentCard() {
         return;
       }
 
-      setCharge({ ...charge, payment_splits: splitData });
+      setCharge({ ...paymentLink, payment_splits: splitData });
       setCardAmount(cardSplit.amount_cents);
       
       // Usar dados SALVOS do split - ir direto para o formulário
@@ -98,7 +114,7 @@ export default function PaymentCard() {
         <PaymentForm
           amount={selectedOption.totalCents / 100}
           installments={selectedOption.installments}
-          productName={charge.description || 'Pagamento'}
+          productName={charge?.description || 'Pagamento'}
           onSuccess={handlePaymentSuccess}
         />
       </Card>
