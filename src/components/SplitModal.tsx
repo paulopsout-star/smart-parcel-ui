@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CreditCard, QrCode, Trash2, Plus, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { CardInstallmentSelector } from '@/components/CardInstallmentSelector';
 
 interface SplitModalProps {
   isOpen: boolean;
@@ -217,30 +217,17 @@ export function SplitModal({ isOpen, onClose, totalCents, chargeId }: SplitModal
                       </div>
                     </div>
 
-                    {split.method === 'CARD' && (
-                      <div>
-                        <Label htmlFor={`installments-${index}`} className="text-sm">
-                          Parcelas
-                        </Label>
-                        <Select
-                          value={String(split.installments || 1)}
-                          onValueChange={(value) => {
+                    {split.method === 'CARD' && split.amount > 0 && (
+                      <div className="mt-4">
+                        <CardInstallmentSelector
+                          cardAmountCents={split.amount}
+                          selectedInstallments={split.installments || 1}
+                          onInstallmentsChange={(installments) => {
                             const newSplits = [...splits];
-                            newSplits[index].installments = parseInt(value);
+                            newSplits[index].installments = installments;
                             setSplits(newSplits);
                           }}
-                        >
-                          <SelectTrigger id={`installments-${index}`} className="mt-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => (
-                              <SelectItem key={num} value={String(num)}>
-                                {num}x de {formatCurrency(Math.floor(split.amount / num))}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        />
                       </div>
                     )}
                   </div>
