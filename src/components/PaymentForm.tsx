@@ -5,8 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { usePaymentMock } from "@/hooks/usePaymentMock";
-import type { PaymentFormData, PaymentState } from "@/types/payment";
+import { usePayment } from "@/hooks/usePayment";
+import type { PaymentFormData } from "@/types/payment";
 
 interface PaymentFormProps {
   amount: number;
@@ -23,14 +23,7 @@ export function PaymentForm({
   onSuccess,
   onCancel,
 }: PaymentFormProps) {
-  const { loading, processSplits } = usePaymentMock();
-  
-  const [paymentState, setPaymentState] = useState<PaymentState>({
-    isProcessing: false,
-    isSuccess: false,
-    error: null,
-    transactionId: null,
-  });
+  const { paymentState, processPayment } = usePayment();
   
   const [formData, setFormData] = useState<PaymentFormData>({
     payerName: "",
@@ -174,40 +167,10 @@ export function PaymentForm({
     
     if (!validateForm()) return;
 
-    setPaymentState({
-      isProcessing: true,
-      isSuccess: false,
-      error: null,
-      transactionId: null,
-    });
-
-    try {
-      // Simular split de pagamento com mock
-      const mockSplit = {
-        method: 'CARD' as const,
-        amount: amount,
-        percentage: 100,
-        installments: installments,
-      };
-
-      const result = await processSplits([mockSplit]);
-      
-      if (result.success && result.transactionIds?.[0]) {
-        setPaymentState({
-          isProcessing: false,
-          isSuccess: true,
-          error: null,
-          transactionId: result.transactionIds[0],
-        });
-        onSuccess?.(result.transactionIds[0]);
-      }
-    } catch (error) {
-      setPaymentState({
-        isProcessing: false,
-        isSuccess: false,
-        error: 'Erro ao processar pagamento',
-        transactionId: null,
-      });
+    const result = await processPayment(formData, amount, installments);
+    
+    if (result.success && result.transactionId) {
+      onSuccess?.(result.transactionId);
     }
   };
 
