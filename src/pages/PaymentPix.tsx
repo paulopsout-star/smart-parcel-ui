@@ -24,13 +24,13 @@ export default function PaymentPix() {
     const fetchData = async () => {
       if (!id) return;
 
-      const { data: chargeData, error } = await supabase
-        .from('charges')
-        .select('*, payment_splits(*)')
-        .eq('checkout_link_id', id)
-        .single();
+      const { data: splitData, error } = await supabase
+        .from('payment_splits')
+        .select('*, charges(*)')
+        .eq('payment_link_id', id)
+        .order('order_index');
 
-      if (error || !chargeData) {
+      if (error || !splitData || splitData.length === 0) {
         toast({
           title: 'Erro',
           description: 'Link de pagamento inválido ou expirado.',
@@ -40,11 +40,11 @@ export default function PaymentPix() {
         return;
       }
 
-      setCharge(chargeData);
+      const charge = splitData[0].charges;
+      const pixSplit = splitData.find((s: any) => s.method === 'pix');
       
-      // Buscar valor do PIX nos splits
-      const pixSplit = chargeData.payment_splits?.find((s: any) => s.method === 'pix' && s.order_index === 1);
-      setPixAmount(pixSplit?.amount_cents || chargeData.amount);
+      setCharge({ ...charge, payment_splits: splitData });
+      setPixAmount(pixSplit?.amount_cents || 0);
       
       setLoading(false);
     };
@@ -89,7 +89,7 @@ export default function PaymentPix() {
     
     // Redirecionar para cartão (se houver) ou thank-you
     const hasCardPayment = charge.payment_splits?.some((s: any) => s.method === 'credit_card');
-    if (nextStep === 'card' || hasCardPayment) {
+    if (hasCardPayment) {
       navigate(`/payment-card/${id}`);
     } else {
       navigate('/thank-you');
