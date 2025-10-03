@@ -31,16 +31,21 @@ export default function Checkout() {
           setTimeout(() => reject(new Error('Timeout')), 10000)
         );
 
-        const fetchPromise = supabase.functions.invoke('public-payment-link', {
-          body: { checkoutId: id }
-        });
+        const fetchPromise = fetch(
+          `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`
+        );
 
-        const { data, error } = await Promise.race([
+        const response = await Promise.race([
           fetchPromise,
           timeoutPromise
-        ]) as any;
+        ]) as Response;
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to fetch payment link');
+        }
+
+        const data = await response.json();
 
         if (!data?.charge) {
           toast({
