@@ -109,7 +109,7 @@ export function SplitModal({ isOpen, onClose, totalCents, chargeId }: SplitModal
       // Persistir splits no DB
       const splitsToInsert = splits.map((split) => ({
         charge_id: chargeId,
-        method: split.method,
+        method: split.method === 'PIX' ? 'pix' : 'credit_card',
         amount_cents: split.amount,
         order_index: split.method === 'PIX' ? 1 : 2,
         installments: split.installments || 1,
