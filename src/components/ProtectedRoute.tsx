@@ -99,10 +99,6 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     readOnly,
   });
 
-  // Wrap children with SubscriptionProvider to propagate readOnly state
-  return (
-    <SubscriptionProvider readOnly={readOnly} canonicalStatus={canonicalStatus}>
-      {children}
-    </SubscriptionProvider>
-  );
+  // Children já tem acesso ao contexto de subscription via provider global
+  return <>{children}</>;
 }
