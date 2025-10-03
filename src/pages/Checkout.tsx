@@ -114,7 +114,8 @@ export default function Checkout() {
         isOpen={isSplitModalOpen}
         onClose={() => setIsSplitModalOpen(false)}
         totalCents={charge.amount_cents}
-        chargeId={id || ''}
+        chargeId={charge.charge_id || ''}
+        paymentLinkId={charge.id || id || ''}
       />
     </div>
   );

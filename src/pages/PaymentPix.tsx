@@ -43,7 +43,7 @@ export default function PaymentPix() {
       setCharge(chargeData);
       
       // Buscar valor do PIX nos splits
-      const pixSplit = chargeData.payment_splits?.find((s: any) => s.method === 'PIX' && s.order_index === 1);
+      const pixSplit = chargeData.payment_splits?.find((s: any) => s.method === 'pix' && s.order_index === 1);
       setPixAmount(pixSplit?.amount_cents || chargeData.amount);
       
       setLoading(false);
@@ -70,7 +70,7 @@ export default function PaymentPix() {
     await new Promise(resolve => setTimeout(resolve, 2000));
     
     // Atualizar split do PIX como pago
-    const pixSplit = charge.payment_splits?.find((s: any) => s.method === 'PIX');
+    const pixSplit = charge.payment_splits?.find((s: any) => s.method === 'pix');
     if (pixSplit) {
       await supabase
         .from('payment_splits')
@@ -88,7 +88,8 @@ export default function PaymentPix() {
     });
     
     // Redirecionar para cartão (se houver) ou thank-you
-    if (nextStep === 'card') {
+    const hasCardPayment = charge.payment_splits?.some((s: any) => s.method === 'credit_card');
+    if (nextStep === 'card' || hasCardPayment) {
       navigate(`/payment-card/${id}`);
     } else {
       navigate('/thank-you');

@@ -16,6 +16,7 @@ interface SplitModalProps {
   onClose: () => void;
   totalCents: number;
   chargeId: string;
+  paymentLinkId?: string;
 }
 
 interface PaymentSplit {
@@ -30,7 +31,12 @@ const paymentMethods = [
   { value: 'CARD', label: 'Cartão de Crédito', icon: CreditCard, color: 'bg-blue-500' }
 ];
 
-export function SplitModal({ isOpen, onClose, totalCents, chargeId }: SplitModalProps) {
+const isValidUuid = (uuid: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+};
+
+export function SplitModal({ isOpen, onClose, totalCents, chargeId, paymentLinkId }: SplitModalProps) {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [splits, setSplits] = useState<PaymentSplit[]>([
@@ -108,7 +114,8 @@ export function SplitModal({ isOpen, onClose, totalCents, chargeId }: SplitModal
     try {
       // Persistir splits no DB
       const splitsToInsert = splits.map((split) => ({
-        charge_id: chargeId,
+        payment_link_id: paymentLinkId || null,
+        charge_id: isValidUuid(chargeId) ? chargeId : null,
         method: split.method === 'PIX' ? 'pix' : 'credit_card',
         amount_cents: split.amount,
         order_index: split.method === 'PIX' ? 1 : 2,
@@ -122,19 +129,20 @@ export function SplitModal({ isOpen, onClose, totalCents, chargeId }: SplitModal
 
       if (error) throw error;
 
-      // Redirecionar conforme a escolha
+      // Redirecionar conforme a escolha (usar paymentLinkId)
+      const redirectId = paymentLinkId || chargeId;
       const hasPix = splits.some(s => s.method === 'PIX');
       const hasCard = splits.some(s => s.method === 'CARD');
 
       if (hasPix && hasCard) {
         // Split: PIX primeiro
-        navigate(`/payment-pix/${chargeId}?next=card`);
+        navigate(`/payment-pix/${redirectId}?next=card`);
       } else if (hasPix) {
         // 100% PIX
-        navigate(`/payment-pix/${chargeId}`);
+        navigate(`/payment-pix/${redirectId}`);
       } else {
         // 100% Cartão
-        navigate(`/payment-card/${chargeId}`);
+        navigate(`/payment-card/${redirectId}`);
       }
 
       onClose();

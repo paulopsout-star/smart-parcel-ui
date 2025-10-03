@@ -47,7 +47,7 @@ export default function PaymentCard() {
       setCharge(chargeData);
       
       // Buscar valor do CARTÃO nos splits (order_index = 2) ou total se for 100% cartão
-      const cardSplit = chargeData.payment_splits?.find((s: any) => s.method === 'CARD');
+      const cardSplit = chargeData.payment_splits?.find((s: any) => s.method === 'credit_card');
       const amountToUse = cardSplit?.amount_cents || chargeData.amount;
       setCardAmount(amountToUse);
       
@@ -99,7 +99,7 @@ export default function PaymentCard() {
 
   const handlePaymentSuccess = async (transactionId: string) => {
     // Atualizar split do cartão como pago
-    const cardSplit = charge.payment_splits?.find((s: any) => s.method === 'CARD');
+    const cardSplit = charge.payment_splits?.find((s: any) => s.method === 'credit_card');
     if (cardSplit) {
       await supabase
         .from('payment_splits')
@@ -209,7 +209,7 @@ export default function PaymentCard() {
                     </div>
                   )}
 
-                  {charge.payment_splits?.some((s: any) => s.method === 'PIX' && s.pix_paid_at) && (
+                  {charge.payment_splits?.some((s: any) => s.method === 'pix' && s.pix_paid_at) && (
                     <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
                       <CheckCircle className="w-4 h-4" />
                       <span>PIX já confirmado</span>
