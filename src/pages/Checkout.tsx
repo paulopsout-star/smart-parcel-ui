@@ -1,252 +1,116 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckoutOptionCard } from '@/components/CheckoutOptionCard';
-import { CheckoutSummary } from '@/components/CheckoutSummary';
+import { Card } from '@/components/ui/card';
 import { SplitModal } from '@/components/SplitModal';
-import { useCheckoutStore } from '@/hooks/useCheckoutStore';
-import { calculatePaymentOptions } from '@/lib/checkout-utils';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Lock } from 'lucide-react';
 
-
-export interface PaymentOption {
-  id: string;
-  title: string;
-  type: 'single' | 'popular' | 'minimum' | 'custom';
-  totalCents: number;
-  installments: number;
-  installmentValueCents: number;
-  discountCents?: number;
-  isCustom?: boolean;
-}
-
-const Checkout = () => {
+export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
-  const { 
-    charge, 
-    selectedOption, 
-    customAmount, 
-    customInstallments,
-    isSplitModalOpen,
-    setCharge, 
-    setSelectedOption, 
-    setCustomAmount, 
-    setCustomInstallments,
-    setSplitModalOpen 
-  } = useCheckoutStore();
-
   const [loading, setLoading] = useState(true);
-  const [options, setOptions] = useState<PaymentOption[]>([]);
+  const [charge, setCharge] = useState<any>(null);
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
 
   useEffect(() => {
-    const loadCharge = async () => {
-      if (!id) return;
-      
+    const fetchCharge = async () => {
+      if (!id) {
+        toast({
+          title: "Erro",
+          description: "Link de pagamento inválido.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
-        
-        const url = `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`;
-        console.log('[Checkout] Iniciando fetch para id:', id);
-        console.log('[Checkout] URL:', url);
-        
-        // Timeout de 10 segundos
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
-        const response = await fetch(url, { 
-          signal: controller.signal,
-          headers: { 'Content-Type': 'application/json' }
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout')), 10000)
+        );
+
+        const fetchPromise = supabase.functions.invoke('public-payment-link', {
+          body: { checkoutId: id }
         });
-        
-        clearTimeout(timeoutId);
-        
-        console.log('[Checkout] Response status:', response.status, 'ok:', response.ok);
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('[Checkout] Erro HTTP:', response.status, errorText);
-          toast({
-            title: "Erro ao carregar",
-            description: `Código HTTP: ${response.status}`,
-            variant: "destructive"
-          });
-          setCharge(null);
-          setLoading(false);
-          return;
-        }
+        const { data, error } = await Promise.race([
+          fetchPromise,
+          timeoutPromise
+        ]) as any;
 
-        const data = await response.json();
-        console.log('[Checkout] Data recebido:', data);
+        if (error) throw error;
 
-        if (data.error) {
-          console.error('[Checkout] API Error:', data.error);
+        if (!data?.charge) {
           toast({
             title: "Link inválido",
-            description: "Este link de pagamento não está disponível",
-            variant: "destructive"
+            description: "Este link de pagamento não existe ou expirou.",
+            variant: "destructive",
           });
-          setCharge(null);
           setLoading(false);
           return;
         }
 
-        const chargeData = {
-          id: data.id,
-          totalCents: data.amount_cents,
-          title: data.title || 'Pagamento',
-          description: data.description || ''
-        };
+        setCharge(data.charge);
+        
+        // Abrir modal de split imediatamente
+        setIsSplitModalOpen(true);
 
-        console.log('[Checkout] Charge data processado:', chargeData);
-        setCharge(chargeData);
-        const paymentOptions = calculatePaymentOptions(chargeData.totalCents);
-        
-        // Reorder: minimum (12x), single, popular (6x), custom
-        const orderedOptions = [
-          paymentOptions.find(opt => opt.type === 'minimum'),
-          paymentOptions.find(opt => opt.type === 'single'),
-          paymentOptions.find(opt => opt.type === 'popular'),
-          paymentOptions.find(opt => opt.type === 'custom')
-        ].filter(Boolean) as PaymentOption[];
-        
-        setOptions(orderedOptions);
-        
-        // Auto-select popular option
-        const popularOption = orderedOptions.find(opt => opt.type === 'popular');
-        if (popularOption) {
-          setSelectedOption(popularOption);
-        }
       } catch (error: any) {
-        console.error('[Checkout] Erro capturado:', error);
-        
-        if (error.name === 'AbortError') {
-          console.error('[Checkout] Timeout na requisição');
-          toast({
-            title: "Timeout",
-            description: "A requisição demorou muito para responder",
-            variant: "destructive"
-          });
-        } else {
-          console.error('[Checkout] Erro de rede:', error);
-          toast({
-            title: "Erro de conexão",
-            description: error.message || "Falha ao conectar com o servidor",
-            variant: "destructive"
-          });
-        }
-        setCharge(null);
+        console.error('Error fetching charge:', error);
+        toast({
+          title: "Erro ao carregar",
+          description: error.message === 'Timeout' 
+            ? "A solicitação demorou muito tempo. Tente novamente."
+            : "Não foi possível carregar os dados do pagamento.",
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }
     };
 
-    loadCharge();
-  }, [id, setCharge, setSelectedOption, toast]);
-
-  const handleCustomValueChange = (amountCents: number, installments: number) => {
-    setCustomAmount(amountCents);
-    setCustomInstallments(installments);
-    
-    // Create custom option
-    if (amountCents > 0 && installments > 0) {
-      const customOption: PaymentOption = {
-        id: 'custom',
-        title: 'Valor Personalizado',
-        type: 'custom',
-        totalCents: amountCents,
-        installments,
-        installmentValueCents: Math.floor(amountCents / installments),
-        isCustom: true
-      };
-      
-      setSelectedOption(customOption);
-    }
-  };
-
-  const handleContinueToCheckout = () => {
-    if (selectedOption) {
-      setSplitModalOpen(true);
-    }
-  };
+    fetchCharge();
+  }, [id, toast]);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-ink-secondary">Carregando dados do pagamento...</p>
+        </div>
       </div>
     );
   }
 
   if (!charge) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <h2 className="text-2xl font-bold text-ink">Link inválido ou expirado</h2>
-          <p className="text-ink-secondary">Este link de pagamento não está mais disponível ou não existe.</p>
-          <p className="text-sm text-ink-secondary">Entre em contato com o responsável pela cobrança para obter um novo link.</p>
-        </div>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="text-destructive mb-4">
+            <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-ink mb-2">Link Inválido</h2>
+          <p className="text-ink-secondary">
+            Este link de pagamento não existe ou expirou.
+          </p>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Payment Options - Left Side */}
-          <div className="lg:col-span-2 space-y-4">
-            <p className="text-ink-secondary text-sm mb-6">
-              Selecione a opção que melhor se adequa ao seu perfil
-            </p>
-            
-            {options.map((option) => (
-              <CheckoutOptionCard
-                key={option.id}
-                option={option}
-                isSelected={selectedOption?.id === option.id}
-                onSelect={() => setSelectedOption(option)}
-                onCustomValueChange={option.isCustom ? handleCustomValueChange : undefined}
-                customAmount={customAmount}
-                customInstallments={customInstallments}
-              />
-            ))}
-            
-            {/* Security Badge at Bottom */}
-            <div className="flex items-center gap-2 mt-8 text-sm text-ink-secondary">
-              <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
-                <Lock className="w-3 h-3 text-primary" />
-              </div>
-              <div>
-                <div className="font-medium text-ink">Pagamento 100% Seguro</div>
-                <div className="text-xs">Seus dados são protegidos por criptografia SSL</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Summary Sidebar - Right Side */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-8">
-              <CheckoutSummary
-                charge={charge}
-                selectedOption={selectedOption}
-                onContinue={handleContinueToCheckout}
-                disabled={!selectedOption}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Split Modal */}
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <SplitModal
         isOpen={isSplitModalOpen}
-        onClose={() => setSplitModalOpen(false)}
-        totalCents={selectedOption?.totalCents || 0}
+        onClose={() => setIsSplitModalOpen(false)}
+        totalCents={charge.amount}
         chargeId={id || ''}
       />
     </div>
   );
-};
-
-export default Checkout;
+}

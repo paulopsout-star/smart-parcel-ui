@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PaymentOption } from '@/pages/Checkout';
+import { PaymentOption } from '@/types/payment-options';
 import { CheckoutCharge } from '@/hooks/useCheckoutStore';
 import { formatCurrency } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';

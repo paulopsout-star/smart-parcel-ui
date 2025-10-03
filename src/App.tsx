@@ -3,171 +3,80 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { Layout } from "@/components/Layout";
+import { AuthProvider } from "./contexts/AuthContext";
+import { SubscriptionProvider } from "./contexts/SubscriptionContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
-// Public pages
 import Index from "./pages/Index";
-import Payment from "./pages/Payment";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import CreateAdmin from "./pages/CreateAdmin";
-import NotFound from "./pages/NotFound";
-
-// Protected pages
 import Dashboard from "./pages/Dashboard";
 import NewCharge from "./pages/NewCharge";
 import ChargeHistory from "./pages/ChargeHistory";
-import MessageTemplates from "./pages/MessageTemplates";
+import Payment from "./pages/Payment";
+import Checkout from "./pages/Checkout";
+import PaymentPix from "./pages/PaymentPix";
+import PaymentCard from "./pages/PaymentCard";
+import ThankYou from "./pages/ThankYou";
 import PayoutAccounts from "./pages/PayoutAccounts";
+import MessageTemplates from "./pages/MessageTemplates";
 import MessageQueue from "./pages/MessageQueue";
+import CreateAdmin from "./pages/CreateAdmin";
+import NotFound from "./pages/NotFound";
+
+// Admin pages
 import UserManagement from "./pages/admin/UserManagement";
-import CheckoutNew from "./pages/admin/CheckoutNew";
-import CheckoutHistory from "./pages/admin/CheckoutHistory";
+import SubscriptionManagement from "./pages/admin/SubscriptionManagement";
 import RefundManagement from "./pages/admin/RefundManagement";
 import RecurrenceManagement from "./pages/admin/RecurrenceManagement";
+import CheckoutNew from "./pages/admin/CheckoutNew";
+import CheckoutHistory from "./pages/admin/CheckoutHistory";
 import Reports from "./pages/admin/Reports";
-import ThankYou from "./pages/ThankYou";
-import SubscriptionManagement from "./pages/admin/SubscriptionManagement";
-import Checkout from "./pages/Checkout";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<Index />} />
-            <Route path="/payment" element={<Payment />} />
-            <Route path="/checkout/:id" element={<Checkout />} />
-            <Route path="/thank-you" element={<ThankYou />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/create-admin" element={<CreateAdmin />} />
-            
-            {/* Protected routes with Layout */}
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Layout>
-                  <Dashboard />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/new-charge" element={
-              <ProtectedRoute>
-                <Layout>
-                  <NewCharge />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/charge-history" element={
-              <ProtectedRoute>
-                <Layout>
-                  <ChargeHistory />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/message-templates" element={
-              <ProtectedRoute>
-                <Layout>
-                  <MessageTemplates />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/payout-accounts" element={
-              <ProtectedRoute>
-                <Layout>
-                  <PayoutAccounts />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/message-queue" element={
-              <ProtectedRoute>
-                <Layout>
-                  <MessageQueue />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/admin/refunds" element={
-              <ProtectedRoute requiredRole="admin">
-                <Layout>
-                  <RefundManagement />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/admin/recurrences" element={
-              <ProtectedRoute requiredRole="admin">
-                <Layout>
-                  <RecurrenceManagement />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/admin/reports" element={
-              <ProtectedRoute requiredRole="admin">
-                <Layout>
-                  <Reports />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/admin/subscriptions" element={
-              <ProtectedRoute requiredRole="admin">
-                <Layout>
-                  <SubscriptionManagement />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            {/* Legacy routes for backward compatibility */}
-            <Route path="/charges/new" element={
-              <ProtectedRoute>
-                <Layout>
-                  <NewCharge />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/charges" element={
-              <ProtectedRoute>
-                <Layout>
-                  <ChargeHistory />
-                </Layout>
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/admin/checkout/new" element={
-              <ProtectedRoute>
-                <CheckoutNew />
-              </ProtectedRoute>
-            } />
-            
-            <Route path="/admin/checkout/history" element={
-              <ProtectedRoute>
-                <CheckoutHistory />
-              </ProtectedRoute>
-            } />
-            
-            {/* Catch all */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+      <AuthProvider>
+        <SubscriptionProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/payment" element={<Payment />} />
+                <Route path="/checkout/:id" element={<Checkout />} />
+                <Route path="/payment-pix/:id" element={<PaymentPix />} />
+                <Route path="/payment-card/:id" element={<PaymentCard />} />
+                <Route path="/thank-you" element={<ThankYou />} />
+                
+                <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/new-charge" element={<ProtectedRoute><NewCharge /></ProtectedRoute>} />
+                <Route path="/charges" element={<ProtectedRoute><ChargeHistory /></ProtectedRoute>} />
+                <Route path="/payout-accounts" element={<ProtectedRoute><PayoutAccounts /></ProtectedRoute>} />
+                <Route path="/message-templates" element={<ProtectedRoute><MessageTemplates /></ProtectedRoute>} />
+                <Route path="/message-queue" element={<ProtectedRoute><MessageQueue /></ProtectedRoute>} />
+                <Route path="/create-admin" element={<ProtectedRoute requiredRole="admin"><CreateAdmin /></ProtectedRoute>} />
+                
+                <Route path="/admin/users" element={<ProtectedRoute requiredRole="admin"><UserManagement /></ProtectedRoute>} />
+                <Route path="/admin/subscriptions" element={<ProtectedRoute requiredRole="admin"><SubscriptionManagement /></ProtectedRoute>} />
+                <Route path="/admin/refunds" element={<ProtectedRoute requiredRole="admin"><RefundManagement /></ProtectedRoute>} />
+                <Route path="/admin/recurrences" element={<ProtectedRoute requiredRole="admin"><RecurrenceManagement /></ProtectedRoute>} />
+                <Route path="/admin/checkout/new" element={<ProtectedRoute requiredRole="admin"><CheckoutNew /></ProtectedRoute>} />
+                <Route path="/admin/checkout/history" element={<ProtectedRoute requiredRole="admin"><CheckoutHistory /></ProtectedRoute>} />
+                <Route path="/admin/reports" element={<ProtectedRoute requiredRole="admin"><Reports /></ProtectedRoute>} />
+                
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
+          </TooltipProvider>
+        </SubscriptionProvider>
+      </AuthProvider>
+    </QueryClientProvider>
 );
 
 export default App;

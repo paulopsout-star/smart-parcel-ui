@@ -1,4 +1,4 @@
-import { PaymentOption } from '@/pages/Checkout';
+import { PaymentOption } from '@/types/payment-options';
 
 export interface CheckoutConfig {
   oneTimeDiscountPct: number;

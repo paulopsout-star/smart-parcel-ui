@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { PaymentOption } from '@/pages/Checkout';
+import { PaymentOption } from '@/types/payment-options';
 
 export interface CheckoutCharge {
   id: string;

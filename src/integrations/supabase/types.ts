@@ -434,9 +434,14 @@ export type Database = {
           charge_id: string | null
           created_at: string
           id: string
+          installments: number | null
           method: string
+          order_index: number | null
           payment_link_id: string | null
+          pix_paid_at: string | null
           processed_at: string | null
+          refund_requested_at: string | null
+          refunded_at: string | null
           status: string
           transaction_id: string | null
         }
@@ -445,9 +450,14 @@ export type Database = {
           charge_id?: string | null
           created_at?: string
           id?: string
+          installments?: number | null
           method: string
+          order_index?: number | null
           payment_link_id?: string | null
+          pix_paid_at?: string | null
           processed_at?: string | null
+          refund_requested_at?: string | null
+          refunded_at?: string | null
           status?: string
           transaction_id?: string | null
         }
@@ -456,9 +466,14 @@ export type Database = {
           charge_id?: string | null
           created_at?: string
           id?: string
+          installments?: number | null
           method?: string
+          order_index?: number | null
           payment_link_id?: string | null
+          pix_paid_at?: string | null
           processed_at?: string | null
+          refund_requested_at?: string | null
+          refunded_at?: string | null
           status?: string
           transaction_id?: string | null
         }

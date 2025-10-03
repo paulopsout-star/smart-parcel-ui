@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { PaymentOption } from '@/pages/Checkout';
+import { PaymentOption } from '@/types/payment-options';
 import { formatCurrency } from '@/lib/utils';
 import { validateCustomPayment, distributeCentsInInstallments } from '@/lib/checkout-utils';
 import { Clock, Zap, TrendingUp, DollarSign } from 'lucide-react';

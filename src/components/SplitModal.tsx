@@ -1,24 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
-import { useCheckoutStore } from '@/hooks/useCheckoutStore';
-import { generateMockCheckoutUrl } from '@/hooks/useCheckoutMocks';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { CreditCard, QrCode, Trash2, Plus, AlertCircle } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { PaymentForm } from '@/components/PaymentForm';
-import { 
-  CreditCard, 
-  Smartphone, 
-  FileText, 
-  QrCode,
-  Calculator,
-  CheckCircle,
-  ArrowLeft
-} from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SplitModalProps {
   isOpen: boolean;
@@ -29,46 +20,33 @@ interface SplitModalProps {
 
 interface PaymentSplit {
   method: 'PIX' | 'CARD';
-  amountCents: number;
+  amount: number;
   percentage: number;
   installments?: number;
 }
 
 const paymentMethods = [
-  { id: 'PIX' as const, name: 'PIX', icon: QrCode, color: 'bg-primary' },
-  { id: 'CARD' as const, name: 'Cartão', icon: CreditCard, color: 'bg-blue-500' }
+  { value: 'PIX', label: 'PIX', icon: QrCode, color: 'bg-primary' },
+  { value: 'CARD', label: 'Cartão de Crédito', icon: CreditCard, color: 'bg-blue-500' }
 ];
 
-export const SplitModal: React.FC<SplitModalProps> = ({
-  isOpen,
-  onClose,
-  totalCents,
-  chargeId
-}) => {
+export function SplitModal({ isOpen, onClose, totalCents, chargeId }: SplitModalProps) {
   const { toast } = useToast();
-  const { setPaymentSplits, setCheckoutUrl } = useCheckoutStore();
+  const navigate = useNavigate();
   const [splits, setSplits] = useState<PaymentSplit[]>([
-    { method: 'PIX', amountCents: totalCents, percentage: 100 }
+    { method: 'PIX', amount: 0, percentage: 0 }
   ]);
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'splits' | 'payment'>('splits');
 
-  useEffect(() => {
-    if (totalCents > 0) {
-      setSplits([{ method: 'PIX', amountCents: totalCents, percentage: 100, installments: 1 }]);
-      setStep('splits');
-    }
-  }, [totalCents]);
-
-  const updateSplit = (index: number, field: 'amountCents' | 'percentage', value: number) => {
+  const updateSplit = (index: number, field: 'amount' | 'percentage', value: number) => {
     const newSplits = [...splits];
     
-    if (field === 'amountCents') {
-      newSplits[index].amountCents = value;
+    if (field === 'amount') {
+      newSplits[index].amount = value;
       newSplits[index].percentage = totalCents > 0 ? (value / totalCents) * 100 : 0;
     } else {
       newSplits[index].percentage = value;
-      newSplits[index].amountCents = Math.round((value / 100) * totalCents);
+      newSplits[index].amount = Math.round((value / 100) * totalCents);
     }
     
     setSplits(newSplits);
@@ -77,7 +55,7 @@ export const SplitModal: React.FC<SplitModalProps> = ({
   const addSplit = () => {
     if (splits.length < 2) {
       const nextMethod = splits.find(s => s.method === 'PIX') ? 'CARD' : 'PIX';
-      setSplits([...splits, { method: nextMethod as 'PIX' | 'CARD', amountCents: 0, percentage: 0, installments: 1 }]);
+      setSplits([...splits, { method: nextMethod as 'PIX' | 'CARD', amount: 0, percentage: 0, installments: 1 }]);
     }
   };
 
@@ -87,84 +65,84 @@ export const SplitModal: React.FC<SplitModalProps> = ({
     }
   };
 
-  const validateSplits = (): { valid: boolean; error?: string } => {
-    const totalAmount = splits.reduce((sum, split) => sum + split.amountCents, 0);
+  const validateSplits = (): { valid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+    const totalAmount = splits.reduce((sum, s) => sum + s.amount, 0);
     
-    // STRICT: Must equal total exactly (0 cents tolerance)
     if (totalAmount !== totalCents) {
-      return { 
-        valid: false, 
-        error: `Soma dos valores (${formatCurrency(totalAmount)}) deve ser exatamente ${formatCurrency(totalCents)}` 
-      };
+      errors.push(`A soma deve ser exatamente ${formatCurrency(totalCents)}`);
     }
     
-    // Check minimum R$ 1,00 per method
-    const minCents = 100;
-    if (splits.some(split => split.amountCents < minCents)) {
-      return { valid: false, error: 'Cada método deve ter no mínimo R$ 1,00' };
+    if (splits.some(s => s.amount < 100)) {
+      errors.push('Cada método deve ter no mínimo R$ 1,00');
     }
     
-    // Check card installment minimum R$ 10,00
-    const minInstallmentCents = 1000;
     const cardSplit = splits.find(s => s.method === 'CARD');
     if (cardSplit && cardSplit.installments && cardSplit.installments > 1) {
-      const installmentValue = Math.floor(cardSplit.amountCents / cardSplit.installments);
-      if (installmentValue < minInstallmentCents) {
-        return { valid: false, error: 'Parcela do cartão deve ser no mínimo R$ 10,00' };
+      const installmentValue = Math.floor(cardSplit.amount / cardSplit.installments);
+      if (installmentValue < 1000) {
+        errors.push('Parcela do cartão deve ser no mínimo R$ 10,00');
       }
     }
     
-    // Check for duplicate methods
     const methods = splits.map(s => s.method);
     if (new Set(methods).size !== methods.length) {
-      return { valid: false, error: 'Métodos de pagamento não podem ser duplicados' };
+      errors.push('Métodos não podem ser duplicados');
     }
     
-    return { valid: true };
+    return { valid: errors.length === 0, errors };
   };
 
-  const handleConfirmSplits = () => {
+  const handleConfirmSplits = async () => {
     const validation = validateSplits();
-    
     if (!validation.valid) {
       toast({
-        title: "Erro na validação",
-        description: validation.error,
+        title: "Valores inválidos",
+        description: validation.errors[0],
         variant: "destructive"
       });
       return;
     }
 
-    // Store splits and move to payment step
-    setPaymentSplits(splits);
-    setStep('payment');
-  };
-
-  const handlePaymentSuccess = async (transactionId: string) => {
     setLoading(true);
-    
     try {
-      // Mock processing delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Generate mock checkout URL
-      const mockUrl = generateMockCheckoutUrl(chargeId);
-      setCheckoutUrl(mockUrl);
-      
-      toast({
-        title: "Pagamento processado!",
-        description: `Transação ${transactionId} realizada com sucesso.`
-      });
-      
+      // Persistir splits no DB
+      const splitsToInsert = splits.map((split) => ({
+        charge_id: chargeId,
+        method: split.method,
+        amount_cents: split.amount,
+        order_index: split.method === 'PIX' ? 1 : 2,
+        installments: split.installments || 1,
+        status: 'pending'
+      }));
+
+      const { error } = await supabase
+        .from('payment_splits')
+        .insert(splitsToInsert);
+
+      if (error) throw error;
+
+      // Redirecionar conforme a escolha
+      const hasPix = splits.some(s => s.method === 'PIX');
+      const hasCard = splits.some(s => s.method === 'CARD');
+
+      if (hasPix && hasCard) {
+        // Split: PIX primeiro
+        navigate(`/payment-pix/${chargeId}?next=card`);
+      } else if (hasPix) {
+        // 100% PIX
+        navigate(`/payment-pix/${chargeId}`);
+      } else {
+        // 100% Cartão
+        navigate(`/payment-card/${chargeId}`);
+      }
+
       onClose();
-      
-      // Reset to splits step for next time
-      setTimeout(() => setStep('splits'), 500);
-      
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error saving splits:', error);
       toast({
         title: "Erro",
-        description: "Falha ao processar pagamento",
+        description: "Não foi possível salvar as formas de pagamento.",
         variant: "destructive"
       });
     } finally {
@@ -172,250 +150,164 @@ export const SplitModal: React.FC<SplitModalProps> = ({
     }
   };
 
-  const handleBack = () => {
-    setStep('splits');
-  };
-
-  const totalSplitAmount = splits.reduce((sum, split) => sum + split.amountCents, 0);
-  const validation = validateSplits();
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {step === 'payment' && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleBack}
-                className="mr-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </Button>
-            )}
-            {step === 'splits' ? (
-              <>
-                <Calculator className="w-5 h-5" />
-                Divisão de Pagamento
-              </>
-            ) : (
-              <>
-                <CreditCard className="w-5 h-5" />
-                Dados do Pagamento
-              </>
-            )}
-          </DialogTitle>
+          <DialogTitle>Como deseja pagar?</DialogTitle>
+          <DialogDescription>
+            Escolha combinar PIX + Cartão ou pagar tudo em um único meio
+          </DialogDescription>
         </DialogHeader>
 
-        {step === 'splits' ? (
-          <div className="space-y-6">
-          <div className="bg-surface p-4 rounded-lg">
-            <div className="flex justify-between items-center">
-              <span className="text-ink-secondary">Total a dividir:</span>
-              <span className="text-lg font-bold text-primary">
-                {formatCurrency(totalCents)}
-              </span>
-            </div>
-          </div>
+        {/* Cards de método de pagamento */}
+        <div className="space-y-4">
+          {splits.map((split, index) => {
+            const method = paymentMethods.find(m => m.value === split.method);
+            if (!method) return null;
 
-          <div className="space-y-4">
-            {splits.map((split, index) => (
+            return (
               <Card key={index} className="p-4">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {(() => {
-                        const method = paymentMethods.find(m => m.id === split.method);
-                        const Icon = method?.icon || CreditCard;
-                        return (
-                          <>
-                            <div className={`p-2 rounded-lg ${method?.color || 'bg-gray-500'} text-white`}>
-                              <Icon className="w-4 h-4" />
-                            </div>
-                            <select
-                              value={split.method}
-                              onChange={(e) => {
-                                const newSplits = [...splits];
-                                newSplits[index].method = e.target.value as any;
-                                setSplits(newSplits);
-                              }}
-                              className="border rounded px-2 py-1 text-sm bg-background text-ink"
-                            >
-                              {paymentMethods.map(method => (
-                                <option key={method.id} value={method.id}>
-                                  {method.name}
-                                </option>
-                              ))}
-                            </select>
-                          </>
-                        );
-                      })()}
-                    </div>
-                    
-                    {splits.length > 1 && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeSplit(index)}
-                      >
-                        Remover
-                      </Button>
-                    )}
+                <div className="flex items-start gap-4">
+                  <div className={`p-3 rounded-lg ${method.color}`}>
+                    <method.icon className="w-6 h-6 text-white" />
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">{method.label}</Label>
+                      {splits.length > 1 && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeSplit(index)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <Label className="text-sm text-ink-secondary">Valor (R$)</Label>
+                        <Label htmlFor={`amount-${index}`} className="text-sm">
+                          Valor (R$)
+                        </Label>
                         <Input
+                          id={`amount-${index}`}
                           type="number"
-                          min="1"
                           step="0.01"
-                          value={(split.amountCents / 100).toFixed(2)}
-                          onChange={(e) => {
-                            const cents = Math.round(parseFloat(e.target.value || '0') * 100);
-                            updateSplit(index, 'amountCents', cents);
-                          }}
+                          value={split.amount / 100}
+                          onChange={(e) => updateSplit(index, 'amount', parseFloat(e.target.value) * 100)}
                           className="mt-1"
                         />
                       </div>
+
                       <div>
-                        <Label className="text-sm text-ink-secondary">Percentual (%)</Label>
+                        <Label htmlFor={`percentage-${index}`} className="text-sm">
+                          Porcentagem (%)
+                        </Label>
                         <Input
+                          id={`percentage-${index}`}
                           type="number"
-                          min="0"
-                          max="100"
-                          step="0.1"
-                          value={split.percentage.toFixed(1)}
-                          onChange={(e) => {
-                            const percentage = parseFloat(e.target.value || '0');
-                            updateSplit(index, 'percentage', percentage);
-                          }}
+                          step="0.01"
+                          value={split.percentage}
+                          onChange={(e) => updateSplit(index, 'percentage', parseFloat(e.target.value))}
                           className="mt-1"
                         />
                       </div>
                     </div>
-                    
+
                     {split.method === 'CARD' && (
                       <div>
-                        <Label className="text-sm text-ink-secondary">Parcelas do Cartão</Label>
-                        <select
-                          value={split.installments || 1}
-                          onChange={(e) => {
+                        <Label htmlFor={`installments-${index}`} className="text-sm">
+                          Parcelas
+                        </Label>
+                        <Select
+                          value={String(split.installments || 1)}
+                          onValueChange={(value) => {
                             const newSplits = [...splits];
-                            newSplits[index].installments = parseInt(e.target.value);
+                            newSplits[index].installments = parseInt(value);
                             setSplits(newSplits);
                           }}
-                          className="w-full mt-1 border rounded px-3 py-2 text-sm bg-background text-ink"
                         >
-                          {Array.from({ length: 12 }, (_, i) => i + 1).map(n => {
-                            const installmentValue = Math.floor(split.amountCents / n);
-                            const lastInstallment = split.amountCents - (installmentValue * (n - 1));
-                            return (
-                              <option key={n} value={n}>
-                                {n}x de {formatCurrency(installmentValue)}
-                                {n > 1 && ` (última: ${formatCurrency(lastInstallment)})`}
-                              </option>
-                            );
-                          })}
-                        </select>
+                          <SelectTrigger id={`installments-${index}`} className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => (
+                              <SelectItem key={num} value={String(num)}>
+                                {num}x de {formatCurrency(Math.floor(split.amount / num))}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
                   </div>
                 </div>
               </Card>
-            ))}
-          </div>
+            );
+          })}
+        </div>
 
-          {splits.length < 2 && (
-            <Button
-              variant="outline"
-              onClick={addSplit}
-              className="w-full"
-            >
-              + Adicionar Método de Pagamento (PIX ou Cartão)
-            </Button>
-          )}
-
-          {/* Summary */}
-          <Card className="p-4 bg-surface">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-ink-secondary">Total dos splits:</span>
-                <span className={`font-semibold ${
-                  totalSplitAmount === totalCents 
-                    ? 'text-success' 
-                    : 'text-destructive'
-                }`}>
-                  {formatCurrency(totalSplitAmount)}
-                </span>
-              </div>
-              
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-ink-secondary">Requerido:</span>
-                <span className="font-semibold text-primary">
-                  {formatCurrency(totalCents)}
-                </span>
-              </div>
-              
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-ink-secondary">Diferença:</span>
-                <span className={`font-semibold ${
-                  totalSplitAmount === totalCents 
-                    ? 'text-success' 
-                    : 'text-destructive'
-                }`}>
-                  {formatCurrency(Math.abs(totalSplitAmount - totalCents))}
-                  {totalSplitAmount !== totalCents && (totalSplitAmount > totalCents ? ' a mais' : ' a menos')}
-                </span>
-              </div>
-              
-              {!validation.valid && (
-                <div className="text-sm text-destructive mt-2">
-                  {validation.error}
-                </div>
-              )}
-              
-              {validation.valid && (
-                <div className="flex items-center gap-2 text-success text-sm mt-2">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Divisão validada com sucesso</span>
-                </div>
-              )}
-            </div>
-          </Card>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="flex-1"
-                disabled={loading}
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleConfirmSplits}
-                className="flex-1 bg-primary hover:bg-primary/90"
-                disabled={!validation.valid || loading}
-              >
-                Continuar para Pagamento
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <PaymentForm
-              amount={totalCents / 100}
-              installments={1}
-              productName="Pagamento"
-              onSuccess={handlePaymentSuccess}
-              onCancel={handleBack}
-            />
-          </div>
+        {/* Botão adicionar método */}
+        {splits.length < 2 && (
+          <Button
+            variant="outline"
+            onClick={addSplit}
+            className="w-full"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Adicionar outro método de pagamento
+          </Button>
         )}
+
+        {/* Resumo */}
+        <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-ink-secondary">Total da cobrança:</span>
+            <span className="font-semibold">{formatCurrency(totalCents)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-ink-secondary">Total selecionado:</span>
+            <span className={`font-semibold ${
+              splits.reduce((sum, s) => sum + s.amount, 0) === totalCents
+                ? 'text-green-600'
+                : 'text-destructive'
+            }`}>
+              {formatCurrency(splits.reduce((sum, s) => sum + s.amount, 0))}
+            </span>
+          </div>
+        </div>
+
+        {/* Validações */}
+        {(() => {
+          const validation = validateSplits();
+          if (!validation.valid) {
+            return (
+              <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-destructive">
+                  {validation.errors.map((error, i) => (
+                    <div key={i}>• {error}</div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          return null;
+        })()}
+
+        {/* Botão confirmar */}
+        <Button
+          onClick={handleConfirmSplits}
+          disabled={loading || !validateSplits().valid}
+          className="w-full"
+          size="lg"
+        >
+          {loading ? 'Processando...' : 'Continuar para o Pagamento'}
+        </Button>
       </DialogContent>
     </Dialog>
   );
-};
+}
