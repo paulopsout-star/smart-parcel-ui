@@ -47,7 +47,7 @@ export default function Checkout() {
 
         const data = await response.json();
 
-        if (!data?.charge) {
+        if (!data?.amount_cents) {
           toast({
             title: "Link inválido",
             description: "Este link de pagamento não existe ou expirou.",
@@ -57,7 +57,7 @@ export default function Checkout() {
           return;
         }
 
-        setCharge(data.charge);
+        setCharge(data);
         
         // Abrir modal de split imediatamente
         setIsSplitModalOpen(true);
@@ -113,7 +113,7 @@ export default function Checkout() {
       <SplitModal
         isOpen={isSplitModalOpen}
         onClose={() => setIsSplitModalOpen(false)}
-        totalCents={charge.amount}
+        totalCents={charge.amount_cents}
         chargeId={id || ''}
       />
     </div>
