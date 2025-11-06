@@ -35,11 +35,13 @@ import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
 import Reports from "./pages/admin/Reports";
 import CompanySettings from "./pages/admin/CompanySettings";
+import { useState } from "react";
 
-const queryClient = new QueryClient();
-
-const App = () => (
-  <QueryClientProvider client={queryClient}>
+const App = () => {
+  const [queryClient] = useState(() => new QueryClient());
+  
+  return (
+    <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <SubscriptionProvider>
           <TooltipProvider>
@@ -81,6 +83,7 @@ const App = () => (
         </SubscriptionProvider>
       </AuthProvider>
     </QueryClientProvider>
-);
+  );
+};
 
 export default App;
