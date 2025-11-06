@@ -103,8 +103,9 @@ serve(async (req) => {
   }
 
   try {
-    // Get environment variables - QUITAPLUS_BASE_URL should be the complete token URL
-    const tokenUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br/connect/token'
+    // Get environment variables and build the complete token URL
+    const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    const tokenUrl = `${baseUrl.replace(/\/$/, '')}/connect/token`
     const clientId = Deno.env.get('QUITAPLUS_CLIENT_ID')
     const clientSecret = Deno.env.get('QUITAPLUS_CLIENT_SECRET')
 

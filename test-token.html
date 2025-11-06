@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teste QuitaPlus Token</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    .success { color: green; }
+    .error { color: red; }
+  </style>
+</head>
+<body>
+  <h1>🔐 Teste de Autenticação QuitaPlus</h1>
+  <button onclick="testToken()">Testar Obtenção de Token</button>
+  <pre id="result">Clique no botão para testar...</pre>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+
+    const supabase = createClient(
+      'https://gsbbrkbeyxsqqjqhptrn.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzYmJya2JleXhzcXFqcWhwdHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyODk5NTQsImV4cCI6MjA3Mzg2NTk1NH0.I5l0SDwsAN_rsSdoZiE9GAndkn3tkqX44O5ypu0cu7w'
+    );
+
+    window.testToken = async function() {
+      const resultDiv = document.getElementById('result');
+      resultDiv.textContent = '🔄 Solicitando token...';
+      resultDiv.className = '';
+
+      try {
+        const startTime = Date.now();
+        
+        const { data, error } = await supabase.functions.invoke('quitaplus-token');
+        
+        const elapsed = Date.now() - startTime;
+
+        if (error) {
+          resultDiv.className = 'error';
+          resultDiv.textContent = `❌ ERRO (${elapsed}ms)\n\n${JSON.stringify(error, null, 2)}`;
+          return;
+        }
+
+        resultDiv.className = 'success';
+        resultDiv.textContent = `✅ TOKEN OBTIDO COM SUCESSO! (${elapsed}ms)\n\n` +
+          `Access Token: ${data.accessToken?.substring(0, 50)}...\n` +
+          `Token Type: ${data.tokenType}\n` +
+          `Expires In: ${data.expiresIn}s\n` +
+          `From Cache: ${data.fromCache ? 'Sim' : 'Não'}\n\n` +
+          `Resposta completa:\n${JSON.stringify(data, null, 2)}`;
+
+      } catch (error) {
+        resultDiv.className = 'error';
+        resultDiv.textContent = `❌ ERRO FATAL:\n\n${error.message}\n\n${error.stack || ''}`;
+      }
+    };
+  </script>
+</body>
+</html>
