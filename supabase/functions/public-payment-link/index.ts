@@ -64,14 +64,17 @@ serve(async (req) => {
       });
     }
 
-    // Return only necessary data for checkout (no sensitive PII)
+    // Return checkout data including payer information for form pre-fill
     const checkoutData = {
       id: paymentLink.id,
       charge_id: paymentLink.charge_id || paymentLink.order_id,
       title: paymentLink.description || 'Pagamento',
       description: paymentLink.description || '',
       amount_cents: paymentLink.amount,
-      payer_name: paymentLink.payer_name || 'Cliente'
+      payer_name: paymentLink.payer_name || 'Cliente',
+      payer_email: paymentLink.payer_email || '',
+      payer_document: paymentLink.payer_document || '',
+      payer_phone: paymentLink.payer_phone || ''
     };
 
     console.log('[public-payment-link] Retornando checkout data:', {
