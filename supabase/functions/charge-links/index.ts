@@ -272,7 +272,9 @@ serve(async (req) => {
           order_type: 'credit_card',
           link_id: tmpLinkId,
           link_url: tmpLinkUrl,
-          guid: tmpGuid
+          guid: tmpGuid,
+          creditor_document: charge.creditor_document || null,
+          creditor_name: charge.creditor_name || null
         })
         .select('id, token, url, status')
         .single();

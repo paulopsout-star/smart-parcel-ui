@@ -116,6 +116,12 @@ export default function PaymentCard() {
           installments={selectedOption.installments}
           productName={charge?.description || 'Pagamento'}
           onSuccess={handlePaymentSuccess}
+          chargeId={charge?.charge_id || charge?.id || ''}
+          paymentLinkId={id || ''}
+          hasBoleto={charge?.has_boleto_link || false}
+          boletoLinhaDigitavel={charge?.boleto_linha_digitavel || ''}
+          creditorDocument={charge?.creditor_document || ''}
+          creditorName={charge?.creditor_name || ''}
         />
       </Card>
     </div>

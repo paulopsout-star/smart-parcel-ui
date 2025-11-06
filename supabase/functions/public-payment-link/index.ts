@@ -42,10 +42,18 @@ serve(async (req) => {
 
     console.log('[public-payment-link] Buscando payment_link no DB...');
 
-    // Find payment link by id
+    // Find payment link by id and join with charge to get boleto/creditor info
     const { data: paymentLink, error: linkError } = await supabase
       .from('payment_links')
-      .select('*')
+      .select(`
+        *,
+        charges!payment_links_charge_id_fkey (
+          has_boleto_link,
+          boleto_linha_digitavel,
+          creditor_document,
+          creditor_name
+        )
+      `)
       .eq('id', id)
       .eq('status', 'active')
       .single();
@@ -64,6 +72,9 @@ serve(async (req) => {
       });
     }
 
+    // Extract charge data (if joined)
+    const chargeData = Array.isArray(paymentLink.charges) ? paymentLink.charges[0] : paymentLink.charges;
+    
     // Return checkout data including payer information for form pre-fill
     const checkoutData = {
       id: paymentLink.id,
@@ -74,7 +85,11 @@ serve(async (req) => {
       payer_name: paymentLink.payer_name || 'Cliente',
       payer_email: paymentLink.payer_email || '',
       payer_document: paymentLink.payer_document || '',
-      payer_phone: paymentLink.payer_phone_number || ''
+      payer_phone: paymentLink.payer_phone_number || '',
+      has_boleto_link: chargeData?.has_boleto_link || false,
+      boleto_linha_digitavel: chargeData?.boleto_linha_digitavel || '',
+      creditor_document: chargeData?.creditor_document || '',
+      creditor_name: chargeData?.creditor_name || ''
     };
 
     console.log('[public-payment-link] Retornando checkout data:', {

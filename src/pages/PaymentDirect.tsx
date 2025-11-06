@@ -240,6 +240,12 @@ export default function PaymentDirect() {
                 document: charge.payer_document || '',
                 phone: charge.payer_phone || '',
               }}
+              chargeId={charge.charge_id || charge.id || ''}
+              paymentLinkId={id || ''}
+              hasBoleto={charge.has_boleto_link || false}
+              boletoLinhaDigitavel={charge.boleto_linha_digitavel || ''}
+              creditorDocument={charge.creditor_document || ''}
+              creditorName={charge.creditor_name || ''}
             />
           </div>
         </div>
