@@ -431,14 +431,17 @@ export type Database = {
       payment_splits: {
         Row: {
           amount_cents: number
+          authorization_code: string | null
           charge_id: string | null
           created_at: string
           id: string
           installments: number | null
+          link_id: string | null
           method: string
           order_index: number | null
           payment_link_id: string | null
           pix_paid_at: string | null
+          pre_payment_key: string | null
           processed_at: string | null
           refund_requested_at: string | null
           refunded_at: string | null
@@ -447,14 +450,17 @@ export type Database = {
         }
         Insert: {
           amount_cents: number
+          authorization_code?: string | null
           charge_id?: string | null
           created_at?: string
           id?: string
           installments?: number | null
+          link_id?: string | null
           method: string
           order_index?: number | null
           payment_link_id?: string | null
           pix_paid_at?: string | null
+          pre_payment_key?: string | null
           processed_at?: string | null
           refund_requested_at?: string | null
           refunded_at?: string | null
@@ -463,14 +469,17 @@ export type Database = {
         }
         Update: {
           amount_cents?: number
+          authorization_code?: string | null
           charge_id?: string | null
           created_at?: string
           id?: string
           installments?: number | null
+          link_id?: string | null
           method?: string
           order_index?: number | null
           payment_link_id?: string | null
           pix_paid_at?: string | null
+          pre_payment_key?: string | null
           processed_at?: string | null
           refund_requested_at?: string | null
           refunded_at?: string | null
@@ -761,10 +770,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_admin_or_operador: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
+      is_admin_or_operador: { Args: { _user_id: string }; Returns: boolean }
       is_subscription_active: {
         Args: { p_company_id: string }
         Returns: boolean

@@ -5,13 +5,20 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { usePaymentMock } from "@/hooks/usePaymentMock";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import type { PaymentFormData, PaymentState } from "@/types/payment";
 
 interface PaymentFormProps {
   amount: number;
   installments: number;
   productName: string;
+  chargeId?: string;
+  paymentLinkId?: string;
+  hasBoleto?: boolean;
+  boletoLinhaDigitavel?: string;
+  creditorDocument?: string;
+  creditorName?: string;
   onSuccess?: (transactionId: string) => void;
   onCancel?: () => void;
   skipSplitCheck?: boolean;
@@ -28,13 +35,19 @@ export function PaymentForm({
   amount,
   installments,
   productName,
+  chargeId,
+  paymentLinkId,
+  hasBoleto = false,
+  boletoLinhaDigitavel,
+  creditorDocument,
+  creditorName,
   onSuccess,
   onCancel,
   skipSplitCheck = false,
   disableSubmit = false,
   initialPayerData,
 }: PaymentFormProps) {
-  const { loading, processSplits } = usePaymentMock();
+  const { toast } = useToast();
   
   const [paymentState, setPaymentState] = useState<PaymentState>({
     isProcessing: false,
@@ -185,6 +198,15 @@ export function PaymentForm({
     
     if (!validateForm()) return;
 
+    if (!chargeId || !paymentLinkId) {
+      toast({
+        title: "Erro",
+        description: "Dados do pagamento incompletos. Por favor, tente novamente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setPaymentState({
       isProcessing: true,
       isSuccess: false,
@@ -193,30 +215,117 @@ export function PaymentForm({
     });
 
     try {
-      // Simular split de pagamento com mock
-      const mockSplit = {
-        method: 'CARD' as const,
-        amount: amount,
-        percentage: 100,
-        installments: installments,
-      };
+      console.log('[PaymentForm] Iniciando processamento de pagamento...');
 
-      const result = await processSplits([mockSplit]);
-      
-      if (result.success && result.transactionIds?.[0]) {
+      // Chamar edge function de pré-pagamento
+      const { data: prePaymentData, error: prePaymentError } = await supabase.functions.invoke(
+        'quitaplus-prepayment',
+        {
+          body: {
+            chargeId,
+            paymentLinkId,
+            amount: Math.round(amount * 100), // Converter para centavos
+            installments,
+            card: {
+              holderName: formData.cardHolderName,
+              number: formData.cardNumber.replace(/\s/g, ''),
+              expirationDate: formData.cardExpirationDate,
+              cvv: formData.cardCvv,
+            },
+            payer: {
+              name: formData.payerName,
+              document: formData.payerDocument.replace(/\D/g, ''),
+              email: formData.payerEmail,
+              phoneNumber: formData.payerPhoneNumber.replace(/\D/g, ''),
+            },
+          },
+        }
+      );
+
+      if (prePaymentError) {
+        console.error('[PaymentForm] Erro no pré-pagamento:', prePaymentError);
+        throw new Error('Falha ao processar pré-pagamento');
+      }
+
+      if (!prePaymentData?.success) {
+        const errorMessage = prePaymentData?.error || 'Pagamento recusado';
+        toast({
+          title: "Pagamento recusado",
+          description: errorMessage,
+          variant: "destructive",
+        });
         setPaymentState({
           isProcessing: false,
-          isSuccess: true,
-          error: null,
-          transactionId: result.transactionIds[0],
+          isSuccess: false,
+          error: errorMessage,
+          transactionId: null,
         });
-        onSuccess?.(result.transactionIds[0]);
+        return;
       }
+
+      console.log('[PaymentForm] Pré-pagamento autorizado:', prePaymentData.prePaymentKey);
+
+      // Se tem boleto, vincular
+      if (hasBoleto && boletoLinhaDigitavel && creditorDocument && creditorName) {
+        console.log('[PaymentForm] Vinculando boleto...');
+        
+        const { data: linkData, error: linkError } = await supabase.functions.invoke(
+          'quitaplus-link-boleto',
+          {
+            body: {
+              prePaymentKey: prePaymentData.prePaymentKey,
+              paymentLinkId,
+              boleto: {
+                number: boletoLinhaDigitavel,
+                creditorDocument: creditorDocument.replace(/\D/g, ''),
+                creditorName,
+              },
+            },
+          }
+        );
+
+        if (linkError) {
+          console.error('[PaymentForm] Erro ao vincular boleto:', linkError);
+          // Não falhar por causa do boleto, pré-pagamento já foi autorizado
+          toast({
+            title: "Atenção",
+            description: "Pagamento autorizado, mas houve erro ao vincular o boleto.",
+            variant: "default",
+          });
+        } else if (linkData?.success) {
+          console.log('[PaymentForm] Boleto vinculado com sucesso:', linkData.linkId);
+        }
+      }
+
+      // Sucesso!
+      setPaymentState({
+        isProcessing: false,
+        isSuccess: true,
+        error: null,
+        transactionId: prePaymentData.prePaymentKey,
+      });
+
+      toast({
+        title: "Pagamento autorizado!",
+        description: `Transação processada com sucesso em ${installments}x.`,
+      });
+
+      onSuccess?.(prePaymentData.prePaymentKey);
+
     } catch (error) {
+      console.error('[PaymentForm] Erro fatal:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao processar pagamento';
+      
+      toast({
+        title: "Erro no pagamento",
+        description: errorMessage,
+        variant: "destructive",
+      });
+
       setPaymentState({
         isProcessing: false,
         isSuccess: false,
-        error: 'Erro ao processar pagamento',
+        error: errorMessage,
         transactionId: null,
       });
     }

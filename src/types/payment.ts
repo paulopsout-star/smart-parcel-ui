@@ -18,12 +18,43 @@ export interface PaymentRequest {
 export interface PaymentResponse {
   success: boolean;
   transactionId?: string;
-  status?: 'AUTHORIZED' | 'REJECTED' | 'PENDING';
-  message: string;
+  prePaymentKey?: string;
   authorizationCode?: string;
+  status?: 'AUTHORIZED' | 'REJECTED' | 'PENDING' | 'LINKED';
+  message?: string;
+  error?: string;
   errorDetails?: {
     code: string;
     message: string;
+  };
+}
+
+export interface QuitaPlusPrePaymentRequest {
+  chargeId: string;
+  paymentLinkId: string;
+  amount: number;
+  installments: number;
+  card: {
+    holderName: string;
+    number: string;
+    expirationDate: string;
+    cvv: string;
+  };
+  payer: {
+    name: string;
+    document: string;
+    email: string;
+    phoneNumber: string;
+  };
+}
+
+export interface QuitaPlusLinkBoletoRequest {
+  prePaymentKey: string;
+  paymentLinkId: string;
+  boleto: {
+    number: string;
+    creditorDocument: string;
+    creditorName: string;
   };
 }
 

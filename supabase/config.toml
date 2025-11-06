@@ -101,3 +101,12 @@ verify_jwt = false
 
 [functions.create-admin-user]
 verify_jwt = false
+
+[functions.quitaplus-prepayment]
+verify_jwt = false
+
+[functions.quitaplus-link-boleto]
+verify_jwt = false
+
+[functions.subscription-status]
+verify_jwt = false
