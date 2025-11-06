@@ -96,6 +96,9 @@ verify_jwt = false
 [functions.thank-you-summary]
 verify_jwt = false
 
+[functions.company-settings]
+verify_jwt = true
+
 [functions.subscription-manager]
 verify_jwt = false
 

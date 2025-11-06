@@ -82,6 +82,11 @@ export default function NewCharge() {
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(true);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [enableSplit, setEnableSplit] = useState(false);
+  const [creditorSettings, setCreditorSettings] = useState<{
+    creditor_document: string;
+    creditor_name: string;
+    merchant_id: string;
+  } | null>(null);
   const [checkoutData, setCheckoutData] = useState<{
     chargeId: string;
     checkoutUrl: string;
@@ -136,6 +141,16 @@ export default function NewCharge() {
       setCheckingPayoutAccount(true);
 
       try {
+        // Buscar configurações do credor
+        const { data: settingsData, error: settingsError } = await supabase.functions.invoke('company-settings');
+        
+        if (settingsError) {
+          console.error('Error loading creditor settings:', settingsError);
+        } else if (settingsData) {
+          setCreditorSettings(settingsData);
+          console.log('[NewCharge] Creditor settings loaded');
+        }
+
         // Verificar conta PIX ativa
         const { data: payoutData, error: payoutError } = await supabase
           .from('payout_accounts')
@@ -301,6 +316,9 @@ export default function NewCharge() {
           // New fields for boleto link
           has_boleto_link: data.recurrence_type === "pontual" ? data.has_boleto_link : false,
           boleto_linha_digitavel: data.recurrence_type === "pontual" && data.has_boleto_link ? normalizedLinhaDigitavel : null,
+          // Creditor settings from company-settings edge function
+          creditor_document: creditorSettings?.creditor_document || null,
+          creditor_name: creditorSettings?.creditor_name || null,
           message_template_id: data.message_template_id === "none" ? null : data.message_template_id,
           message_template_snapshot: messageTemplateSnapshot,
           recurrence_type: data.recurrence_type,
