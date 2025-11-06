@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teste Company Settings</title>
+</head>
+<body>
+  <h1>Teste Edge Function: company-settings</h1>
+  <button onclick="testCompanySettings()">Testar company-settings</button>
+  <pre id="result"></pre>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+
+    const supabase = createClient(
+      'https://gsbbrkbeyxsqqjqhptrn.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzYmJya2JleXhzcXFqcWhwdHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyODk5NTQsImV4cCI6MjA3Mzg2NTk1NH0.I5l0SDwsAN_rsSdoZiE9GAndkn3tkqX44O5ypu0cu7w'
+    );
+
+    window.testCompanySettings = async function() {
+      const resultDiv = document.getElementById('result');
+      resultDiv.textContent = '🔄 Testando...';
+
+      try {
+        // 1. Fazer login primeiro (use suas credenciais de teste)
+        const email = prompt('Email de teste:');
+        const password = prompt('Senha:');
+        
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (authError) {
+          resultDiv.textContent = `❌ Erro no login:\n${JSON.stringify(authError, null, 2)}`;
+          return;
+        }
+
+        resultDiv.textContent = `✅ Login OK\n🔄 Chamando company-settings...`;
+
+        // 2. Chamar company-settings
+        const { data, error } = await supabase.functions.invoke('company-settings');
+
+        if (error) {
+          resultDiv.textContent = `❌ Erro:\n${JSON.stringify(error, null, 2)}`;
+          return;
+        }
+
+        // 3. Exibir resultado
+        resultDiv.textContent = `✅ Sucesso!\n\nDados retornados:\n${JSON.stringify(data, null, 2)}`;
+
+        // 4. Verificar se os valores estão corretos
+        const expected = {
+          creditor_document: '54329414001414',
+          creditor_name: 'Auto Negocie Digital Full',
+          merchant_id: '54329414001414'
+        };
+
+        const matches = {
+          creditor_document: data.creditor_document === expected.creditor_document,
+          creditor_name: data.creditor_name === expected.creditor_name,
+          merchant_id: data.merchant_id === expected.merchant_id
+        };
+
+        resultDiv.textContent += `\n\n📊 Validação:\n${JSON.stringify(matches, null, 2)}`;
+
+      } catch (error) {
+        resultDiv.textContent = `❌ Erro fatal:\n${error.message}\n\n${error.stack}`;
+      }
+    };
+  </script>
+</body>
+</html>
