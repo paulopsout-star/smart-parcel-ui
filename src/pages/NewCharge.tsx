@@ -42,9 +42,8 @@ const formSchema = z.object({
   message_template_id: z.string().optional(),
   
   // Novos campos para vínculo de boleto
-  has_boleto_link: z.boolean().default(false),
-  boleto_linha_digitavel: z.string().optional().refine((val) => {
-    if (!val) return true; // Optional field
+  has_boleto_link: z.boolean().default(true),
+  boleto_linha_digitavel: z.string().min(1, "Linha digitável é obrigatória").refine((val) => {
     const digitsOnly = val.replace(/\D/g, '');
     return digitsOnly.length === 47 || digitsOnly.length === 48;
   }, {
@@ -55,15 +54,6 @@ const formSchema = z.object({
   recurrence_type: z.enum(["pontual", "diaria", "semanal", "quinzenal", "mensal", "semestral", "anual"]),
   recurrence_interval: z.string(),
   recurrence_end_date: z.string().optional(),
-}).refine((data) => {
-  // Se for pontual e tem vínculo de boleto, linha digitável é obrigatória
-  if (data.recurrence_type === "pontual" && data.has_boleto_link && !data.boleto_linha_digitavel) {
-    return false;
-  }
-  return true;
-}, {
-  message: "Linha digitável é obrigatória para cobranças com vínculo de boleto",
-  path: ["boleto_linha_digitavel"]
 });
 
 interface FormData {
@@ -122,7 +112,7 @@ export default function NewCharge() {
     defaultValues: {
       mask_fee: false,
       has_boleto: false,
-      has_boleto_link: false,
+      has_boleto_link: true,
       installments: "1",
       recurrence_type: "pontual",
       recurrence_interval: "1"
@@ -559,52 +549,56 @@ export default function NewCharge() {
                         )}
                       </div>
                       
-                      <div>
-                        <Label htmlFor="installments">Parcelas</Label>
+                      {false && (
+                        <div>
+                          <Label htmlFor="installments">Parcelas</Label>
+                          <Controller
+                            control={control}
+                            name="installments"
+                            render={({ field }) => (
+                              <Select
+                                onValueChange={field.onChange}
+                                value={field.value}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="1">1x à vista</SelectItem>
+                                  {Array.from({ length: 47 }, (_, i) => i + 2).map((num) => (
+                                    <SelectItem key={num} value={num.toString()}>
+                                      {num}x
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {false && (
+                      <div className="flex items-center space-x-2">
                         <Controller
                           control={control}
-                          name="installments"
+                          name="mask_fee"
                           render={({ field }) => (
-                            <Select
-                              onValueChange={field.onChange}
-                              value={field.value}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="1">1x à vista</SelectItem>
-                                {Array.from({ length: 47 }, (_, i) => i + 2).map((num) => (
-                                  <SelectItem key={num} value={num.toString()}>
-                                    {num}x
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <Checkbox
+                              id="mask_fee"
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
                           )}
                         />
+                        <Label htmlFor="mask_fee">
+                          Parcelas fechadas (cliente não pode alterar)
+                        </Label>
                       </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Controller
-                        control={control}
-                        name="mask_fee"
-                        render={({ field }) => (
-                          <Checkbox
-                            id="mask_fee"
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        )}
-                      />
-                      <Label htmlFor="mask_fee">
-                        Parcelas fechadas (cliente não pode alterar)
-                      </Label>
-                    </div>
+                    )}
 
                     {/* Toggle Split PIX+Cartão - apenas para pontual sem boleto */}
-                    {watchRecurrenceType === 'pontual' && !watchHasBoletoLink && (
+                    {false && watchRecurrenceType === 'pontual' && !watchHasBoletoLink && (
                       <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/30">
                         <Checkbox
                           id="enable_split"
@@ -618,66 +612,36 @@ export default function NewCharge() {
                       </div>
                     )}
 
-                    {/* Seletor de boleto - apenas para pontual */}
-                    {watchRecurrenceType === 'pontual' && (
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-2">
-                          <Controller
-                            control={control}
-                            name="has_boleto_link"
-                            render={({ field }) => (
-                              <Checkbox
-                                id="has_boleto_link"
-                                checked={field.value}
-                                onCheckedChange={(checked) => {
-                                  field.onChange(checked);
-                                  // Clear linha digitável when unchecking
-                                  if (!checked) {
-                                    setValue("boleto_linha_digitavel", "");
-                                  }
-                                }}
-                              />
-                            )}
-                          />
-                          <Label htmlFor="has_boleto_link" className="flex items-center gap-2 cursor-pointer">
-                            <Receipt className="w-4 h-4" />
-                            Com boleto (simulado)
-                          </Label>
+                    {/* Linha Digitável do Boleto - sempre visível */}
+                    <div className="p-4 border rounded-lg bg-muted/50">
+                      <Label htmlFor="boleto_linha_digitavel">Linha Digitável do Boleto *</Label>
+                      <Textarea
+                        id="boleto_linha_digitavel"
+                        placeholder="Digite ou cole a linha digitável do boleto (apenas números)"
+                        {...register("boleto_linha_digitavel")}
+                        className={`font-mono resize-none ${errors.boleto_linha_digitavel ? "border-destructive" : ""}`}
+                        rows={3}
+                      />
+                      {errors.boleto_linha_digitavel && (
+                        <p className="text-sm text-destructive mt-1">{errors.boleto_linha_digitavel.message}</p>
+                      )}
+                      <div className="flex items-start gap-2 mt-2">
+                        <Banknote className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div className="text-sm text-muted-foreground">
+                          <p className="mb-1">
+                            <strong>Onde encontrar:</strong> A linha digitável está no seu boleto, geralmente logo abaixo do código de barras.
+                          </p>
+                          <p className="mb-1">
+                            <strong>Formato esperado:</strong> 47 ou 48 dígitos (apenas números)
+                          </p>
+                          {watchBoletoLinhaDigitavel && (
+                            <p className="text-primary">
+                              <strong>Dígitos encontrados:</strong> {watchBoletoLinhaDigitavel.replace(/\D/g, '').length}
+                            </p>
+                          )}
                         </div>
-                        
-                        {watchHasBoletoLink && (
-                          <div className="p-4 border rounded-lg bg-muted/50">
-                            <Label htmlFor="boleto_linha_digitavel">Linha Digitável do Boleto *</Label>
-                            <Textarea
-                              id="boleto_linha_digitavel"
-                              placeholder="Digite ou cole a linha digitável do boleto (apenas números)"
-                              {...register("boleto_linha_digitavel")}
-                              className={`font-mono resize-none ${errors.boleto_linha_digitavel ? "border-destructive" : ""}`}
-                              rows={3}
-                            />
-                            {errors.boleto_linha_digitavel && (
-                              <p className="text-sm text-destructive mt-1">{errors.boleto_linha_digitavel.message}</p>
-                            )}
-                            <div className="flex items-start gap-2 mt-2">
-                              <Banknote className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                              <div className="text-sm text-muted-foreground">
-                                <p className="mb-1">
-                                  <strong>Onde encontrar:</strong> A linha digitável está no seu boleto, geralmente logo abaixo do código de barras.
-                                </p>
-                                <p className="mb-1">
-                                  <strong>Formato esperado:</strong> 47 ou 48 dígitos (apenas números)
-                                </p>
-                                {watchBoletoLinhaDigitavel && (
-                                  <p className="text-primary">
-                                    <strong>Dígitos encontrados:</strong> {watchBoletoLinhaDigitavel.replace(/\D/g, '').length}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
                       </div>
-                    )}
+                    </div>
 
                     {/* Manter checkbox antigo para recorrentes */}
                     {watchRecurrenceType !== 'pontual' && (
@@ -714,59 +678,61 @@ export default function NewCharge() {
                       </div>
                     )}
 
-                    <div>
-                      <Label htmlFor="message_template_id">Template de Mensagem</Label>
-                      <Controller
-                        control={control}
-                        name="message_template_id"
-                        render={({ field }) => (
-                          <Select
-                            onValueChange={field.onChange}
-                            value={field.value ?? ''}
-                            disabled={loadingTemplates || templatesError}
-                          >
-                            <SelectTrigger>
-                              <SelectValue 
-                                placeholder={
-                                  loadingTemplates 
-                                    ? "Carregando..." 
-                                    : templatesError 
-                                      ? "Erro ao carregar" 
-                                      : "Selecione um template"
-                                } 
-                              />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {messageTemplates.length === 0 && !loadingTemplates && !templatesError ? (
-                                <div className="px-3 py-2 text-muted-foreground text-sm">
-                                  Nenhum template ativo
-                                </div>
-                              ) : (
-                                <>
-                                  <SelectItem value="none">Nenhum template</SelectItem>
-                                  {messageTemplates.map((template) => (
-                                    <SelectItem key={template.id} value={template.id}>
-                                      {template.name}
-                                    </SelectItem>
-                                  ))}
-                                </>
-                              )}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      />
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Template para mensagem WhatsApp (simulado). {' '}
-                        <Link to="/message-templates" className="text-primary hover:underline">
-                          Gerenciar templates
-                        </Link>
-                      </p>
-                      {templatesError && (
-                        <p className="text-sm text-destructive mt-1">
-                          Erro ao carregar templates. Você pode continuar sem selecionar um template.
+                    {false && (
+                      <div>
+                        <Label htmlFor="message_template_id">Template de Mensagem</Label>
+                        <Controller
+                          control={control}
+                          name="message_template_id"
+                          render={({ field }) => (
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value ?? ''}
+                              disabled={loadingTemplates || templatesError}
+                            >
+                              <SelectTrigger>
+                                <SelectValue 
+                                  placeholder={
+                                    loadingTemplates 
+                                      ? "Carregando..." 
+                                      : templatesError 
+                                        ? "Erro ao carregar" 
+                                        : "Selecione um template"
+                                  } 
+                                />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {messageTemplates.length === 0 && !loadingTemplates && !templatesError ? (
+                                  <div className="px-3 py-2 text-muted-foreground text-sm">
+                                    Nenhum template ativo
+                                  </div>
+                                ) : (
+                                  <>
+                                    <SelectItem value="none">Nenhum template</SelectItem>
+                                    {messageTemplates.map((template) => (
+                                      <SelectItem key={template.id} value={template.id}>
+                                        {template.name}
+                                      </SelectItem>
+                                    ))}
+                                  </>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Template para mensagem WhatsApp (simulado). {' '}
+                          <Link to="/message-templates" className="text-primary hover:underline">
+                            Gerenciar templates
+                          </Link>
                         </p>
-                      )}
-                    </div>
+                        {templatesError && (
+                          <p className="text-sm text-destructive mt-1">
+                            Erro ao carregar templates. Você pode continuar sem selecionar um template.
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {/* Alert for PIX account requirement - only for charges without boleto link */}
                     {((watchRecurrenceType === 'pontual' && !watchHasBoletoLink) || 
@@ -799,73 +765,75 @@ export default function NewCharge() {
                 </Card>
 
                 {/* Recorrência */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Recorrência</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label>Tipo de Cobrança</Label>
-                      <Controller
-                        control={control}
-                        name="recurrence_type"
-                        render={({ field }) => (
-                          <Select
-                            onValueChange={field.onChange}
-                            value={field.value}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pontual">Pontual (única vez)</SelectItem>
-                              <SelectItem value="diaria">Diária</SelectItem>
-                              <SelectItem value="semanal">Semanal</SelectItem>
-                              <SelectItem value="quinzenal">Quinzenal</SelectItem>
-                              <SelectItem value="mensal">Mensal</SelectItem>
-                              <SelectItem value="semestral">Semestral</SelectItem>
-                              <SelectItem value="anual">Anual</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                      />
-                    </div>
+                {false && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Recorrência</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <Label>Tipo de Cobrança</Label>
+                        <Controller
+                          control={control}
+                          name="recurrence_type"
+                          render={({ field }) => (
+                            <Select
+                              onValueChange={field.onChange}
+                              value={field.value}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pontual">Pontual (única vez)</SelectItem>
+                                <SelectItem value="diaria">Diária</SelectItem>
+                                <SelectItem value="semanal">Semanal</SelectItem>
+                                <SelectItem value="quinzenal">Quinzenal</SelectItem>
+                                <SelectItem value="mensal">Mensal</SelectItem>
+                                <SelectItem value="semestral">Semestral</SelectItem>
+                                <SelectItem value="anual">Anual</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                      </div>
 
-                    {watchRecurrenceType !== 'pontual' && (
-                      <>
-                        <div>
-                          <Label htmlFor="recurrence_interval">Intervalo</Label>
-                          <Input
-                            id="recurrence_interval"
-                            type="number"
-                            min="1"
-                            placeholder="1"
-                            {...register("recurrence_interval")}
-                          />
-                          <p className="text-sm text-muted-foreground mt-1">
-                            A cada {watch("recurrence_interval") || 1} {watchRecurrenceType === 'diaria' ? 'dia(s)' : 
-                            watchRecurrenceType === 'semanal' ? 'semana(s)' :
-                            watchRecurrenceType === 'quinzenal' ? 'quinzena(s)' :
-                            watchRecurrenceType === 'mensal' ? 'mês(es)' :
-                            watchRecurrenceType === 'semestral' ? 'semestre(s)' : 'ano(s)'}
-                          </p>
-                        </div>
+                      {watchRecurrenceType !== 'pontual' && (
+                        <>
+                          <div>
+                            <Label htmlFor="recurrence_interval">Intervalo</Label>
+                            <Input
+                              id="recurrence_interval"
+                              type="number"
+                              min="1"
+                              placeholder="1"
+                              {...register("recurrence_interval")}
+                            />
+                            <p className="text-sm text-muted-foreground mt-1">
+                              A cada {watch("recurrence_interval") || 1} {watchRecurrenceType === 'diaria' ? 'dia(s)' : 
+                              watchRecurrenceType === 'semanal' ? 'semana(s)' :
+                              watchRecurrenceType === 'quinzenal' ? 'quinzena(s)' :
+                              watchRecurrenceType === 'mensal' ? 'mês(es)' :
+                              watchRecurrenceType === 'semestral' ? 'semestre(s)' : 'ano(s)'}
+                            </p>
+                          </div>
 
-                        <div>
-                          <Label htmlFor="recurrence_end_date">Data de Fim (opcional)</Label>
-                          <Input
-                            id="recurrence_end_date"
-                            type="date"
-                            {...register("recurrence_end_date")}
-                          />
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Deixe em branco para recorrência sem fim
-                          </p>
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
+                          <div>
+                            <Label htmlFor="recurrence_end_date">Data de Fim (opcional)</Label>
+                            <Input
+                              id="recurrence_end_date"
+                              type="date"
+                              {...register("recurrence_end_date")}
+                            />
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Deixe em branco para recorrência sem fim
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
               </div>
 
               {/* Sidebar */}
