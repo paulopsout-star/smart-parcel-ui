@@ -26,11 +26,11 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Buscar payment_link pelo token
+    // Buscar payment_link pelo id (consistente com public-payment-link)
     const { data: paymentLink, error: linkError } = await supabase
       .from('payment_links')
       .select('*')
-      .eq('link_id', token)
+      .eq('id', token)
       .single()
 
     if (linkError || !paymentLink) {
