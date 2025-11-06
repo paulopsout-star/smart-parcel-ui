@@ -90,8 +90,7 @@ export default function PaymentDirect() {
             transaction_id: transactionId,
             processed_at: new Date().toISOString()
           })
-          .eq('payment_link_id', charge.id)
-          .eq('method', 'CARD');
+          .eq('payment_link_id', charge.id);
       } catch (error) {
         console.error('Error updating payment split:', error);
       }

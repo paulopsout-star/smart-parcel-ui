@@ -19,6 +19,8 @@ Deno.serve(async (req) => {
     const url = new URL(req.url)
     const token = url.searchParams.get('pl')
     
+    console.log('[thank-you-summary] Token:', token)
+    
     if (!token) {
       return new Response(JSON.stringify({ error: 'Missing payment link token' }), {
         status: 400,
@@ -33,6 +35,8 @@ Deno.serve(async (req) => {
       .eq('id', token)
       .single()
 
+    console.log('[thank-you-summary] Payment Link found:', paymentLink?.id)
+
     if (linkError || !paymentLink) {
       return new Response(JSON.stringify({ error: 'Invalid or expired link' }), {
         status: 404,
@@ -46,6 +50,9 @@ Deno.serve(async (req) => {
       .from('payment_splits')
       .select('*')
       .eq('payment_link_id', paymentLink.id)
+
+    console.log('[thank-you-summary] Splits found:', splits?.length || 0)
+    console.log('[thank-you-summary] Splits status:', splits?.map(s => ({ id: s.id, method: s.method, status: s.status })))
 
     if (splitsError) {
       console.error('Error fetching splits:', splitsError)
@@ -87,6 +94,8 @@ Deno.serve(async (req) => {
 
     // Verificar se está PAID (todos os splits CONCLUDED)
     const isPaid = splits && splits.length > 0 && splits.every(s => s.status === 'concluded')
+    
+    console.log('[thank-you-summary] isPaid:', isPaid)
 
     if (!isPaid) {
       return new Response(JSON.stringify({
