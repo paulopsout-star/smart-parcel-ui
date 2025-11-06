@@ -74,7 +74,7 @@ serve(async (req) => {
       payer_name: paymentLink.payer_name || 'Cliente',
       payer_email: paymentLink.payer_email || '',
       payer_document: paymentLink.payer_document || '',
-      payer_phone: paymentLink.payer_phone || ''
+      payer_phone: paymentLink.payer_phone_number || ''
     };
 
     console.log('[public-payment-link] Retornando checkout data:', {
