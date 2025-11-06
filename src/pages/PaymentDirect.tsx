@@ -21,7 +21,6 @@ export default function PaymentDirect() {
   const [selectedOption, setSelectedOption] = useState<PaymentOption | null>(null);
   const [customAmount, setCustomAmount] = useState(0);
   const [customInstallments, setCustomInstallments] = useState(1);
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   useEffect(() => {
     const fetchCharge = async () => {
@@ -135,77 +134,16 @@ export default function PaymentDirect() {
     );
   }
 
-  // Mostrar formulário de pagamento se opção foi selecionada
-  if (showPaymentForm && selectedOption) {
-    const finalAmount = selectedOption.isCustom ? customAmount : selectedOption.totalCents;
-    const finalInstallments = selectedOption.isCustom ? customInstallments : selectedOption.installments;
-    
-    return (
-      <div className="min-h-screen bg-background p-4 py-8">
-        <div className="max-w-2xl mx-auto">
-          <Button
-            variant="ghost"
-            onClick={() => setShowPaymentForm(false)}
-            className="mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar para opções
-          </Button>
-          
-          <PaymentForm
-            amount={finalAmount / 100}
-            installments={finalInstallments}
-            productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
-            onSuccess={handlePaymentSuccess}
-            skipSplitCheck={true}
-            initialPayerData={{
-              name: charge.payer_name || '',
-              email: charge.payer_email || '',
-              document: charge.payer_document || '',
-              phone: charge.payer_phone || '',
-            }}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // Mostrar opções de pagamento
+  // Calcular opções de pagamento
   const paymentOptions = calculatePaymentOptions(charge.amount_cents);
 
-  const handleContinueToPayment = () => {
-    if (!selectedOption) {
-      toast({
-        title: "Selecione uma opção",
-        description: "Escolha uma forma de pagamento para continuar.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (selectedOption.isCustom) {
-      if (customAmount <= 0) {
-        toast({
-          title: "Valor inválido",
-          description: "Digite um valor válido para continuar.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      const minInstallment = 1000; // R$ 10,00
-      if (customAmount / customInstallments < minInstallment) {
-        toast({
-          title: "Parcela muito baixa",
-          description: "O valor da parcela mínima é R$ 10,00",
-          variant: "destructive",
-        });
-        return;
-      }
-    }
-
-    setShowPaymentForm(true);
-  };
+  // Calcular valor e parcelas finais baseado na seleção
+  const finalAmount = selectedOption 
+    ? (selectedOption.isCustom ? customAmount : selectedOption.totalCents)
+    : charge.amount_cents;
+  const finalInstallments = selectedOption
+    ? (selectedOption.isCustom ? customInstallments : selectedOption.installments)
+    : 1;
 
   const handleCustomValueChange = (amountCents: number, installments: number) => {
     setCustomAmount(amountCents);
@@ -214,7 +152,7 @@ export default function PaymentDirect() {
 
   return (
     <div className="min-h-screen bg-background p-4 py-8">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-bold text-foreground mb-2">
@@ -225,29 +163,42 @@ export default function PaymentDirect() {
           </p>
         </div>
 
-        {/* Opções de Pagamento */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {paymentOptions.map((option) => (
-            <CheckoutOptionCard
-              key={option.id}
-              option={option}
-              isSelected={selectedOption?.id === option.id}
-              onSelect={() => setSelectedOption(option)}
-              onCustomValueChange={handleCustomValueChange}
-            />
-          ))}
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Coluna Esquerda: Opções de Pagamento */}
+          <div>
+            <h2 className="text-xl font-semibold text-foreground mb-4">
+              Selecione o valor e as parcelas
+            </h2>
+            <div className="space-y-4">
+              {paymentOptions.map((option) => (
+                <CheckoutOptionCard
+                  key={option.id}
+                  option={option}
+                  isSelected={selectedOption?.id === option.id}
+                  onSelect={() => setSelectedOption(option)}
+                  onCustomValueChange={handleCustomValueChange}
+                />
+              ))}
+            </div>
+          </div>
 
-        {/* Botão Continuar */}
-        <div className="flex justify-center">
-          <Button
-            size="lg"
-            onClick={handleContinueToPayment}
-            disabled={!selectedOption}
-            className="min-w-[300px] bg-primary hover:bg-primary/90"
-          >
-            Continuar para o Pagamento
-          </Button>
+          {/* Coluna Direita: Formulário de Pagamento */}
+          <div>
+            <PaymentForm
+              amount={finalAmount / 100}
+              installments={finalInstallments}
+              productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
+              onSuccess={handlePaymentSuccess}
+              skipSplitCheck={true}
+              disableSubmit={!selectedOption}
+              initialPayerData={{
+                name: charge.payer_name || '',
+                email: charge.payer_email || '',
+                document: charge.payer_document || '',
+                phone: charge.payer_phone || '',
+              }}
+            />
+          </div>
         </div>
 
         {/* Informações de Segurança */}

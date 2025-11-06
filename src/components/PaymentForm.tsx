@@ -15,6 +15,7 @@ interface PaymentFormProps {
   onSuccess?: (transactionId: string) => void;
   onCancel?: () => void;
   skipSplitCheck?: boolean;
+  disableSubmit?: boolean;
   initialPayerData?: {
     name?: string;
     email?: string;
@@ -30,6 +31,7 @@ export function PaymentForm({
   onSuccess,
   onCancel,
   skipSplitCheck = false,
+  disableSubmit = false,
   initialPayerData,
 }: PaymentFormProps) {
   const { loading, processSplits } = usePaymentMock();
@@ -433,7 +435,7 @@ export function PaymentForm({
           
           <Button
             type="submit"
-            disabled={paymentState.isProcessing}
+            disabled={paymentState.isProcessing || disableSubmit}
             className="flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80"
           >
             {paymentState.isProcessing ? (
@@ -441,6 +443,8 @@ export function PaymentForm({
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-background border-t-transparent mr-2" />
                 Processando...
               </>
+            ) : disableSubmit ? (
+              "Selecione uma opção de pagamento"
             ) : (
               "Pagar Agora"
             )}
