@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { PaymentForm } from '@/components/PaymentForm';
+import { CheckoutOptionCard } from '@/components/CheckoutOptionCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { calculatePaymentOptions } from '@/lib/checkout-utils';
+import { PaymentOption } from '@/types/payment-options';
+import { ArrowLeft } from 'lucide-react';
 
 export default function PaymentDirect() {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +18,10 @@ export default function PaymentDirect() {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [charge, setCharge] = useState<any>(null);
+  const [selectedOption, setSelectedOption] = useState<PaymentOption | null>(null);
+  const [customAmount, setCustomAmount] = useState(0);
+  const [customInstallments, setCustomInstallments] = useState(1);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   useEffect(() => {
     const fetchCharge = async () => {
@@ -126,16 +135,125 @@ export default function PaymentDirect() {
     );
   }
 
+  // Mostrar formulário de pagamento se opção foi selecionada
+  if (showPaymentForm && selectedOption) {
+    const finalAmount = selectedOption.isCustom ? customAmount : selectedOption.totalCents;
+    const finalInstallments = selectedOption.isCustom ? customInstallments : selectedOption.installments;
+    
+    return (
+      <div className="min-h-screen bg-background p-4 py-8">
+        <div className="max-w-2xl mx-auto">
+          <Button
+            variant="ghost"
+            onClick={() => setShowPaymentForm(false)}
+            className="mb-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar para opções
+          </Button>
+          
+          <PaymentForm
+            amount={finalAmount / 100}
+            installments={finalInstallments}
+            productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
+            onSuccess={handlePaymentSuccess}
+            skipSplitCheck={true}
+            initialPayerData={{
+              name: charge.payer_name || '',
+              email: charge.payer_email || '',
+              document: charge.payer_document || '',
+              phone: charge.payer_phone || '',
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Mostrar opções de pagamento
+  const paymentOptions = calculatePaymentOptions(charge.amount_cents);
+
+  const handleContinueToPayment = () => {
+    if (!selectedOption) {
+      toast({
+        title: "Selecione uma opção",
+        description: "Escolha uma forma de pagamento para continuar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedOption.isCustom) {
+      if (customAmount <= 0) {
+        toast({
+          title: "Valor inválido",
+          description: "Digite um valor válido para continuar.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const minInstallment = 1000; // R$ 10,00
+      if (customAmount / customInstallments < minInstallment) {
+        toast({
+          title: "Parcela muito baixa",
+          description: "O valor da parcela mínima é R$ 10,00",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    setShowPaymentForm(true);
+  };
+
+  const handleCustomValueChange = (amountCents: number, installments: number) => {
+    setCustomAmount(amountCents);
+    setCustomInstallments(installments);
+  };
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full">
-        <PaymentForm
-          amount={charge.amount_cents / 100}
-          installments={1}
-          productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
-          onSuccess={handlePaymentSuccess}
-          skipSplitCheck={true}
-        />
+    <div className="min-h-screen bg-background p-4 py-8">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            Escolha a melhor forma de pagamento
+          </h1>
+          <p className="text-muted-foreground">
+            {charge.description || `Pagamento para ${charge.payer_name || 'Cliente'}`}
+          </p>
+        </div>
+
+        {/* Opções de Pagamento */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {paymentOptions.map((option) => (
+            <CheckoutOptionCard
+              key={option.id}
+              option={option}
+              isSelected={selectedOption?.id === option.id}
+              onSelect={() => setSelectedOption(option)}
+              onCustomValueChange={handleCustomValueChange}
+            />
+          ))}
+        </div>
+
+        {/* Botão Continuar */}
+        <div className="flex justify-center">
+          <Button
+            size="lg"
+            onClick={handleContinueToPayment}
+            disabled={!selectedOption}
+            className="min-w-[300px] bg-primary hover:bg-primary/90"
+          >
+            Continuar para o Pagamento
+          </Button>
+        </div>
+
+        {/* Informações de Segurança */}
+        <div className="mt-8 text-center text-sm text-muted-foreground">
+          <p>🔒 Pagamento 100% seguro e criptografado</p>
+        </div>
       </div>
     </div>
   );

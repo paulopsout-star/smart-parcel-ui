@@ -15,6 +15,12 @@ interface PaymentFormProps {
   onSuccess?: (transactionId: string) => void;
   onCancel?: () => void;
   skipSplitCheck?: boolean;
+  initialPayerData?: {
+    name?: string;
+    email?: string;
+    document?: string;
+    phone?: string;
+  };
 }
 
 export function PaymentForm({
@@ -24,6 +30,7 @@ export function PaymentForm({
   onSuccess,
   onCancel,
   skipSplitCheck = false,
+  initialPayerData,
 }: PaymentFormProps) {
   const { loading, processSplits } = usePaymentMock();
   
@@ -35,10 +42,10 @@ export function PaymentForm({
   });
   
   const [formData, setFormData] = useState<PaymentFormData>({
-    payerName: "",
-    payerDocument: "",
-    payerEmail: "",
-    payerPhoneNumber: "",
+    payerName: initialPayerData?.name || "",
+    payerDocument: initialPayerData?.document || "",
+    payerEmail: initialPayerData?.email || "",
+    payerPhoneNumber: initialPayerData?.phone || "",
     cardHolderName: "",
     cardNumber: "",
     cardExpirationDate: "",
