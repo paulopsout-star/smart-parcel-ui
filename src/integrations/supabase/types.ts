@@ -142,6 +142,8 @@ export type Database = {
           checkout_url: string | null
           created_at: string
           created_by: string
+          creditor_document: string | null
+          creditor_name: string | null
           description: string | null
           has_boleto: boolean | null
           has_boleto_link: boolean
@@ -171,6 +173,8 @@ export type Database = {
           checkout_url?: string | null
           created_at?: string
           created_by: string
+          creditor_document?: string | null
+          creditor_name?: string | null
           description?: string | null
           has_boleto?: boolean | null
           has_boleto_link?: boolean
@@ -200,6 +204,8 @@ export type Database = {
           checkout_url?: string | null
           created_at?: string
           created_by?: string
+          creditor_document?: string | null
+          creditor_name?: string | null
           description?: string | null
           has_boleto?: boolean | null
           has_boleto_link?: boolean
