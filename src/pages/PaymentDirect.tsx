@@ -77,69 +77,54 @@ export default function PaymentDirect() {
   const handlePaymentSuccess = async (transactionId: string, paymentStatus: 'approved' | 'pending' | 'failed' = 'approved') => {
     console.log('[PaymentDirect] Payment result:', { transactionId, paymentStatus, chargeId: charge?.id });
 
-    // Status APROVADO: atualizar DB e redirecionar
+    // Status APROVADO: chamar edge function e redirecionar
     if (paymentStatus === 'approved') {
-      toast({
-        title: "Pagamento aprovado!",
-        description: "Seu pagamento foi processado com sucesso.",
-      });
-
-      // Atualizar status do payment_split no banco
-      if (charge?.id) {
-        try {
-          // Verificar se existem splits para este payment_link
-          const { data: existingSplits, error: checkError } = await supabase
-            .from('payment_splits')
-            .select('id')
-            .eq('payment_link_id', charge.id);
-
-          if (checkError) {
-            console.error('[PaymentDirect] Error checking splits:', checkError);
-          }
-
-          // Se não existir nenhum split, criar um
-          if (!existingSplits || existingSplits.length === 0) {
-            console.log('[PaymentDirect] No splits found, creating one for payment_link_id:', charge.id);
-            
-            const { error: insertError } = await supabase
-              .from('payment_splits')
-              .insert({
-                payment_link_id: charge.id,
-                charge_id: charge.charge_id || null,
-                amount_cents: finalAmount,
-                method: 'CARD',
-                status: 'pending',
-                order_index: 1,
-                installments: finalInstallments,
-              });
-
-            if (insertError) {
-              console.error('[PaymentDirect] Error inserting split:', insertError);
-            } else {
-              console.log('[PaymentDirect] Split created successfully');
-            }
-          }
-
-          // Atualizar splits para concluded
-          await supabase
-            .from('payment_splits')
-            .update({ 
-              status: 'concluded',
-              transaction_id: transactionId,
-              processed_at: new Date().toISOString()
-            })
-            .eq('payment_link_id', charge.id);
-          
-          console.log('[PaymentDirect] Payment splits updated to concluded');
-        } catch (error) {
-          console.error('Error updating payment split:', error);
-        }
+      if (!charge?.id) {
+        console.error('[PaymentDirect] No charge ID available');
+        return;
       }
 
-      // Redirecionar para página de comprovante
-      setTimeout(() => {
-        navigate(`/thank-you?pl=${id}`);
-      }, 1500);
+      try {
+        console.log('[PaymentDirect] Calling conclude-card-payment edge function');
+        
+        const { data, error } = await supabase.functions.invoke('conclude-card-payment', {
+          body: {
+            payment_link_id: charge.id,
+            amount_cents: finalAmount,
+            installments: finalInstallments,
+            transaction_id: transactionId,
+          },
+        });
+
+        if (error) {
+          console.error('[PaymentDirect] Error from edge function:', error);
+          toast({
+            title: "Erro",
+            description: "Erro ao registrar pagamento. Tente novamente.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        console.log('[PaymentDirect] Payment concluded successfully:', data);
+        
+        toast({
+          title: "Pagamento aprovado!",
+          description: "Seu pagamento foi processado com sucesso.",
+        });
+
+        // Redirecionar para página de comprovante
+        setTimeout(() => {
+          navigate(`/thank-you?pl=${id}`);
+        }, 1500);
+      } catch (error) {
+        console.error('[PaymentDirect] Error processing payment:', error);
+        toast({
+          title: "Erro",
+          description: "Erro ao processar pagamento. Tente novamente.",
+          variant: "destructive",
+        });
+      }
     }
     // Status PENDENTE: informar usuário
     else if (paymentStatus === 'pending') {

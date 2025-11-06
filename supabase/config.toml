@@ -7,6 +7,9 @@ schemas = ["public"]
 extra_search_path = ["public"]
 max_rows = 1000
 
+[functions.conclude-card-payment]
+verify_jwt = false
+
 [functions.quitaplus-token]
 verify_jwt = false
 
