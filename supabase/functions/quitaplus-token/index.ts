@@ -29,8 +29,8 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
           'Accept': 'application/json',
         },
         body: JSON.stringify({
-          clientId: clientId,
-          clientSecret: clientSecret,
+          client_id: clientId,
+          client_secret: clientSecret,
           grant_type: 'client_credentials',
         }),
       })
