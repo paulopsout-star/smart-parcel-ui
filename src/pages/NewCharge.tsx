@@ -91,6 +91,7 @@ export default function NewCharge() {
   const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(true);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [enableSplit, setEnableSplit] = useState(false);
   const [checkoutData, setCheckoutData] = useState<{
     chargeId: string;
     checkoutUrl: string;
@@ -395,10 +396,14 @@ export default function NewCharge() {
           
           console.log('[NewCharge] Link gerado com sucesso:', linkData.link.url);
           
+          // Adicionar query param ?mode=split ou ?mode=direct baseado no toggle
+          const checkoutMode = enableSplit ? 'split' : 'direct';
+          const checkoutUrlWithMode = `${linkData.link.url}${linkData.link.url.includes('?') ? '&' : '?'}mode=${checkoutMode}`;
+          
           // Construir checkoutData completo com os dados da cobrança criada
           const fullCheckoutData = {
             chargeId: charge.id,
-            checkoutUrl: linkData.link.url,
+            checkoutUrl: checkoutUrlWithMode,
             linkId: linkData.link.id,
             amount: charge.amount, // já está em centavos do banco
             payerName: charge.payer_name,
@@ -411,7 +416,9 @@ export default function NewCharge() {
           // Toast de sucesso
           toast({
             title: "Link de pagamento gerado!",
-            description: "O link foi criado com sucesso e está pronto para ser compartilhado.",
+            description: enableSplit 
+              ? "Link com split PIX+Cartão criado com sucesso."
+              : "Link de pagamento direto criado com sucesso.",
           });
           
           // Setar dados completos
@@ -595,6 +602,21 @@ export default function NewCharge() {
                         Parcelas fechadas (cliente não pode alterar)
                       </Label>
                     </div>
+
+                    {/* Toggle Split PIX+Cartão - apenas para pontual sem boleto */}
+                    {watchRecurrenceType === 'pontual' && !watchHasBoletoLink && (
+                      <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/30">
+                        <Checkbox
+                          id="enable_split"
+                          checked={enableSplit}
+                          onCheckedChange={(checked) => setEnableSplit(!!checked)}
+                        />
+                        <Label htmlFor="enable_split" className="flex items-center gap-2 cursor-pointer">
+                          <Wallet className="w-4 h-4" />
+                          Habilitar Split PIX+Cartão
+                        </Label>
+                      </div>
+                    )}
 
                     {/* Seletor de boleto - apenas para pontual */}
                     {watchRecurrenceType === 'pontual' && (

@@ -1,21 +1,18 @@
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
-import { SplitModal } from '@/components/SplitModal';
+import { PaymentForm } from '@/components/PaymentForm';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
 
-export default function Checkout() {
+export default function PaymentDirect() {
   const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [charge, setCharge] = useState<any>(null);
-  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
-  
-  // Verificar modo: 'direct' (default) ou 'split'
-  const mode = searchParams.get('mode') || 'direct';
 
   useEffect(() => {
     const fetchCharge = async () => {
@@ -32,22 +29,13 @@ export default function Checkout() {
       try {
         setLoading(true);
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 10000)
-        );
-
-        const fetchPromise = fetch(
+        // Buscar dados do link de pagamento via edge function
+        const response = await fetch(
           `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`
         );
 
-        const response = await Promise.race([
-          fetchPromise,
-          timeoutPromise
-        ]) as Response;
-
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || 'Failed to fetch payment link');
+          throw new Error('Failed to fetch payment link');
         }
 
         const data = await response.json();
@@ -63,25 +51,11 @@ export default function Checkout() {
         }
 
         setCharge(data);
-        
-        // Se modo for 'direct', redirecionar para pagamento direto
-        if (mode === 'direct') {
-          navigate(`/payment-direct/${id}`, { replace: true });
-          return;
-        }
-        
-        // Se modo for 'split', abrir modal de split
-        if (mode === 'split') {
-          setIsSplitModalOpen(true);
-        }
-
       } catch (error: any) {
         console.error('Error fetching charge:', error);
         toast({
           title: "Erro ao carregar",
-          description: error.message === 'Timeout' 
-            ? "A solicitação demorou muito tempo. Tente novamente."
-            : "Não foi possível carregar os dados do pagamento.",
+          description: "Não foi possível carregar os dados do pagamento.",
           variant: "destructive",
         });
       } finally {
@@ -92,13 +66,44 @@ export default function Checkout() {
     fetchCharge();
   }, [id, toast]);
 
+  const handlePaymentSuccess = async (transactionId: string) => {
+    toast({
+      title: "Pagamento processado!",
+      description: "Seu pagamento foi processado com sucesso.",
+    });
+
+    // Atualizar status do payment_split no banco (se existir)
+    if (charge?.id) {
+      try {
+        await supabase
+          .from('payment_splits')
+          .update({ 
+            status: 'concluded',
+            transaction_id: transactionId,
+            processed_at: new Date().toISOString()
+          })
+          .eq('payment_link_id', charge.id)
+          .eq('method', 'CARD');
+      } catch (error) {
+        console.error('Error updating payment split:', error);
+      }
+    }
+
+    // Redirecionar para página de sucesso
+    setTimeout(() => {
+      navigate(`/thank-you?transaction=${transactionId}`);
+    }, 1500);
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-ink-secondary">Carregando dados do pagamento...</p>
-        </div>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="max-w-2xl w-full p-8">
+          <Skeleton className="h-8 w-48 mb-6" />
+          <Skeleton className="h-24 w-full mb-4" />
+          <Skeleton className="h-24 w-full mb-4" />
+          <Skeleton className="h-12 w-full" />
+        </Card>
       </div>
     );
   }
@@ -123,13 +128,15 @@ export default function Checkout() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <SplitModal
-        isOpen={isSplitModalOpen}
-        onClose={() => setIsSplitModalOpen(false)}
-        totalCents={charge.amount_cents}
-        chargeId={charge.charge_id || ''}
-        paymentLinkId={charge.id || id || ''}
-      />
+      <div className="max-w-2xl w-full">
+        <PaymentForm
+          amount={charge.amount_cents / 100}
+          installments={1}
+          productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
+          onSuccess={handlePaymentSuccess}
+          skipSplitCheck={true}
+        />
+      </div>
     </div>
   );
 }

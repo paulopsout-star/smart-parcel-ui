@@ -16,6 +16,7 @@ import NewCharge from "./pages/NewCharge";
 import ChargeHistory from "./pages/ChargeHistory";
 import Payment from "./pages/Payment";
 import Checkout from "./pages/Checkout";
+import PaymentDirect from "./pages/PaymentDirect";
 import PaymentPix from "./pages/PaymentPix";
 import PaymentCard from "./pages/PaymentCard";
 import ThankYou from "./pages/ThankYou";
@@ -50,6 +51,7 @@ const App = () => (
                 <Route path="/register" element={<Register />} />
                 <Route path="/payment" element={<Payment />} />
                 <Route path="/checkout/:id" element={<Checkout />} />
+                <Route path="/payment-direct/:id" element={<PaymentDirect />} />
                 <Route path="/payment-pix/:id" element={<PaymentPix />} />
                 <Route path="/payment-card/:id" element={<PaymentCard />} />
                 <Route path="/thank-you" element={<ThankYou />} />
