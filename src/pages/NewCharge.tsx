@@ -226,12 +226,13 @@ export default function NewCharge() {
       return;
     }
     
-    // Validar conta PIX para cobranças sem boleto e sem vínculo de boleto
-    if (!data.has_boleto && !data.has_boleto_link && !hasPayoutAccount) {
-      setError('Para cobranças sem boleto, é necessário ter uma conta PIX cadastrada.');
+    // Validar conta PIX apenas para cobranças recorrentes sem boleto
+    // Para cobranças pontuais, o checkout de cartão não requer conta PIX
+    if (data.recurrence_type !== 'pontual' && !data.has_boleto && !hasPayoutAccount) {
+      setError('Para cobranças recorrentes sem boleto, é necessário ter uma conta PIX cadastrada.');
       toast({
         title: "Conta PIX necessária",
-        description: "Cadastre uma conta PIX em 'Contas PIX' antes de criar cobranças sem boleto.",
+        description: "Cadastre uma conta PIX em 'Contas PIX' antes de criar cobranças recorrentes sem boleto.",
         variant: "destructive"
       });
       return;
@@ -353,8 +354,8 @@ export default function NewCharge() {
           variant: "default"
         });
       } else {
-        // Para cobranças recorrentes ou com boleto, sucesso já está completo
-        if (data.recurrence_type !== 'pontual' || data.has_boleto || data.has_boleto_link) {
+        // Para cobranças recorrentes ou com boleto físico, sucesso já está completo
+        if (data.recurrence_type !== 'pontual' || data.has_boleto) {
           toast({
             title: "Cobrança criada com sucesso!",
             description: data.recurrence_type === 'pontual' 
@@ -362,11 +363,12 @@ export default function NewCharge() {
               : `Cobrança recorrente configurada (${data.recurrence_type}).`,
           });
         }
-        // Para cobrança pontual sem boleto, aguardar geração do link
+        // Para cobrança pontual, sempre aguardar geração do link de checkout
       }
 
-      // Para cobranças pontuais sem boleto, gerar link via edge function
-      if (data.recurrence_type === 'pontual' && !data.has_boleto && !data.has_boleto_link) {
+      // Para cobranças pontuais, sempre gerar link de checkout (cartão)
+      // O has_boleto_link indica se haverá vinculação com boleto, mas não impede o checkout
+      if (data.recurrence_type === 'pontual' && !data.has_boleto) {
         try {
           console.log('[NewCharge] Gerando link de checkout via charge-links...');
           
@@ -394,7 +396,7 @@ export default function NewCharge() {
           const fullCheckoutData = {
             chargeId: charge.id,
             checkoutUrl: checkoutUrlWithMode,
-            linkId: linkData.link.id,
+            linkId: linkData.link.linkId || linkData.link.id, // Suporte para ambos formatos
             amount: charge.amount, // já está em centavos do banco
             payerName: charge.payer_name,
             description: charge.description || undefined,
