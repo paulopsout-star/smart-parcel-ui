@@ -96,7 +96,7 @@ export default function PaymentCard() {
         .eq('id', cardSplit.id);
     }
     
-    navigate('/thank-you');
+    navigate(`/thank-you?pl=${id}`);
   };
 
   if (loading) {

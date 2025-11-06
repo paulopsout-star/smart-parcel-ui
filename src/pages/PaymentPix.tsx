@@ -108,7 +108,7 @@ export default function PaymentPix() {
     if (hasCardPayment) {
       navigate(`/payment-card/${id}`);
     } else {
-      navigate('/thank-you');
+      navigate(`/thank-you?pl=${id}`);
     }
   };
 

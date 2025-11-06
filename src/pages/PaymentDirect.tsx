@@ -87,6 +87,40 @@ export default function PaymentDirect() {
       // Atualizar status do payment_split no banco
       if (charge?.id) {
         try {
+          // Verificar se existem splits para este payment_link
+          const { data: existingSplits, error: checkError } = await supabase
+            .from('payment_splits')
+            .select('id')
+            .eq('payment_link_id', charge.id);
+
+          if (checkError) {
+            console.error('[PaymentDirect] Error checking splits:', checkError);
+          }
+
+          // Se não existir nenhum split, criar um
+          if (!existingSplits || existingSplits.length === 0) {
+            console.log('[PaymentDirect] No splits found, creating one for payment_link_id:', charge.id);
+            
+            const { error: insertError } = await supabase
+              .from('payment_splits')
+              .insert({
+                payment_link_id: charge.id,
+                charge_id: charge.charge_id || null,
+                amount_cents: finalAmount,
+                method: 'CARD',
+                status: 'pending',
+                order_index: 1,
+                installments: finalInstallments,
+              });
+
+            if (insertError) {
+              console.error('[PaymentDirect] Error inserting split:', insertError);
+            } else {
+              console.log('[PaymentDirect] Split created successfully');
+            }
+          }
+
+          // Atualizar splits para concluded
           await supabase
             .from('payment_splits')
             .update({ 
@@ -106,7 +140,7 @@ export default function PaymentDirect() {
       setTimeout(() => {
         navigate(`/thank-you?pl=${id}`);
       }, 1500);
-    } 
+    }
     // Status PENDENTE: informar usuário
     else if (paymentStatus === 'pending') {
       toast({

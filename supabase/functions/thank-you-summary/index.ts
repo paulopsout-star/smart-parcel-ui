@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       .select('*')
       .eq('payment_link_id', paymentLink.id)
 
-    console.log('[thank-you-summary] Splits found:', splits?.length || 0)
+    console.log('[thank-you-summary] Splits found by payment_link_id:', splits?.length || 0)
     console.log('[thank-you-summary] Splits status:', splits?.map(s => ({ id: s.id, method: s.method, status: s.status })))
 
     if (splitsError) {
@@ -62,21 +62,40 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Se não há splits, buscar charge_id diretamente das execuções
-    let chargeId = null
-    if (splits && splits.length > 0) {
-      chargeId = splits[0].charge_id
-    } else {
-      // Buscar através de charge_executions se disponível
-      const { data: executions } = await supabase
-        .from('charge_executions')
-        .select('charge_id')
-        .eq('payment_link_id', paymentLink.id)
-        .limit(1)
+    // Fallback: buscar por charge_id se não houver splits por payment_link_id
+    let finalSplits = splits
+    let chargeId = paymentLink.charge_id
 
-      if (executions && executions.length > 0) {
-        chargeId = executions[0].charge_id
+    if (!finalSplits || finalSplits.length === 0) {
+      console.log('[thank-you-summary] No splits by payment_link_id, trying fallback by charge_id:', chargeId)
+      
+      if (chargeId) {
+        const { data: splitsByCharge, error: chargeError } = await supabase
+          .from('payment_splits')
+          .select('*')
+          .eq('charge_id', chargeId)
+
+        if (!chargeError && splitsByCharge && splitsByCharge.length > 0) {
+          finalSplits = splitsByCharge
+          console.log('[thank-you-summary] Fallback successful! Splits found by charge_id:', finalSplits.length)
+        }
       }
+
+      // Se ainda não houver splits, buscar charge_id diretamente das execuções
+      if ((!finalSplits || finalSplits.length === 0) && !chargeId) {
+        const { data: executions } = await supabase
+          .from('charge_executions')
+          .select('charge_id')
+          .eq('payment_link_id', paymentLink.id)
+          .limit(1)
+
+        if (executions && executions.length > 0) {
+          chargeId = executions[0].charge_id
+          console.log('[thank-you-summary] Found charge_id from executions:', chargeId)
+        }
+      }
+    } else {
+      chargeId = finalSplits[0].charge_id || chargeId
     }
 
     let charge = null
@@ -93,7 +112,7 @@ Deno.serve(async (req) => {
     }
 
     // Verificar se está PAID (todos os splits CONCLUDED)
-    const isPaid = splits && splits.length > 0 && splits.every(s => s.status === 'concluded')
+    const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => s.status === 'concluded')
     
     console.log('[thank-you-summary] isPaid:', isPaid)
 
@@ -111,7 +130,7 @@ Deno.serve(async (req) => {
     const { data: transactions, error: txError } = await supabase
       .from('transactions')
       .select('*')
-      .in('id', splits.map(s => s.transaction_id).filter(Boolean))
+      .in('id', finalSplits.map(s => s.transaction_id).filter(Boolean))
       .order('created_at', { ascending: false })
 
     // Buscar próximas execuções se for recorrente
@@ -142,7 +161,7 @@ Deno.serve(async (req) => {
         paid_at: new Date().toISOString(), // Usar timestamp atual já que está PAID
         has_boleto_link: charge?.has_boleto_link || false
       },
-      splits: (splits || []).map(split => ({
+      splits: (finalSplits || []).map(split => ({
         id: split.id,
         method: split.method,
         amount_cents: split.amount_cents,
