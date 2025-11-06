@@ -319,13 +319,7 @@ export default function NewCharge() {
         throw chargeError;
       }
 
-      // Process charge immediately (create payment link and send message)
-      const { data: executionResult, error: executionError } = await supabase.functions.invoke('process-charge', {
-        body: {
-          chargeId: charge.id,
-          immediate: true
-        }
-      });
+      console.log('[NewCharge] Cobrança criada com sucesso no banco:', charge.id);
 
       // Se houver template de mensagem, enviar mensagem mock
       if (data.message_template_id && data.message_template_id !== "none" && messageTemplateSnapshot) {
@@ -345,29 +339,21 @@ export default function NewCharge() {
         }
       }
 
-      if (executionError) {
-        console.error('Error processing charge:', executionError);
-        // Don't throw - the charge was created successfully
+      // Para cobranças recorrentes ou com boleto físico, apenas informar sucesso
+      // O processamento via integração externa será implementado posteriormente
+      if (data.recurrence_type !== 'pontual' || data.has_boleto) {
         toast({
-          title: "Cobrança criada!",
-          description: "A cobrança foi criada, mas houve um problema ao processar. Tente gerar o link manualmente.",
-          variant: "default"
+          title: "Cobrança criada com sucesso!",
+          description: data.recurrence_type === 'pontual' 
+            ? "Cobrança com boleto criada. O processamento será realizado quando a integração estiver ativa."
+            : `Cobrança recorrente configurada (${data.recurrence_type}). O agendamento será processado quando a integração estiver ativa.`,
         });
-      } else {
-        // Para cobranças recorrentes ou com boleto físico, sucesso já está completo
-        if (data.recurrence_type !== 'pontual' || data.has_boleto) {
-          toast({
-            title: "Cobrança criada com sucesso!",
-            description: data.recurrence_type === 'pontual' 
-              ? "Cobrança criada com sucesso."
-              : `Cobrança recorrente configurada (${data.recurrence_type}).`,
-          });
-        }
-        // Para cobrança pontual, sempre aguardar geração do link de checkout
+        navigate('/charges');
+        return;
       }
 
-      // Para cobranças pontuais, sempre gerar link de checkout (cartão)
-      // O has_boleto_link indica se haverá vinculação com boleto, mas não impede o checkout
+      // Para cobranças pontuais de cartão, gerar link de checkout interno (sem API externa)
+      console.log('[NewCharge] Gerando link de checkout para cobrança pontual...');
       if (data.recurrence_type === 'pontual' && !data.has_boleto) {
         try {
           console.log('[NewCharge] Gerando link de checkout via charge-links...');
