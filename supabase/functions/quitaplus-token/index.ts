@@ -25,16 +25,22 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
       // Create Basic Auth header: base64(client_id:client_secret)
       const authString = btoa(`${clientId}:${clientSecret}`)
       
+      // Create URLSearchParams for form-urlencoded body
+      const body = new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      })
+      
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
           'Authorization': `Basic ${authString}`,
+          'User-Agent': 'AutonegocieHub/quitaplus-token',
         },
-        body: JSON.stringify({
-          grant_type: 'client_credentials',
-        }),
+        body: body.toString(),
       })
 
       if (response.ok) {
@@ -64,9 +70,11 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
 
       // For other errors, log and prepare to return error
       const errorText = await response.text()
+      const maskedError = errorText.length > 200 ? errorText.substring(0, 200) + '...' : errorText
+      console.log(`Request failed with ${response.status}: ${maskedError}`)
       lastError = {
         status: response.status,
-        message: errorText,
+        message: maskedError,
         attempt
       }
       
@@ -107,7 +115,10 @@ serve(async (req) => {
   try {
     // Get environment variables and build the complete token URL
     const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br'
-    const tokenUrl = `${baseUrl.replace(/\/$/, '')}/connect/token`
+    // Check if URL already contains the token endpoint
+    const tokenUrl = baseUrl.includes('/connect/token') || baseUrl.includes('/oauth/token')
+      ? baseUrl
+      : `${baseUrl.replace(/\/$/, '')}/connect/token`
     const clientId = Deno.env.get('QUITAPLUS_CLIENT_ID')
     const clientSecret = Deno.env.get('QUITAPLUS_CLIENT_SECRET')
 
