@@ -34,6 +34,7 @@ import RecurrenceManagement from "./pages/admin/RecurrenceManagement";
 import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
 import Reports from "./pages/admin/Reports";
+import CompanySettings from "./pages/admin/CompanySettings";
 
 const queryClient = new QueryClient();
 
@@ -71,6 +72,7 @@ const App = () => (
                 <Route path="/admin/checkout/new" element={<ProtectedRoute requiredRole="admin"><CheckoutNew /></ProtectedRoute>} />
                 <Route path="/admin/checkout/history" element={<ProtectedRoute requiredRole="admin"><CheckoutHistory /></ProtectedRoute>} />
                 <Route path="/admin/reports" element={<ProtectedRoute requiredRole="admin"><Reports /></ProtectedRoute>} />
+                <Route path="/admin/settings" element={<ProtectedRoute requiredRole="admin"><CompanySettings /></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>

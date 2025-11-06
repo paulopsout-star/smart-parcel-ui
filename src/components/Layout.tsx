@@ -22,7 +22,8 @@ import {
   RefreshCw,
   Repeat,
   BarChart3,
-  Settings
+  Settings,
+  Wrench
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -60,7 +61,8 @@ export function Layout({ children }: LayoutProps) {
       { name: 'Estornos', href: '/admin/refunds', icon: RefreshCw },
       { name: 'Recorrentes', href: '/admin/recurrences', icon: Repeat },
       { name: 'Relatórios', href: '/admin/reports', icon: BarChart3 },
-      { name: 'Assinaturas', href: '/admin/subscriptions', icon: Settings }
+      { name: 'Assinaturas', href: '/admin/subscriptions', icon: Settings },
+      { name: 'Configurações', href: '/admin/settings', icon: Wrench }
     ] : []),
   ];
 
