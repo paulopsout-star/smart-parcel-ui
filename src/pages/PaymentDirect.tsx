@@ -97,9 +97,9 @@ export default function PaymentDirect() {
       }
     }
 
-    // Redirecionar para página de sucesso
+    // Redirecionar para página de comprovante com o token correto (payment link id)
     setTimeout(() => {
-      navigate(`/thank-you?transaction=${transactionId}`);
+      navigate(`/thank-you?pl=${id}`);
     }, 1500);
   };
 
