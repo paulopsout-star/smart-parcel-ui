@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, ArrowLeft, History, Printer, RefreshCw, Calendar } from "lucide-react";
+import { CheckCircle, ArrowLeft, History, Printer, RefreshCw, Calendar, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -81,6 +81,11 @@ export default function ThankYou() {
   const [data, setData] = useState<ThankYouData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+  
+  const retryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const token = searchParams.get('pl');
 
@@ -137,7 +142,37 @@ export default function ThankYou() {
 
   useEffect(() => {
     loadData();
+    
+    // Cleanup timers on unmount
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
+    };
   }, [token]);
+
+  // Retry automático para estado de processamento
+  useEffect(() => {
+    if (data?.processing && !data?.paid && retryCount < 3) {
+      console.log(`[ThankYou] Auto-retry ${retryCount + 1}/3 in 3s...`);
+      
+      retryTimerRef.current = setTimeout(() => {
+        setRetryCount(prev => prev + 1);
+        loadData();
+      }, 3000);
+    }
+    
+    // Timeout de 30s
+    if (data?.processing && !data?.paid && retryCount === 0) {
+      timeoutTimerRef.current = setTimeout(() => {
+        console.log('[ThankYou] Timeout reached (30s)');
+        setError('O pagamento está demorando mais do que o esperado. Por favor, entre em contato com o suporte.');
+      }, 30000);
+    }
+    
+    return () => {
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+    };
+  }, [data, retryCount]);
 
   const formatCurrency = (amountCents: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -174,6 +209,49 @@ export default function ThankYou() {
       total: data?.charge?.total_amount_cents
     });
     window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    setIsDownloadingPDF(true);
+    
+    try {
+      analyticsLocal.track('thank_you.download_pdf', {
+        charge_id: data?.charge?.id,
+        total: data?.charge?.total_amount_cents
+      });
+
+      // Importar html2pdf dinamicamente
+      const html2pdf = (await import('html2pdf.js')).default;
+      
+      const element = document.getElementById('comprovante-container');
+      if (!element) {
+        throw new Error('Elemento do comprovante não encontrado');
+      }
+
+      const opt = {
+        margin: 10,
+        filename: `comprovante-${data?.charge?.id.slice(0, 8)}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+      
+      toast({
+        title: "PDF gerado!",
+        description: "O comprovante foi baixado com sucesso.",
+      });
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      toast({
+        title: "Erro ao gerar PDF",
+        description: "Não foi possível gerar o PDF. Tente usar a opção de imprimir.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloadingPDF(false);
+    }
   };
 
   if (loading) {
@@ -225,7 +303,7 @@ export default function ThankYou() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-8 px-4 max-w-4xl">
+      <div id="comprovante-container" className="container mx-auto py-8 px-4 max-w-4xl">
         {/* Header */}
         <div className="text-center mb-8 print:mb-4">
           <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4 print:h-8 print:w-8" />
@@ -374,7 +452,16 @@ export default function ThankYou() {
 
           <Button variant="outline" onClick={handlePrint}>
             <Printer className="h-4 w-4 mr-2" />
-            Imprimir/Salvar
+            Imprimir
+          </Button>
+
+          <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloadingPDF}>
+            {isDownloadingPDF ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Baixar PDF
           </Button>
         </div>
 

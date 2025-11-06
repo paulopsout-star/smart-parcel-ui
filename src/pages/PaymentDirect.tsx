@@ -74,32 +74,57 @@ export default function PaymentDirect() {
     fetchCharge();
   }, [id, toast]);
 
-  const handlePaymentSuccess = async (transactionId: string) => {
-    toast({
-      title: "Pagamento processado!",
-      description: "Seu pagamento foi processado com sucesso.",
-    });
+  const handlePaymentSuccess = async (transactionId: string, paymentStatus: 'approved' | 'pending' | 'failed' = 'approved') => {
+    console.log('[PaymentDirect] Payment result:', { transactionId, paymentStatus, chargeId: charge?.id });
 
-    // Atualizar status do payment_split no banco (se existir)
-    if (charge?.id) {
-      try {
-        await supabase
-          .from('payment_splits')
-          .update({ 
-            status: 'concluded',
-            transaction_id: transactionId,
-            processed_at: new Date().toISOString()
-          })
-          .eq('payment_link_id', charge.id);
-      } catch (error) {
-        console.error('Error updating payment split:', error);
+    // Status APROVADO: atualizar DB e redirecionar
+    if (paymentStatus === 'approved') {
+      toast({
+        title: "Pagamento aprovado!",
+        description: "Seu pagamento foi processado com sucesso.",
+      });
+
+      // Atualizar status do payment_split no banco
+      if (charge?.id) {
+        try {
+          await supabase
+            .from('payment_splits')
+            .update({ 
+              status: 'concluded',
+              transaction_id: transactionId,
+              processed_at: new Date().toISOString()
+            })
+            .eq('payment_link_id', charge.id);
+          
+          console.log('[PaymentDirect] Payment splits updated to concluded');
+        } catch (error) {
+          console.error('Error updating payment split:', error);
+        }
       }
-    }
 
-    // Redirecionar para página de comprovante com o token correto (payment link id)
-    setTimeout(() => {
-      navigate(`/thank-you?pl=${id}`);
-    }, 1500);
+      // Redirecionar para página de comprovante
+      setTimeout(() => {
+        navigate(`/thank-you?pl=${id}`);
+      }, 1500);
+    } 
+    // Status PENDENTE: informar usuário
+    else if (paymentStatus === 'pending') {
+      toast({
+        title: "Pagamento pendente",
+        description: "Seu pagamento está sendo processado. Aguarde a confirmação.",
+        variant: "default",
+      });
+      console.log('[PaymentDirect] Payment is pending, no redirect');
+    } 
+    // Status RECUSADO: informar erro
+    else if (paymentStatus === 'failed') {
+      toast({
+        title: "Pagamento recusado",
+        description: "Não foi possível processar seu pagamento. Verifique os dados e tente novamente.",
+        variant: "destructive",
+      });
+      console.log('[PaymentDirect] Payment failed, no redirect');
+    }
   };
 
   if (loading) {
