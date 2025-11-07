@@ -58,37 +58,40 @@ serve(async (req) => {
     const creditorDocument = Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '';
     const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || '';
 
-    // Sanitizar dados do cartão (remover espaços e pontuação)
-    const sanitizedCard = {
-      holderName: requestData.card.holderName.trim(),
-      number: requestData.card.number.replace(/\D/g, ''),
-      expirationDate: requestData.card.expirationDate.replace(/\D/g, ''),
-      cvv: requestData.card.cvv.replace(/\D/g, ''),
-    };
+    // Sanitizar dados
+    const sanitizedCardNumber = requestData.card.number.replace(/\D/g, '');
+    const sanitizedCvv = requestData.card.cvv.replace(/\D/g, '');
+    const sanitizedDocument = requestData.payer.document.replace(/\D/g, '');
+    const sanitizedPhone = requestData.payer.phoneNumber.replace(/\D/g, '');
+    
+    // Converter data de expiração de MM/AA para YYYY/MM
+    const expDateClean = requestData.card.expirationDate.replace(/\D/g, '');
+    let cardExpirationDate: string;
+    if (expDateClean.length === 4) {
+      // Formato MMAA -> YYYY/MM
+      const month = expDateClean.substring(0, 2);
+      const year = expDateClean.substring(2, 4);
+      cardExpirationDate = `20${year}/${month}`;
+    } else {
+      // Assumir formato já correto ou inválido
+      cardExpirationDate = requestData.card.expirationDate;
+    }
 
-    const sanitizedPayer = {
-      name: requestData.payer.name.trim(),
-      document: requestData.payer.document.replace(/\D/g, ''),
-      email: requestData.payer.email.trim(),
-      phoneNumber: requestData.payer.phoneNumber.replace(/\D/g, ''),
-    };
-
-    // Preparar payload para Quita+
+    // Preparar payload para Quita+ (Shape A - PascalCase)
     const quitaPlusPayload = {
-      merchantId,
-      amount: requestData.amount,
-      installments: requestData.installments,
-      card: {
-        holderName: sanitizedCard.holderName,
-        number: sanitizedCard.number,
-        expirationDate: sanitizedCard.expirationDate,
-        cvv: sanitizedCard.cvv,
-      },
-      payer: sanitizedPayer,
-      creditor: {
-        name: creditorName,
-        document: creditorDocument,
-      },
+      MerchantId: merchantId,
+      CreditorName: creditorName,
+      CreditorDocument: creditorDocument,
+      AmountInCents: requestData.amount,
+      Installments: requestData.installments,
+      PayerDocument: sanitizedDocument,
+      PayerEmail: requestData.payer.email.trim(),
+      PayerPhoneNumber: sanitizedPhone,
+      PayerName: requestData.payer.name.trim(),
+      CardHolderName: requestData.card.holderName.trim(),
+      CardNumber: sanitizedCardNumber,
+      CardExpirationDate: cardExpirationDate,
+      CardCvv: sanitizedCvv,
     };
 
     // Log sanitizado (sem dados sensíveis)
@@ -96,8 +99,9 @@ serve(async (req) => {
       merchantId,
       amount: requestData.amount,
       installments: requestData.installments,
-      cardLastFour: sanitizedCard.number.slice(-4),
-      payerDocument: sanitizedPayer.document.slice(0, 3) + '***',
+      cardLastFour: sanitizedCardNumber.slice(-4),
+      payerDocument: sanitizedDocument.slice(0, 3) + '***',
+      cardExpirationDate,
     });
 
     // Chamar API Quita+ com retry
