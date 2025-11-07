@@ -94,8 +94,14 @@ serve(async (req) => {
       CardCvv: sanitizedCvv,
     };
 
-    // Log sanitizado (sem dados sensíveis)
-    console.log('[quitaplus-prepayment] Enviando pré-pagamento:', {
+    // Construir URL completa
+    const fullUrl = `${baseUrl}/prepayment/authorize`;
+
+    // Log detalhado para diagnóstico
+    console.log('[quitaplus-prepayment] Configuração da chamada:', {
+      baseUrl,
+      fullUrl,
+      endpoint: '/prepayment/authorize',
       merchantId,
       amount: requestData.amount,
       installments: requestData.installments,
@@ -112,7 +118,9 @@ serve(async (req) => {
       attempts++;
       
       try {
-        const quitaResponse = await fetch(`${baseUrl}/prepayment/authorize`, {
+        console.log(`[quitaplus-prepayment] Tentativa ${attempts}/3 - Chamando: ${fullUrl}`);
+        
+        const quitaResponse = await fetch(fullUrl, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
