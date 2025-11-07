@@ -22,31 +22,42 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
     try {
       console.log(`Token request attempt ${attempt}/${maxRetries}`)
       
-      // Create JSON body as per official documentation
-      const body = {
-        clientId: clientId,
-        clientSecret: clientSecret,
-        grant_type: 'client_credentials'
-      }
+      // Create form-urlencoded body (OAuth 2.0 standard)
+      const body = new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      })
       
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
           'User-Agent': 'AutonegocieHub/quitaplus-token',
         },
-        body: JSON.stringify(body),
+        body: body.toString(),
       })
 
       if (response.ok) {
-        const data = await response.json()
+        const responseText = await response.text()
+        console.log('Raw token response:', responseText.substring(0, 500))
+        
+        let data
+        try {
+          data = JSON.parse(responseText)
+        } catch (e) {
+          console.error('Failed to parse token response as JSON:', e)
+          throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`)
+        }
+        
         console.log('Token obtained successfully')
         console.log('Token data received:', { 
           hasAccessToken: !!data.access_token,
           hasExpiresIn: !!data.expires_in,
           tokenType: data.token_type,
-          expiresIn: data.expires_in 
+          expiresIn: data.expires_in,
+          allKeys: Object.keys(data)
         })
         return data
       }

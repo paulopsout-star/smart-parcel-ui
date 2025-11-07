@@ -40,12 +40,16 @@ serve(async (req) => {
       );
     }
 
+    // Obter URL do Supabase
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+
     // Obter token de autenticação
-    const tokenResponse = await fetch(`${req.headers.get('origin') || ''}/functions/v1/quitaplus-token`, {
+    const tokenResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      body: JSON.stringify({}),
     });
 
     if (!tokenResponse.ok) {
@@ -58,7 +62,6 @@ serve(async (req) => {
 
     // Preparar payload para Quita+
     const quitaPlusPayload = {
-      prePaymentKey: requestData.prePaymentKey,
       bankslip: {
         number: sanitizedNumber,
         creditorDocument: requestData.boleto.creditorDocument.replace(/\D/g, ''),
@@ -79,7 +82,7 @@ serve(async (req) => {
       attempts++;
       
       try {
-        const quitaResponse = await fetch(`${baseUrl}/payment/link-bankslip`, {
+        const quitaResponse = await fetch(`${baseUrl}/prepayment/AttachBankslip/${requestData.prePaymentKey}`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -125,8 +128,7 @@ serve(async (req) => {
 
         const quitaData = JSON.parse(responseText);
 
-        // Inicializar cliente Supabase
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+        // Inicializar cliente Supabase para atualizar DB
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
