@@ -22,21 +22,21 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
     try {
       console.log(`Token request attempt ${attempt}/${maxRetries}`)
       
-      // Create form-urlencoded body (OAuth 2.0 standard)
-      const body = new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
+      // Create JSON body (Cappta API requirement)
+      const body = JSON.stringify({
+        clientId: clientId,
+        clientSecret: clientSecret,
+        grant_type: 'client_credentials'
       })
       
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': 'AutonegocieHub/quitaplus-token',
         },
-        body: body.toString(),
+        body: body,
       })
 
       if (response.ok) {
