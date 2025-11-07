@@ -60,18 +60,16 @@ serve(async (req) => {
 
     const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || '';
 
-    // Preparar payload para Quita+
+    // Preparar payload para Quita+ (formato correto da API)
     const quitaPlusPayload = {
-      bankslip: {
-        number: sanitizedNumber,
-        creditorDocument: requestData.boleto.creditorDocument.replace(/\D/g, ''),
-        creditorName: requestData.boleto.creditorName.trim(),
-      },
+      Barcode: sanitizedNumber, // Campo único em PascalCase
     };
 
+    console.log('[quitaplus-link-boleto] Payload preparado:', JSON.stringify(quitaPlusPayload, null, 2));
     console.log('[quitaplus-link-boleto] Enviando vínculo:', {
       prePaymentKey: requestData.prePaymentKey,
       boletoLastDigits: sanitizedNumber.slice(-4),
+      url: `${baseUrl}/prepayment/AttachBankslip/${requestData.prePaymentKey}`,
     });
 
     // Chamar API Quita+ com retry
