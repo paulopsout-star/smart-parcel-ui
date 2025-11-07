@@ -33,11 +33,10 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
           'User-Agent': 'AutonegocieHub/quitaplus-token',
         },
-        body: body.toString(),
+        body: body,
       })
 
       if (response.ok) {
