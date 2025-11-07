@@ -22,14 +22,12 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
     try {
       console.log(`Token request attempt ${attempt}/${maxRetries}`)
       
-      // Create Basic Auth header: base64(client_id:client_secret)
-      const authString = btoa(`${clientId}:${clientSecret}`)
-      
       // Create URLSearchParams for form-urlencoded body
       const body = new URLSearchParams({
         grant_type: 'client_credentials',
         client_id: clientId,
         client_secret: clientSecret,
+        scope: 'api',
       })
       
       const response = await fetch(tokenUrl, {
@@ -37,7 +35,6 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
-          'Authorization': `Basic ${authString}`,
           'User-Agent': 'AutonegocieHub/quitaplus-token',
         },
         body: body.toString(),
