@@ -22,21 +22,21 @@ async function fetchTokenWithRetry(tokenUrl: string, clientId: string, clientSec
     try {
       console.log(`Token request attempt ${attempt}/${maxRetries}`)
       
-      // Create URLSearchParams for form-urlencoded body
-      const body = new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
-        scope: 'api',
-      })
+      // Create JSON body as per official documentation
+      const body = {
+        clientId: clientId,
+        clientSecret: clientSecret,
+        grant_type: 'client_credentials'
+      }
       
       const response = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Accept': 'application/json',
           'User-Agent': 'AutonegocieHub/quitaplus-token',
         },
-        body: body,
+        body: JSON.stringify(body),
       })
 
       if (response.ok) {
