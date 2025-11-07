@@ -126,23 +126,34 @@ serve(async (req) => {
 
         const quitaData = JSON.parse(responseText);
 
-        // Inicializar cliente Supabase para atualizar DB
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        // Atualizar DB apenas se paymentLinkId for UUID válido
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const isValidUuid = uuidRegex.test(requestData.paymentLinkId);
 
-        // Atualizar payment_splits com link_id
-        const { error: updateError } = await supabase
-          .from('payment_splits')
-          .update({
-            link_id: quitaData.linkId || quitaData.link_id,
-            status: 'linked',
-          })
-          .eq('payment_link_id', requestData.paymentLinkId)
-          .eq('pre_payment_key', requestData.prePaymentKey);
+        if (isValidUuid) {
+          // Inicializar cliente Supabase para atualizar DB
+          const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+          const supabase = createClient(supabaseUrl, supabaseKey);
 
-        if (updateError) {
-          console.error('[quitaplus-link-boleto] Erro ao atualizar payment_splits:', updateError);
-          throw updateError;
+          // Atualizar payment_splits com link_id
+          const { error: updateError } = await supabase
+            .from('payment_splits')
+            .update({
+              link_id: quitaData.linkId || quitaData.link_id,
+              status: 'linked',
+            })
+            .eq('payment_link_id', requestData.paymentLinkId)
+            .eq('pre_payment_key', requestData.prePaymentKey);
+
+          if (updateError) {
+            console.error('[quitaplus-link-boleto] Erro ao atualizar payment_splits:', updateError);
+            // Não falha a requisição se o vínculo na API foi bem-sucedido
+            console.warn('[quitaplus-link-boleto] Vínculo na API OK, mas falha no update do DB');
+          } else {
+            console.log('[quitaplus-link-boleto] DB atualizado com sucesso');
+          }
+        } else {
+          console.log('[quitaplus-link-boleto] PaymentLinkId não é UUID válido, pulando update do DB:', requestData.paymentLinkId);
         }
 
         console.log('[quitaplus-link-boleto] Boleto vinculado com sucesso');
