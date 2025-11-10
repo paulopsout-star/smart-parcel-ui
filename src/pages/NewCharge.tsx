@@ -497,13 +497,7 @@ export default function NewCharge() {
             {/* Main Form - 2/3 */}
             <div className="xl:col-span-2 space-y-6">
               
-              {checkingPayoutAccount ? (
-                <>
-                  <FieldSkeleton rows={2} />
-                  <FieldSkeleton rows={3} />
-                </>
-              ) : (
-                <>
+                
                   {/* Dados do Pagador */}
                   <FormSection
                     title="Dados do Pagador"
@@ -684,7 +678,7 @@ export default function NewCharge() {
                         <Alert className="bg-feedback-warning-bg border-feedback-warning">
                           <Wallet className="w-4 h-4 text-feedback-warning" />
                           <AlertDescription className="text-feedback-warning">
-                            Você ainda não possui uma conta PIX cadastrada.{' '}
+                            Você ainda não possui uma conta PIX cadastrada.{" "}
                             <Link to="/payout-accounts" className="underline font-medium">
                               Cadastrar agora
                             </Link>
@@ -693,8 +687,7 @@ export default function NewCharge() {
                       )}
                     </div>
                   </FormSection>
-                </>
-              )}
+                
             </div>
 
             {/* Sidebar - 1/3 */}
