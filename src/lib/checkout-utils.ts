@@ -8,7 +8,7 @@ export interface CheckoutConfig {
 }
 
 export const defaultCheckoutConfig: CheckoutConfig = {
-  oneTimeDiscountPct: 0.20, // 20%
+  oneTimeDiscountPct: 0, // ❌ SEM DESCONTO - Quita+ exige mínimo R$ 20,00
   popularInstallments: 6,
   maxInstallments: 12,
   minInstallmentValueCents: 1000 // R$ 10,00

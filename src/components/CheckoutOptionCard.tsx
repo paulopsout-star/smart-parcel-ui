@@ -125,7 +125,7 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
             </div>
           )}
           
-          {option.discountCents && (
+          {option.discountCents && option.discountCents > 0 && (
             <div className="text-sm text-primary font-medium mt-1">
               Economize {formatCurrency(option.discountCents)}
             </div>
@@ -155,7 +155,7 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
       case 'minimum':
         return 'Parcele em mais vezes e pague menos por mês';
       case 'single':
-        return 'Pagamento único com desconto especial';
+        return 'Pagamento único sem parcelamento';
       case 'popular':
         return 'A opção mais escolhida pelos nossos clientes';
       case 'custom':
