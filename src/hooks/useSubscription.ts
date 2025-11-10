@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCallback, useMemo } from 'react';
 
 export interface SubscriptionData {
   canonicalStatus: 'active' | 'trialing' | 'past_due' | 'canceled';
@@ -69,11 +70,11 @@ export function useSubscription(companyId?: string) {
     }
   });
 
-  const revalidateOnNewCharge = () => {
+  const revalidateOnNewCharge = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['subscription', currentCompanyId] });
-  };
+  }, [queryClient, currentCompanyId]);
 
-  const checkSubscriptionOrThrow = async (): Promise<void> => {
+  const checkSubscriptionOrThrow = useCallback(async (): Promise<void> => {
     if (loading || !subscription) {
       const result = await loadSubscription();
       if (!result.data || result.data.canonicalStatus === 'canceled') {
@@ -85,14 +86,14 @@ export function useSubscription(companyId?: string) {
     if (subscription.canonicalStatus === 'canceled') {
       throw new Error('ASSINATURA_INATIVA: A assinatura da sua empresa não permite esta operação.');
     }
-  };
+  }, [loading, subscription, loadSubscription]);
 
-  const isAllowed = () => {
+  const isAllowed = useCallback(() => {
     if (loading || !subscription) return false;
     return subscription.canonicalStatus !== 'canceled';
-  };
+  }, [loading, subscription]);
 
-  const getStatusBadgeVariant = () => {
+  const getStatusBadgeVariant = useMemo(() => {
     if (loading || !subscription) return 'secondary';
     
     switch (subscription.canonicalStatus) {
@@ -106,9 +107,9 @@ export function useSubscription(companyId?: string) {
       default:
         return 'secondary';
     }
-  };
+  }, [loading, subscription]);
 
-  const getStatusMessage = () => {
+  const getStatusMessage = useMemo(() => {
     if (loading) return 'Carregando status...';
     if (!subscription) return 'Status indisponível';
 
@@ -124,7 +125,7 @@ export function useSubscription(companyId?: string) {
       default:
         return 'Status desconhecido';
     }
-  };
+  }, [loading, subscription]);
 
   return {
     subscription,

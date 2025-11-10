@@ -9,21 +9,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Save, Eye, EyeOff, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
+import { useCompanySettings } from '@/hooks/useCompanySettings';
 
 export default function CompanySettings() {
   const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showValues, setShowValues] = useState({
     creditor_document: false,
     merchant_id: false,
   });
 
-  const [settings, setSettings] = useState({
-    creditor_document: '',
-    creditor_name: '',
-    merchant_id: '',
-  });
+  // Use stable hook for company settings
+  const { data: settings, isLoading: loading } = useCompanySettings();
 
   const [formData, setFormData] = useState({
     creditor_document: '',
@@ -31,40 +28,12 @@ export default function CompanySettings() {
     merchant_id: '',
   });
 
+  // Update formData when settings are loaded
   useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('company-settings');
-
-      if (error) {
-        console.error('Error loading settings:', error);
-        toast({
-          title: 'Erro ao carregar configurações',
-          description: 'Não foi possível carregar as configurações da empresa.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      if (data) {
-        setSettings(data);
-        setFormData(data);
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      toast({
-        title: 'Erro',
-        description: 'Erro ao carregar configurações.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
+    if (settings) {
+      setFormData(settings);
     }
-  };
+  }, [settings]);
 
   const censorValue = (value: string, show: boolean) => {
     if (!value) return '';
@@ -131,8 +100,8 @@ export default function CompanySettings() {
         });
       }
 
-      // Recarregar configurações
-      await loadSettings();
+      // Recarregar configurações (will refetch automatically via React Query)
+      setFormData(settings || { creditor_document: '', creditor_name: '', merchant_id: '' });
     } catch (error) {
       console.error('Error saving settings:', error);
       toast({
@@ -146,6 +115,7 @@ export default function CompanySettings() {
   };
 
   const hasChanges = () => {
+    if (!settings) return false;
     return (
       formData.creditor_document !== settings.creditor_document ||
       formData.creditor_name !== settings.creditor_name ||
@@ -294,7 +264,7 @@ export default function CompanySettings() {
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  onClick={loadSettings}
+                  onClick={() => setFormData(settings || { creditor_document: '', creditor_name: '', merchant_id: '' })}
                   disabled={saving || !hasChanges()}
                 >
                   Cancelar

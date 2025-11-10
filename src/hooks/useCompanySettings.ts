@@ -1,0 +1,64 @@
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { useRef, useEffect } from 'react';
+
+export interface CompanySettings {
+  creditor_document: string;
+  creditor_name: string;
+  merchant_id: string;
+}
+
+export function useCompanySettings() {
+  const { user } = useAuth();
+  const lastGoodSettings = useRef<CompanySettings | null>(null);
+  const hasLoggedOnce = useRef(false);
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['company-settings', user?.id],
+    queryFn: async () => {
+      if (!user) throw new Error('User not authenticated');
+
+      const { data, error } = await supabase.functions.invoke<CompanySettings>('company-settings', {
+        body: {},
+      });
+
+      if (error) throw error;
+      if (!data) throw new Error('No data returned from company-settings');
+
+      return data;
+    },
+    enabled: !!user,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+    retry: 1,
+  });
+
+  const isValid = !!(data?.creditor_document && data?.creditor_name && data?.merchant_id);
+
+  // Update lastGoodSettings when we have valid data
+  useEffect(() => {
+    if (isValid && data) {
+      lastGoodSettings.current = data;
+      
+      // Log only once per mount
+      if (!hasLoggedOnce.current) {
+        console.log('[useCompanySettings] ✅ Settings loaded:', {
+          creditor_document: data.creditor_document ? '***' + data.creditor_document.slice(-4) : 'EMPTY',
+          creditor_name: data.creditor_name || 'EMPTY',
+          merchant_id: data.merchant_id ? '***' + data.merchant_id.slice(-4) : 'EMPTY',
+        });
+        hasLoggedOnce.current = true;
+      }
+    }
+  }, [isValid, data]);
+
+  return {
+    data: data || lastGoodSettings.current,
+    isLoading,
+    isError,
+    error,
+    isValid: isValid || !!lastGoodSettings.current,
+    lastGoodSettings: lastGoodSettings.current,
+  };
+}

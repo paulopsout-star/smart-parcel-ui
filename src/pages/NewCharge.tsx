@@ -19,6 +19,7 @@ import { useSubscriptionContext } from "@/contexts/SubscriptionContext";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useMessageTemplates } from '@/hooks/useMessageTemplates';
+import { useCompanySettings } from '@/hooks/useCompanySettings';
 import { FormSection } from '@/components/forms/FormSection';
 import { FormField } from '@/components/forms/FormField';
 import { SummaryCard } from '@/components/forms/SummaryCard';
@@ -97,11 +98,13 @@ export default function NewCharge() {
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [enableSplit, setEnableSplit] = useState(false);
-  const [creditorSettings, setCreditorSettings] = useState<{
-    creditor_document: string;
-    creditor_name: string;
-    merchant_id: string;
-  } | null>(null);
+  
+  // Use stable hook for company settings
+  const { 
+    data: creditorSettings, 
+    isLoading: settingsLoading, 
+    isValid: isSettingsValid 
+  } = useCompanySettings();
   const [checkoutData, setCheckoutData] = useState<{
     chargeId: string;
     checkoutUrl: string;
@@ -148,62 +151,11 @@ export default function NewCharge() {
 
   // Verificar conta PIX e revalidar assinatura
   useEffect(() => {
-    const loadData = async () => {
-      // Aguardar o AuthContext terminar de carregar
-      if (authLoading) {
-        setCheckingPayoutAccount(true);
-        return;
-      }
-      
-      if (!profile) {
-        setCheckingPayoutAccount(false);
-        return;
-      }
-      
-      // Revalidate subscription when opening this page
-      revalidateOnNewCharge();
-      
+    if (!profile) return;
+    
+    const checkPayoutAccount = async () => {
       setCheckingPayoutAccount(true);
-
       try {
-        console.log('[NewCharge] 🔄 Chamando company-settings...');
-        
-        // Buscar configurações do credor
-        const { data: settingsData, error: settingsError } = await supabase.functions.invoke('company-settings');
-        
-        console.log('[NewCharge] 📦 Resposta recebida:', { 
-          hasData: !!settingsData, 
-          hasError: !!settingsError,
-          data: settingsData ? {
-            creditor_document: settingsData.creditor_document ? '***' + settingsData.creditor_document.slice(-4) : 'VAZIO',
-            creditor_name: settingsData.creditor_name || 'VAZIO',
-            merchant_id: settingsData.merchant_id ? '***' + settingsData.merchant_id.slice(-4) : 'VAZIO'
-          } : null,
-          error: settingsError 
-        });
-        
-        if (settingsError || !settingsData) {
-          console.error('[NewCharge] ❌ Erro ao carregar configurações:', settingsError);
-          setError('Erro ao carregar configurações da empresa. Tente novamente.');
-          setCreditorSettings(null);
-          return;
-        }
-
-        if (!settingsData.creditor_document || !settingsData.creditor_name) {
-          console.error('[NewCharge] ❌ Configurações do credor incompletas:', settingsData);
-          setError('Configurações da empresa incompletas. Entre em contato com o suporte.');
-          setCreditorSettings(null);
-          return;
-        }
-
-        setCreditorSettings(settingsData);
-        console.log('[NewCharge] ✅ Creditor settings loaded:', {
-          document: '***' + settingsData.creditor_document.slice(-4),
-          name: settingsData.creditor_name,
-          merchant_id: '***' + settingsData.merchant_id.slice(-4)
-        });
-
-        // Verificar conta PIX ativa
         const { data: payoutData, error: payoutError } = await supabase
           .from('payout_accounts')
           .select('id')
@@ -213,19 +165,21 @@ export default function NewCharge() {
 
         if (payoutError) throw payoutError;
         setHasPayoutAccount((payoutData ?? []).length > 0);
-
       } catch (error) {
-        console.error('[NewCharge] ❌ Exceção ao carregar dados:', error);
-        if (!creditorSettings) {
-          setError('Erro inesperado ao carregar configurações.');
-        }
+        console.error('[NewCharge] ❌ Erro ao verificar conta de pagamento:', error);
       } finally {
         setCheckingPayoutAccount(false);
       }
     };
 
-    loadData();
-  }, [profile, authLoading, revalidateOnNewCharge]);
+    checkPayoutAccount();
+  }, [profile]);
+
+  // Call revalidateOnNewCharge only once on mount (stable, no deps loop)
+  useEffect(() => {
+    revalidateOnNewCharge();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const formatAmount = (value: string) => {
     // Convert string to cents (integer)
@@ -285,7 +239,7 @@ export default function NewCharge() {
     if (!profile) return;
     
     // Guard: Validar configurações do credor antes de criar cobrança
-    if (!creditorSettings?.creditor_document || !creditorSettings?.creditor_name) {
+    if (!isSettingsValid) {
       toast({
         title: 'Configurações da empresa ausentes',
         description: 'Atualize a página e tente novamente. Se o problema persistir, entre em contato com o suporte.',
@@ -559,7 +513,7 @@ export default function NewCharge() {
           
           <SubscriptionBanner />
           
-          {!creditorSettings && (
+          {!settingsLoading && !isSettingsValid && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>
                 <strong>Configurações Incompletas:</strong> As configurações da empresa não foram carregadas. Atualize a página ou entre em contato com o suporte.
@@ -770,7 +724,7 @@ export default function NewCharge() {
                 totalAmount={watchAmount ? formatAmount(watchAmount) : 0}
                 recurrenceType={watchRecurrenceType}
                 payerName={watchPayerName}
-                isValid={isFormValid && !!creditorSettings && !readOnly && isAllowed()}
+                isValid={isFormValid && isSettingsValid && !readOnly && isAllowed()}
                 validationErrors={validationErrors}
                 onSubmit={handleSubmit(onSubmit)}
                 isLoading={isLoading}

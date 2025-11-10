@@ -31,7 +31,7 @@ export function SubscriptionBanner() {
       <AlertDescription className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="space-y-1">
-            <div className="font-semibold">{getStatusMessage()}</div>
+            <div className="font-semibold">{getStatusMessage}</div>
             <div className="text-sm">
               Entre em contato com o suporte para reativar sua assinatura e continuar usando todas as funcionalidades.
             </div>

@@ -81,7 +81,11 @@ serve(async (req) => {
 
     return new Response(JSON.stringify(settings), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store'
+      },
     });
 
   } catch (error) {
@@ -91,7 +95,11 @@ serve(async (req) => {
       details: error instanceof Error ? error.message : 'Unknown error'
     }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store'
+      },
     });
   }
 });
