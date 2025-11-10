@@ -80,7 +80,7 @@ export default function NewCharge() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
-  const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(true);
+  const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [enableSplit, setEnableSplit] = useState(false);
   const [creditorSettings, setCreditorSettings] = useState<{
@@ -97,7 +97,7 @@ export default function NewCharge() {
     description?: string;
     status: 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'ERRO';
   } | null>(null);
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { checkSubscriptionOrThrow, isAllowed, revalidateOnNewCharge } = useSubscription();
@@ -135,7 +135,16 @@ export default function NewCharge() {
   // Verificar conta PIX e revalidar assinatura
   useEffect(() => {
     const loadData = async () => {
-      if (!profile) return;
+      // Aguardar o AuthContext terminar de carregar
+      if (authLoading) {
+        setCheckingPayoutAccount(true);
+        return;
+      }
+      
+      if (!profile) {
+        setCheckingPayoutAccount(false);
+        return;
+      }
       
       // Revalidate subscription when opening this page
       revalidateOnNewCharge();
@@ -172,7 +181,7 @@ export default function NewCharge() {
     };
 
     loadData();
-  }, [profile, revalidateOnNewCharge]);
+  }, [profile, authLoading, revalidateOnNewCharge]);
 
   const formatAmount = (value: string) => {
     // Convert string to cents (integer)
