@@ -74,7 +74,7 @@ export function PaymentSimulator({
           Escolha como deseja pagar - Total: {formatCents(amountCents)}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-4">
         {conditions.map((condition) => {
           const isSelected = selectedInstallments === condition.installments;
           const isPopular = condition.installments === popularInstallment;
@@ -84,10 +84,10 @@ export function PaymentSimulator({
               key={condition.installments}
               onClick={() => onSelectInstallment?.(condition.installments, condition.totalAmount)}
               className={`
-                w-full p-4 rounded-lg border-2 transition-all text-left
-                hover:border-primary hover:bg-accent/50
+                w-full p-5 rounded-lg border-2 transition-all duration-200 text-left
+                hover:border-primary hover:bg-accent/50 hover:shadow-md
                 ${isSelected 
-                  ? 'border-primary bg-accent' 
+                  ? 'border-primary bg-accent shadow-sm' 
                   : 'border-border bg-card'
                 }
               `}

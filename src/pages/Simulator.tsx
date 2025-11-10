@@ -14,6 +14,20 @@ export default function Simulator() {
   const [selectedInstallments, setSelectedInstallments] = useState<number | undefined>();
   const [selectedTotal, setSelectedTotal] = useState<number | undefined>();
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/\D/g, '');
+    if (!raw) {
+      setInputValue('');
+      return;
+    }
+    const cents = parseInt(raw);
+    const formatted = (cents / 100).toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    setInputValue(formatted);
+  };
+
   const handleApplyValue = () => {
     const cents = toCents(inputValue);
     setAmountCents(cents);
@@ -45,24 +59,26 @@ export default function Simulator() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Valor para Simulação (R$)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="amount"
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="100,00"
-                    className="flex-1"
-                  />
-                  <Button onClick={handleApplyValue}>
-                    Simular
-                  </Button>
+              <div className="flex gap-3 items-end">
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="amount">Valor para Simulação</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                      R$
+                    </span>
+                    <Input
+                      id="amount"
+                      type="text"
+                      value={inputValue}
+                      onChange={handleInputChange}
+                      placeholder="0,00"
+                      className="pl-12 text-right font-medium text-lg"
+                    />
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Valor em centavos: {amountCents} centavos
-                </p>
+                <Button onClick={handleApplyValue} size="lg" className="px-8">
+                  Simular
+                </Button>
               </div>
 
               {selectedInstallments && selectedTotal && (
