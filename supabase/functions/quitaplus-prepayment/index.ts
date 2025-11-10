@@ -130,7 +130,7 @@ serve(async (req) => {
         },
         checkout: {
           maskFee: false,
-          installments: null  // Sempre null - o campo Installments no nível superior é suficiente
+          installments: requestData.installments > 1 ? requestData.installments : null
         }
       }
     };
