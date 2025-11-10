@@ -169,12 +169,25 @@ export default function NewCharge() {
         // Buscar configurações do credor
         const { data: settingsData, error: settingsError } = await supabase.functions.invoke('company-settings');
         
-        if (settingsError) {
-          console.error('Error loading creditor settings:', settingsError);
-        } else if (settingsData) {
-          setCreditorSettings(settingsData);
-          console.log('[NewCharge] Creditor settings loaded');
+        if (settingsError || !settingsData) {
+          console.error('[NewCharge] ❌ Erro ao carregar configurações do credor:', settingsError);
+          setError('Erro ao carregar configurações da empresa. Tente novamente.');
+          setCreditorSettings(null);
+          return; // Bloqueia criação de cobranças
         }
+
+        if (!settingsData.creditor_document || !settingsData.creditor_name) {
+          console.error('[NewCharge] ❌ Configurações do credor incompletas:', settingsData);
+          setError('Configurações da empresa incompletas. Entre em contato com o suporte.');
+          setCreditorSettings(null);
+          return;
+        }
+
+        setCreditorSettings(settingsData);
+        console.log('[NewCharge] ✅ Creditor settings loaded:', {
+          document: settingsData.creditor_document ? '***' + settingsData.creditor_document.slice(-4) : '',
+          name: settingsData.creditor_name
+        });
 
         // Verificar conta PIX ativa
         const { data: payoutData, error: payoutError } = await supabase
@@ -518,6 +531,14 @@ export default function NewCharge() {
           </div>
           
           <SubscriptionBanner />
+          
+          {!creditorSettings && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>
+                <strong>Configurações Incompletas:</strong> As configurações da empresa não foram carregadas. Atualize a página ou entre em contato com o suporte.
+              </AlertDescription>
+            </Alert>
+          )}
           
           <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
             {/* Main Form - 2/3 */}

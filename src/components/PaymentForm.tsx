@@ -277,6 +277,17 @@ export function PaymentForm({
 
       console.log('[PaymentForm] Cartão autorizado! PrePaymentKey:', prePaymentKey);
 
+      // Debug: Verificar condições para vincular boleto
+      console.log('[PaymentForm] 🔍 Verificando condições para vincular boleto:', {
+        hasBoleto,
+        temLinhaDigitavel: !!boletoLinhaDigitavel,
+        comprimentoLinha: boletoLinhaDigitavel?.length,
+        temCreditorDocument: !!creditorDocument,
+        creditorDocument: creditorDocument ? '***' + creditorDocument.slice(-4) : 'VAZIO',
+        temCreditorName: !!creditorName,
+        creditorName: creditorName || 'VAZIO'
+      });
+
       // ETAPA 2: Vincular boleto (se existir)
       if (hasBoleto && boletoLinhaDigitavel && creditorDocument && creditorName) {
         console.log('[PaymentForm] Vinculando boleto à autorização...');
