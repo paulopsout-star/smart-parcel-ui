@@ -284,6 +284,16 @@ export default function NewCharge() {
     
     if (!profile) return;
     
+    // Guard: Validar configurações do credor antes de criar cobrança
+    if (!creditorSettings?.creditor_document || !creditorSettings?.creditor_name) {
+      toast({
+        title: 'Configurações da empresa ausentes',
+        description: 'Atualize a página e tente novamente. Se o problema persistir, entre em contato com o suporte.',
+        className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
+      });
+      return;
+    }
+    
     // Verificar assinatura antes de criar cobrança
     try {
       await checkSubscriptionOrThrow();
@@ -760,7 +770,7 @@ export default function NewCharge() {
                 totalAmount={watchAmount ? formatAmount(watchAmount) : 0}
                 recurrenceType={watchRecurrenceType}
                 payerName={watchPayerName}
-                isValid={isFormValid && !readOnly && isAllowed()}
+                isValid={isFormValid && !!creditorSettings && !readOnly && isAllowed()}
                 validationErrors={validationErrors}
                 onSubmit={handleSubmit(onSubmit)}
                 isLoading={isLoading}

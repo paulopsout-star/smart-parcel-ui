@@ -12,7 +12,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  if (req.method !== 'GET') {
+  if (!['GET', 'POST', 'OPTIONS'].includes(req.method)) {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -21,6 +21,7 @@ serve(async (req) => {
 
   try {
     console.log('[company-settings] 📥 Requisição recebida');
+    console.log('[company-settings] 🔍 Method:', req.method);
     console.log('[company-settings] 🔐 Authorization header:', req.headers.get('Authorization') ? 'Presente' : 'AUSENTE');
     
     // Verificar autenticação
