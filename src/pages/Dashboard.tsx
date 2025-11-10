@@ -10,7 +10,8 @@ import {
   LogOut,
   Plus,
   Settings,
-  BarChart3
+  BarChart3,
+  Calculator
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +19,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
 import { SubscriptionBanner } from '@/components/SubscriptionBanner';
 import { useSubscription } from '@/hooks/useSubscription';
+import { SimulatorModal } from '@/components/SimulatorModal';
 
 interface DashboardStats {
   totalCharges: number;
@@ -39,6 +41,7 @@ export default function Dashboard() {
     recurringCharges: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [showSimulatorModal, setShowSimulatorModal] = useState(false);
 
   useEffect(() => {
     loadDashboardStats();
@@ -141,6 +144,16 @@ export default function Dashboard() {
             Histórico
           </Link>
         </Button>
+
+        <Button 
+          variant="outline" 
+          size="lg" 
+          className="w-full sm:w-auto"
+          onClick={() => setShowSimulatorModal(true)}
+        >
+          <Calculator className="w-4 h-4 mr-2" />
+          Simular Parcelamento
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -239,6 +252,12 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Simulator Modal */}
+        <SimulatorModal
+          open={showSimulatorModal}
+          onOpenChange={setShowSimulatorModal}
+        />
     </div>
   );
 }
