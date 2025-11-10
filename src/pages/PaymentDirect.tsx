@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { mapSimulationToPaymentOptions, findClosestInstallment } from '@/lib/checkout-utils';
 import { PaymentOption } from '@/types/payment-options';
-import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle, CreditCard } from 'lucide-react';
 import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -240,18 +240,26 @@ export default function PaymentDirect() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 py-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Escolha a melhor forma de pagamento
-          </h1>
-          <p className="text-muted-foreground">
+    <div className="min-h-screen bg-gradient-to-br from-background via-surface to-surface-light">
+      {/* Header */}
+      <div className="border-b border-border/40 bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CreditCard className="w-6 h-6 text-primary" />
+              <h1 className="text-2xl font-bold text-foreground">
+                Escolha a melhor forma de pagamento
+              </h1>
+            </div>
+          </div>
+          <p className="text-muted-foreground mt-2 text-center lg:text-left">
             {charge.description || `Pagamento para ${charge.payer_name || 'Cliente'}`}
           </p>
         </div>
+      </div>
 
+      {/* Main Content */}
+      <div className="max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 py-6 lg:py-10">
         {/* Alerta de erro na simulação */}
         {simulationError && (
           <Alert variant="destructive" className="mb-6">
@@ -262,7 +270,7 @@ export default function PaymentDirect() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[45%_55%] gap-6 lg:gap-10">
           {/* Coluna Esquerda: Opções de Pagamento */}
           <div>
             <h2 className="text-xl font-semibold text-foreground mb-4">

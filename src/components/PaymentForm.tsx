@@ -406,22 +406,27 @@ export function PaymentForm({
   }
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <CreditCard className="w-6 h-6 text-primary" />
-        <h3 className="text-xl font-semibold text-card-foreground">
-          Dados para Pagamento
-        </h3>
+    <Card className="p-6 lg:p-8">
+      <div className="flex items-center gap-3 mb-6 lg:mb-8">
+        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+          <CreditCard className="w-5 h-5 text-primary" />
+        </div>
+        <div>
+          <h3 className="text-xl lg:text-2xl font-bold text-card-foreground">
+            Dados para Pagamento
+          </h3>
+          <p className="text-sm text-muted-foreground">Preencha os dados abaixo para concluir</p>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6 lg:space-y-8">
         {/* Dados do Pagador */}
-        <div>
-          <h4 className="font-medium text-card-foreground mb-4 flex items-center gap-2">
-            <User className="w-4 h-4" />
+        <div className="bg-muted/30 rounded-lg p-5 lg:p-6 space-y-4">
+          <h4 className="text-base lg:text-lg font-bold text-card-foreground mb-4 flex items-center gap-2">
+            <User className="w-5 h-5 text-primary" />
             Dados Pessoais
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div>
               <Label htmlFor="payerName">Nome Completo</Label>
               <Input
@@ -487,39 +492,37 @@ export function PaymentForm({
           </div>
         </div>
 
-        <Separator />
-
         {/* Dados do Cartão */}
-        <div>
-          <h4 className="font-medium text-card-foreground mb-4 flex items-center gap-2">
-            <CreditCard className="w-4 h-4" />
+        <div className="bg-muted/30 rounded-lg p-5 lg:p-6 space-y-4">
+          <h4 className="text-base lg:text-lg font-bold text-card-foreground mb-4 flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-primary" />
             Dados do Cartão
           </h4>
           
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="cardHolderName">Nome no Cartão</Label>
+            <div className="space-y-2">
+              <Label htmlFor="cardHolderName" className="text-sm font-medium">Nome no Cartão</Label>
               <Input
                 id="cardHolderName"
                 value={formData.cardHolderName}
                 onChange={(e) => handleInputChange('cardHolderName', e.target.value)}
                 placeholder="Nome como está no cartão"
-                className={errors.cardHolderName ? "border-destructive" : ""}
+                className={`h-11 ${errors.cardHolderName ? "border-destructive" : ""}`}
               />
               {errors.cardHolderName && (
                 <p className="text-sm text-destructive mt-1">{errors.cardHolderName}</p>
               )}
             </div>
 
-            <div>
-              <Label htmlFor="cardNumber">Número do Cartão</Label>
+            <div className="space-y-2">
+              <Label htmlFor="cardNumber" className="text-sm font-medium">Número do Cartão</Label>
               <Input
                 id="cardNumber"
                 value={formData.cardNumber}
                 onChange={(e) => handleInputChange('cardNumber', e.target.value)}
                 placeholder="0000 0000 0000 0000"
                 maxLength={19}
-                className={errors.cardNumber ? "border-destructive" : ""}
+                className={`h-11 ${errors.cardNumber ? "border-destructive" : ""}`}
               />
               {errors.cardNumber && (
                 <p className="text-sm text-destructive mt-1">{errors.cardNumber}</p>
@@ -527,17 +530,17 @@ export function PaymentForm({
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="cardExpirationDate">Validade</Label>
+              <div className="space-y-2">
+                <Label htmlFor="cardExpirationDate" className="text-sm font-medium">Validade</Label>
                 <div className="relative">
-                  <Calendar className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="cardExpirationDate"
                     value={formData.cardExpirationDate}
                     onChange={(e) => handleInputChange('cardExpirationDate', e.target.value)}
                     placeholder="MM/AA"
                     maxLength={5}
-                    className={`pl-10 ${errors.cardExpirationDate ? "border-destructive" : ""}`}
+                    className={`h-11 pl-10 ${errors.cardExpirationDate ? "border-destructive" : ""}`}
                   />
                 </div>
                 {errors.cardExpirationDate && (
@@ -545,17 +548,17 @@ export function PaymentForm({
                 )}
               </div>
 
-              <div>
-                <Label htmlFor="cardCvv">CVV</Label>
+              <div className="space-y-2">
+                <Label htmlFor="cardCvv" className="text-sm font-medium">CVV</Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
                     id="cardCvv"
                     value={formData.cardCvv}
                     onChange={(e) => handleInputChange('cardCvv', e.target.value)}
                     placeholder="123"
                     maxLength={4}
-                    className={`pl-10 ${errors.cardCvv ? "border-destructive" : ""}`}
+                    className={`h-11 pl-10 ${errors.cardCvv ? "border-destructive" : ""}`}
                   />
                 </div>
                 {errors.cardCvv && (
@@ -566,53 +569,61 @@ export function PaymentForm({
           </div>
         </div>
 
-        <Separator />
-
-        {/* Resumo e Ações */}
-        <div className="bg-muted/30 p-4 rounded-lg">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-muted-foreground">{productName}</span>
-            <span className="font-medium">R$ {amount.toFixed(2)}</span>
+        {/* Resumo e Ações - Sticky */}
+        <div className="lg:sticky lg:top-4 space-y-4">
+          <div className="bg-gradient-to-br from-primary/5 to-primary/10 border border-primary/20 p-5 lg:p-6 rounded-lg">
+            <h5 className="text-sm font-semibold text-card-foreground mb-3 uppercase tracking-wide">Resumo do Pagamento</h5>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">{productName}</span>
+                <span className="font-medium">R$ {amount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Parcelamento</span>
+                <span className="font-medium">
+                  {installments}x de R$ {(amount / installments).toFixed(2)}
+                </span>
+              </div>
+              <Separator className="my-2" />
+              <div className="flex justify-between items-center pt-1">
+                <span className="font-semibold text-base">Total</span>
+                <span className="font-bold text-xl text-primary">
+                  R$ {amount.toFixed(2)}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-muted-foreground">
-              {installments}x de R$ {(amount / installments).toFixed(2)}
-            </span>
-            <span className="font-semibold text-primary">
-              Total: R$ {amount.toFixed(2)}
-            </span>
-          </div>
-        </div>
 
-        <div className="flex gap-3">
-          {onCancel && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-              disabled={paymentState.isProcessing}
-              className="flex-1"
-            >
-              Cancelar
-            </Button>
-          )}
-          
-          <Button
-            type="submit"
-            disabled={paymentState.isProcessing || disableSubmit}
-            className="flex-1 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80"
-          >
-            {paymentState.isProcessing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-background border-t-transparent mr-2" />
-                Processando...
-              </>
-            ) : disableSubmit ? (
-              "Selecione uma opção de pagamento"
-            ) : (
-              "Pagar Agora"
+          <div className="flex flex-col sm:flex-row gap-3">
+            {onCancel && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={paymentState.isProcessing}
+                className="flex-1 h-12"
+              >
+                Cancelar
+              </Button>
             )}
-          </Button>
+            
+            <Button
+              type="submit"
+              disabled={paymentState.isProcessing || disableSubmit}
+              className="flex-1 h-12 text-base font-semibold bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-lg hover:shadow-xl transition-all"
+            >
+              {paymentState.isProcessing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-background border-t-transparent mr-2" />
+                  Processando...
+                </>
+              ) : disableSubmit ? (
+                "Selecione uma opção de pagamento"
+              ) : (
+                "Pagar Agora"
+              )}
+            </Button>
+          </div>
         </div>
       </form>
     </Card>
