@@ -34,6 +34,17 @@ serve(async (req) => {
     const requestData: PrePaymentRequest = await req.json();
     console.log('[quitaplus-prepayment] Iniciando pré-pagamento para charge:', requestData.chargeId);
 
+    // Validar número de parcelas
+    if (requestData.installments < 1 || requestData.installments > 12) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Número de parcelas inválido',
+          message: 'O número de parcelas deve estar entre 1 e 12'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Obter URL do Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 
@@ -119,10 +130,18 @@ serve(async (req) => {
         },
         checkout: {
           maskFee: false,
-          installments: requestData.installments > 1 ? requestData.installments : null
+          installments: null  // Sempre null - o campo Installments no nível superior é suficiente
         }
       }
     };
+
+    // Log do payload montado para debug
+    console.log('[quitaplus-prepayment] Payload montado:', {
+      AmountInCents: requestData.amount,
+      Installments: requestData.installments,
+      CheckoutInstallments: null,
+      ChargeId: requestData.chargeId
+    });
 
     // Concatenar os dois JSONs como string RAW (igual ao teste que funcionou)
     const rawBody = `${JSON.stringify(cardPayload, null, 2)}
