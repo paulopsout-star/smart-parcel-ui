@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { User, Receipt, Banknote, Wallet } from "lucide-react";
+import { User, Receipt, Banknote, Wallet, Calculator } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,7 @@ import { SummaryCard } from '@/components/forms/SummaryCard';
 import { FieldSkeleton } from '@/components/forms/FieldSkeleton';
 import { formatPhone, formatDocument, unformatPhone, unformatDocument } from '@/lib/input-masks';
 import { cn } from '@/lib/utils';
+import { SimulatorModal } from '@/components/SimulatorModal';
 
 const formSchema = z.object({
   // Dados do pagador
@@ -98,6 +99,7 @@ export default function NewCharge() {
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [enableSplit, setEnableSplit] = useState(false);
+  const [showSimulatorModal, setShowSimulatorModal] = useState(false);
   
   // Use stable hook for company settings
   const { 
@@ -630,23 +632,37 @@ export default function NewCharge() {
                         helpText="Valor total a ser cobrado"
                         required
                       >
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary font-medium">R$</span>
-                          <Input
-                            id="amount"
-                            placeholder="0,00"
-                            {...register("amount")}
-                            className={cn(
-                              "pl-10 font-medium text-lg transition-all duration-200",
-                              errors.amount && "border-feedback-error focus:ring-feedback-error"
-                            )}
-                          />
+                        <div className="space-y-3">
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary font-medium">R$</span>
+                            <Input
+                              id="amount"
+                              placeholder="0,00"
+                              {...register("amount")}
+                              className={cn(
+                                "pl-10 font-medium text-lg transition-all duration-200",
+                                errors.amount && "border-feedback-error focus:ring-feedback-error"
+                              )}
+                            />
+                          </div>
+                          {watchAmount && (
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-brand font-medium">
+                                {formatCurrency(formatAmount(watchAmount))}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowSimulatorModal(true)}
+                                className="gap-2"
+                              >
+                                <Calculator className="h-4 w-4" />
+                                Simular Parcelamento
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                        {watchAmount && (
-                          <p className="text-sm text-brand font-medium mt-2">
-                            {formatCurrency(formatAmount(watchAmount))}
-                          </p>
-                        )}
                       </FormField>
 
                       {/* Linha Digitável */}
@@ -746,6 +762,13 @@ export default function NewCharge() {
               checkoutData={checkoutData}
             />
           )}
+
+          {/* Simulator Modal */}
+          <SimulatorModal
+            open={showSimulatorModal}
+            onOpenChange={setShowSimulatorModal}
+            initialAmount={watchAmount ? formatAmount(watchAmount) : undefined}
+          />
         </div>
       </div>
     </ErrorBoundary>
