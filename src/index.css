@@ -34,6 +34,27 @@ All colors MUST be HSL.
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
+    
+    /* Feedback colors - SEM VERMELHO */
+    --feedback-error: 0 0% 30%;
+    --feedback-error-bg: 0 0% 96%;
+    --feedback-warning: 38 92% 50%;
+    --feedback-warning-bg: 48 96% 95%;
+    --feedback-success: 152 100% 42%;
+    --feedback-success-bg: 152 100% 97%;
+    --feedback-info: 210 50% 50%;
+    --feedback-info-bg: 210 50% 97%;
+
+    /* Sombras e elevação */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    --shadow-focus: 0 0 0 3px hsl(152 100% 42% / 0.2);
+
+    /* Spacing tokens */
+    --spacing-section: 2rem;
+    --spacing-card: 1.5rem;
+    --spacing-field: 1rem;
     --success: 142 76% 36%;
     --success-foreground: 355 7% 97%;
     --warning: 38 92% 50%;

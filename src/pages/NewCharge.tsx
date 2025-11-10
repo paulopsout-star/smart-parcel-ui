@@ -2,15 +2,12 @@ import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, ArrowLeft, CreditCard, Wallet, Receipt, Banknote } from "lucide-react";
+import { User, Receipt, Banknote, Wallet } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,11 +16,15 @@ import { z } from "zod";
 import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useSubscriptionContext } from "@/contexts/SubscriptionContext";
-import { createPaymentLinkForCharge } from "@/lib/payment-link-utils";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useMessageTemplates } from '@/hooks/useMessageTemplates';
+import { FormSection } from '@/components/forms/FormSection';
+import { FormField } from '@/components/forms/FormField';
+import { SummaryCard } from '@/components/forms/SummaryCard';
+import { FieldSkeleton } from '@/components/forms/FieldSkeleton';
+import { formatPhone, formatDocument, unformatPhone, unformatDocument } from '@/lib/input-masks';
+import { cn } from '@/lib/utils';
 
 const formSchema = z.object({
   // Dados do pagador
@@ -129,6 +130,7 @@ export default function NewCharge() {
   const watchHasBoleto = watch("has_boleto");
   const watchHasBoletoLink = watch("has_boleto_link");
   const watchBoletoLinhaDigitavel = watch("boleto_linha_digitavel");
+  const watchPayerName = watch("payer_name");
 
   // Verificar conta PIX e revalidar assinatura
   useEffect(() => {
@@ -236,7 +238,7 @@ export default function NewCharge() {
       toast({
         title: 'Assinatura Inativa',
         description: error instanceof Error ? error.message : 'Sua assinatura não permite criar novas cobranças.',
-        variant: 'destructive',
+        className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
       });
       return;
     }
@@ -248,7 +250,7 @@ export default function NewCharge() {
       toast({
         title: "Conta PIX necessária",
         description: "Cadastre uma conta PIX em 'Contas PIX' antes de criar cobranças recorrentes sem boleto.",
-        variant: "destructive"
+        className: 'bg-feedback-warning-bg border-feedback-warning text-feedback-warning'
       });
       return;
     }
@@ -305,8 +307,8 @@ export default function NewCharge() {
           created_by: profile.id,
           payer_name: data.payer_name,
           payer_email: data.payer_email,
-          payer_document: data.payer_document.replace(/\D/g, ''),
-          payer_phone: data.payer_phone.replace(/\D/g, ''),
+          payer_document: unformatDocument(data.payer_document),
+          payer_phone: unformatPhone(data.payer_phone),
           amount: amountInCents,
           description: data.description || null,
           installments: parseInt(data.installments),
@@ -365,6 +367,7 @@ export default function NewCharge() {
           description: data.recurrence_type === 'pontual' 
             ? "Cobrança com boleto criada. O processamento será realizado quando a integração estiver ativa."
             : `Cobrança recorrente configurada (${data.recurrence_type}). O agendamento será processado quando a integração estiver ativa.`,
+          className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
         });
         navigate('/charges');
         return;
@@ -415,6 +418,7 @@ export default function NewCharge() {
             description: enableSplit 
               ? "Link com split PIX+Cartão criado com sucesso."
               : "Link de pagamento direto criado com sucesso.",
+            className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
           });
           
           // Setar dados completos
@@ -428,7 +432,7 @@ export default function NewCharge() {
           toast({
             title: "Cobrança criada com aviso",
             description: "A cobrança foi criada, mas o link de pagamento não pôde ser gerado automaticamente. Use 'Gerar Link' no histórico.",
-            variant: "default"
+            className: 'bg-feedback-warning-bg border-feedback-warning text-feedback-warning'
           });
           
           // Navegar para o histórico mesmo com erro
@@ -442,482 +446,259 @@ export default function NewCharge() {
     } catch (error: any) {
       console.error('Error creating charge:', error);
       setError('Erro ao criar cobrança. Tente novamente.');
+      toast({
+        title: "Erro ao criar cobrança",
+        description: error.message || 'Tente novamente.',
+        className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Calcular erros de validação para o SummaryCard
+  const validationErrors = [
+    !watchAmount && "Valor não informado",
+    !watchBoletoLinhaDigitavel && "Linha digitável obrigatória",
+    errors.payer_name?.message,
+    errors.payer_email?.message,
+    errors.payer_phone?.message,
+    errors.payer_document?.message,
+    errors.boleto_linha_digitavel?.message,
+    errors.amount?.message
+  ].filter(Boolean) as string[];
+
+  const isFormValid = Object.keys(errors).length === 0 && !!watchAmount && !!watchBoletoLinhaDigitavel;
+
   return (
     <ErrorBoundary>
-      <div className="container mx-auto p-6">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">Nova Cobrança</h1>
-          <p className="text-muted-foreground">
-            Crie uma cobrança pontual ou recorrente
-          </p>
-        </div>
-        
-        <SubscriptionBanner />
-        
-          <div className="max-w-4xl mx-auto">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-            <div className="grid lg:grid-cols-3 gap-8">
-              {/* Main Form */}
-              <div className="lg:col-span-2 space-y-6">
-                
-                {/* Dados do Pagador */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Dados do Pagador</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <div className="mb-8 space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-ink">Nova Cobrança</h1>
+            <p className="text-sm text-ink-secondary">
+              Crie uma cobrança pontual com vínculo de boleto
+            </p>
+          </div>
+          
+          <SubscriptionBanner />
+          
+          <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
+            {/* Main Form - 2/3 */}
+            <div className="xl:col-span-2 space-y-6">
+              
+              {checkingPayoutAccount ? (
+                <>
+                  <FieldSkeleton rows={2} />
+                  <FieldSkeleton rows={3} />
+                </>
+              ) : (
+                <>
+                  {/* Dados do Pagador */}
+                  <FormSection
+                    title="Dados do Pagador"
+                    icon={<User className="w-5 h-5 text-brand" />}
+                  >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="payer_name">Nome Completo *</Label>
+                      <FormField
+                        label="Nome Completo"
+                        htmlFor="payer_name"
+                        error={errors.payer_name?.message}
+                        required
+                      >
                         <Input
                           id="payer_name"
                           placeholder="Nome do pagador"
                           {...register("payer_name")}
-                          className={errors.payer_name ? "border-destructive" : ""}
+                          className={cn(
+                            "transition-all duration-200",
+                            errors.payer_name && "border-feedback-error focus:ring-feedback-error"
+                          )}
                         />
-                        {errors.payer_name && (
-                          <p className="text-sm text-destructive mt-1">{errors.payer_name.message}</p>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="payer_email">Email *</Label>
+                      </FormField>
+
+                      <FormField
+                        label="Email"
+                        htmlFor="payer_email"
+                        error={errors.payer_email?.message}
+                        helpText="Será usado para envio de confirmações"
+                        required
+                      >
                         <Input
                           id="payer_email"
                           type="email"
                           placeholder="email@exemplo.com"
                           {...register("payer_email")}
-                          className={errors.payer_email ? "border-destructive" : ""}
+                          className={cn(
+                            "transition-all duration-200",
+                            errors.payer_email && "border-feedback-error focus:ring-feedback-error"
+                          )}
                         />
-                        {errors.payer_email && (
-                          <p className="text-sm text-destructive mt-1">{errors.payer_email.message}</p>
-                        )}
-                      </div>
+                      </FormField>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="payer_phone">Telefone *</Label>
+                      <FormField
+                        label="Telefone"
+                        htmlFor="payer_phone"
+                        error={errors.payer_phone?.message}
+                        helpText="Formato: (11) 99999-9999"
+                        required
+                      >
                         <Input
                           id="payer_phone"
-                          placeholder="11999999999"
+                          placeholder="(11) 99999-9999"
                           {...register("payer_phone")}
-                          className={errors.payer_phone ? "border-destructive" : ""}
+                          onChange={(e) => {
+                            const formatted = formatPhone(e.target.value);
+                            setValue("payer_phone", formatted);
+                          }}
+                          className={cn(
+                            "transition-all duration-200",
+                            errors.payer_phone && "border-feedback-error focus:ring-feedback-error"
+                          )}
                         />
-                        {errors.payer_phone && (
-                          <p className="text-sm text-destructive mt-1">{errors.payer_phone.message}</p>
-                        )}
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="payer_document">CPF/CNPJ *</Label>
+                      </FormField>
+
+                      <FormField
+                        label="CPF/CNPJ"
+                        htmlFor="payer_document"
+                        error={errors.payer_document?.message}
+                        helpText="Apenas números"
+                        required
+                      >
                         <Input
                           id="payer_document"
                           placeholder="000.000.000-00"
                           {...register("payer_document")}
-                          className={errors.payer_document ? "border-destructive" : ""}
+                          onChange={(e) => {
+                            const formatted = formatDocument(e.target.value);
+                            setValue("payer_document", formatted);
+                          }}
+                          className={cn(
+                            "transition-all duration-200",
+                            errors.payer_document && "border-feedback-error focus:ring-feedback-error"
+                          )}
                         />
-                        {errors.payer_document && (
-                          <p className="text-sm text-destructive mt-1">{errors.payer_document.message}</p>
-                        )}
-                      </div>
+                      </FormField>
                     </div>
-                  </CardContent>
-                </Card>
+                  </FormSection>
 
-                 {/* Dados da Cobrança */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Configurações da Cobrança</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="amount">Valor *</Label>
-                        <Input
-                          id="amount"
-                          placeholder="R$ 0,00"
-                          {...register("amount")}
-                          className={errors.amount ? "border-destructive" : ""}
-                        />
-                        {errors.amount && (
-                          <p className="text-sm text-destructive mt-1">{errors.amount.message}</p>
-                        )}
-                        {watchAmount && (
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Valor: {formatCurrency(formatAmount(watchAmount))}
-                          </p>
-                        )}
-                      </div>
-                      
-                      {false && (
-                        <div>
-                          <Label htmlFor="installments">Parcelas</Label>
-                          <Controller
-                            control={control}
-                            name="installments"
-                            render={({ field }) => (
-                              <Select
-                                onValueChange={field.onChange}
-                                value={field.value}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="1">1x à vista</SelectItem>
-                                  {Array.from({ length: 47 }, (_, i) => i + 2).map((num) => (
-                                    <SelectItem key={num} value={num.toString()}>
-                                      {num}x
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                  {/* Configurações da Cobrança */}
+                  <FormSection
+                    title="Configurações da Cobrança"
+                    icon={<Receipt className="w-5 h-5 text-brand" />}
+                  >
+                    <div className="space-y-6">
+                      {/* Valor */}
+                      <FormField
+                        label="Valor da Cobrança"
+                        htmlFor="amount"
+                        error={errors.amount?.message}
+                        helpText="Valor total a ser cobrado"
+                        required
+                      >
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary font-medium">R$</span>
+                          <Input
+                            id="amount"
+                            placeholder="0,00"
+                            {...register("amount")}
+                            className={cn(
+                              "pl-10 font-medium text-lg transition-all duration-200",
+                              errors.amount && "border-feedback-error focus:ring-feedback-error"
                             )}
                           />
                         </div>
-                      )}
-                    </div>
-
-                    {false && (
-                      <div className="flex items-center space-x-2">
-                        <Controller
-                          control={control}
-                          name="mask_fee"
-                          render={({ field }) => (
-                            <Checkbox
-                              id="mask_fee"
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          )}
-                        />
-                        <Label htmlFor="mask_fee">
-                          Parcelas fechadas (cliente não pode alterar)
-                        </Label>
-                      </div>
-                    )}
-
-                    {/* Toggle Split PIX+Cartão - apenas para pontual sem boleto */}
-                    {false && watchRecurrenceType === 'pontual' && !watchHasBoletoLink && (
-                      <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/30">
-                        <Checkbox
-                          id="enable_split"
-                          checked={enableSplit}
-                          onCheckedChange={(checked) => setEnableSplit(!!checked)}
-                        />
-                        <Label htmlFor="enable_split" className="flex items-center gap-2 cursor-pointer">
-                          <Wallet className="w-4 h-4" />
-                          Habilitar Split PIX+Cartão
-                        </Label>
-                      </div>
-                    )}
-
-                    {/* Linha Digitável do Boleto - sempre visível */}
-                    <div className="p-4 border rounded-lg bg-muted/50">
-                      <Label htmlFor="boleto_linha_digitavel">Linha Digitável do Boleto *</Label>
-                      <Textarea
-                        id="boleto_linha_digitavel"
-                        placeholder="Digite ou cole a linha digitável do boleto (apenas números)"
-                        {...register("boleto_linha_digitavel")}
-                        className={`font-mono resize-none ${errors.boleto_linha_digitavel ? "border-destructive" : ""}`}
-                        rows={3}
-                      />
-                      {errors.boleto_linha_digitavel && (
-                        <p className="text-sm text-destructive mt-1">{errors.boleto_linha_digitavel.message}</p>
-                      )}
-                      <div className="flex items-start gap-2 mt-2">
-                        <Banknote className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                        <div className="text-sm text-muted-foreground">
-                          <p className="mb-1">
-                            <strong>Onde encontrar:</strong> A linha digitável está no seu boleto, geralmente logo abaixo do código de barras.
-                          </p>
-                          <p className="mb-1">
-                            <strong>Formato esperado:</strong> 47 ou 48 dígitos (apenas números)
-                          </p>
-                          {watchBoletoLinhaDigitavel && (
-                            <p className="text-primary">
-                              <strong>Dígitos encontrados:</strong> {watchBoletoLinhaDigitavel.replace(/\D/g, '').length}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Manter checkbox antigo para recorrentes */}
-                    {watchRecurrenceType !== 'pontual' && (
-                      <div className="flex items-center space-x-2">
-                        <Controller
-                          control={control}
-                          name="has_boleto"
-                          render={({ field }) => (
-                            <Checkbox
-                              id="has_boleto"
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          )}
-                        />
-                        <Label htmlFor="has_boleto">
-                          Cobrança com vínculo de boleto (simulado)
-                        </Label>
-                      </div>
-                    )}
-
-                    {watchRecurrenceType !== 'pontual' && watchHasBoleto && (
-                      <div>
-                        <Label htmlFor="boleto_barcode">Linha Digitável do Boleto</Label>
-                        <Input
-                          id="boleto_barcode"
-                          placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
-                          {...register("boleto_barcode")}
-                          className="font-mono"
-                        />
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Digite a linha digitável do boleto para simulação
-                        </p>
-                      </div>
-                    )}
-
-                    {false && (
-                      <div>
-                        <Label htmlFor="message_template_id">Template de Mensagem</Label>
-                        <Controller
-                          control={control}
-                          name="message_template_id"
-                          render={({ field }) => (
-                            <Select
-                              onValueChange={field.onChange}
-                              value={field.value ?? ''}
-                              disabled={loadingTemplates || templatesError}
-                            >
-                              <SelectTrigger>
-                                <SelectValue 
-                                  placeholder={
-                                    loadingTemplates 
-                                      ? "Carregando..." 
-                                      : templatesError 
-                                        ? "Erro ao carregar" 
-                                        : "Selecione um template"
-                                  } 
-                                />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {messageTemplates.length === 0 && !loadingTemplates && !templatesError ? (
-                                  <div className="px-3 py-2 text-muted-foreground text-sm">
-                                    Nenhum template ativo
-                                  </div>
-                                ) : (
-                                  <>
-                                    <SelectItem value="none">Nenhum template</SelectItem>
-                                    {messageTemplates.map((template) => (
-                                      <SelectItem key={template.id} value={template.id}>
-                                        {template.name}
-                                      </SelectItem>
-                                    ))}
-                                  </>
-                                )}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        />
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Template para mensagem WhatsApp (simulado). {' '}
-                          <Link to="/message-templates" className="text-primary hover:underline">
-                            Gerenciar templates
-                          </Link>
-                        </p>
-                        {templatesError && (
-                          <p className="text-sm text-destructive mt-1">
-                            Erro ao carregar templates. Você pode continuar sem selecionar um template.
+                        {watchAmount && (
+                          <p className="text-sm text-brand font-medium mt-2">
+                            {formatCurrency(formatAmount(watchAmount))}
                           </p>
                         )}
-                      </div>
-                    )}
+                      </FormField>
 
-                    {/* Alert for PIX account requirement - only for charges without boleto link */}
-                    {((watchRecurrenceType === 'pontual' && !watchHasBoletoLink) || 
-                      (watchRecurrenceType !== 'pontual' && !watchHasBoleto)) && 
-                      !hasPayoutAccount && !checkingPayoutAccount && (
-                      <Alert variant="destructive">
-                        <Wallet className="w-4 h-4" />
-                        <AlertDescription>
-                          Para cobranças sem boleto, você precisa ter uma conta PIX cadastrada. 
-                          <Link to="/payout-accounts" className="ml-1 underline">
-                            Cadastrar conta PIX
-                          </Link>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    <div>
-                      <Label htmlFor="description">Descrição</Label>
-                      <Textarea
-                        id="description"
-                        placeholder="Descrição da cobrança..."
-                        {...register("description")}
-                        className={errors.description ? "border-destructive" : ""}
-                      />
-                      {errors.description && (
-                        <p className="text-sm text-destructive mt-1">{errors.description.message}</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Recorrência */}
-                {false && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Recorrência</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <Label>Tipo de Cobrança</Label>
-                        <Controller
-                          control={control}
-                          name="recurrence_type"
-                          render={({ field }) => (
-                            <Select
-                              onValueChange={field.onChange}
-                              value={field.value}
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pontual">Pontual (única vez)</SelectItem>
-                                <SelectItem value="diaria">Diária</SelectItem>
-                                <SelectItem value="semanal">Semanal</SelectItem>
-                                <SelectItem value="quinzenal">Quinzenal</SelectItem>
-                                <SelectItem value="mensal">Mensal</SelectItem>
-                                <SelectItem value="semestral">Semestral</SelectItem>
-                                <SelectItem value="anual">Anual</SelectItem>
-                              </SelectContent>
-                            </Select>
+                      {/* Linha Digitável */}
+                      <FormField
+                        label="Linha Digitável do Boleto"
+                        htmlFor="boleto_linha_digitavel"
+                        error={errors.boleto_linha_digitavel?.message}
+                        helpText="47 ou 48 dígitos (apenas números)"
+                        helpIcon
+                        required
+                      >
+                        <Textarea
+                          id="boleto_linha_digitavel"
+                          placeholder="Digite ou cole a linha digitável do boleto"
+                          {...register("boleto_linha_digitavel")}
+                          className={cn(
+                            "font-mono resize-none transition-all duration-200",
+                            errors.boleto_linha_digitavel && "border-feedback-error focus:ring-feedback-error"
                           )}
+                          rows={3}
                         />
-                      </div>
-
-                      {watchRecurrenceType !== 'pontual' && (
-                        <>
-                          <div>
-                            <Label htmlFor="recurrence_interval">Intervalo</Label>
-                            <Input
-                              id="recurrence_interval"
-                              type="number"
-                              min="1"
-                              placeholder="1"
-                              {...register("recurrence_interval")}
-                            />
-                            <p className="text-sm text-muted-foreground mt-1">
-                              A cada {watch("recurrence_interval") || 1} {watchRecurrenceType === 'diaria' ? 'dia(s)' : 
-                              watchRecurrenceType === 'semanal' ? 'semana(s)' :
-                              watchRecurrenceType === 'quinzenal' ? 'quinzena(s)' :
-                              watchRecurrenceType === 'mensal' ? 'mês(es)' :
-                              watchRecurrenceType === 'semestral' ? 'semestre(s)' : 'ano(s)'}
-                            </p>
+                        
+                        {/* Contador de dígitos */}
+                        {watchBoletoLinhaDigitavel && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Banknote className="w-4 h-4 text-brand" />
+                            <span className={cn(
+                              "text-sm font-medium",
+                              watchBoletoLinhaDigitavel.replace(/\D/g, '').length === 47 ||
+                              watchBoletoLinhaDigitavel.replace(/\D/g, '').length === 48
+                                ? "text-feedback-success"
+                                : "text-ink-muted"
+                            )}>
+                              {watchBoletoLinhaDigitavel.replace(/\D/g, '').length} dígitos
+                            </span>
                           </div>
-
-                          <div>
-                            <Label htmlFor="recurrence_end_date">Data de Fim (opcional)</Label>
-                            <Input
-                              id="recurrence_end_date"
-                              type="date"
-                              {...register("recurrence_end_date")}
-                            />
-                            <p className="text-sm text-muted-foreground mt-1">
-                              Deixe em branco para recorrência sem fim
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-
-              {/* Sidebar */}
-              <div className="space-y-6">
-                {/* Resumo */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Resumo</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Valor:</span>
-                      <span className="font-medium">
-                        {watchAmount ? formatCurrency(formatAmount(watchAmount)) : "R$ 0,00"}
-                      </span>
-                    </div>
-                    
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Parcelas:</span>
-                      <span className="font-medium">
-                        {watch("installments")}x
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Tipo:</span>
-                      <span className="font-medium capitalize">
-                        {watchRecurrenceType}
-                        {watchRecurrenceType === 'pontual' && watchHasBoletoLink && (
-                          <span className="text-xs text-muted-foreground ml-1">(com boleto)</span>
                         )}
-                      </span>
+                      </FormField>
+
+                      {/* Descrição */}
+                      <FormField
+                        label="Descrição"
+                        htmlFor="description"
+                        helpText="Informações adicionais sobre a cobrança"
+                      >
+                        <Textarea
+                          id="description"
+                          placeholder="Ex: Referente ao contrato #123..."
+                          {...register("description")}
+                          rows={4}
+                          className="transition-all duration-200"
+                        />
+                      </FormField>
+
+                      {/* Alerta de Conta PIX (se necessário) */}
+                      {!hasPayoutAccount && !checkingPayoutAccount && (
+                        <Alert className="bg-feedback-warning-bg border-feedback-warning">
+                          <Wallet className="w-4 h-4 text-feedback-warning" />
+                          <AlertDescription className="text-feedback-warning">
+                            Você ainda não possui uma conta PIX cadastrada.{' '}
+                            <Link to="/payout-accounts" className="underline font-medium">
+                              Cadastrar agora
+                            </Link>
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
+                  </FormSection>
+                </>
+              )}
+            </div>
 
-                    {/* Show boleto info in summary */}
-                    {watchRecurrenceType === 'pontual' && watchHasBoletoLink && watchBoletoLinhaDigitavel && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Linha Digitável:</span>
-                        <span className="font-medium text-xs font-mono">
-                          {watchBoletoLinhaDigitavel.replace(/\D/g, '').substring(0, 12)}...
-                        </span>
-                      </div>
-                    )}
-
-                    {error && (
-                      <Alert variant="destructive">
-                        <AlertDescription>{error}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    {readOnly && canonicalStatus === 'past_due' && (
-                      <Alert>
-                        <AlertDescription>
-                          Sua assinatura está em atraso. Você pode visualizar cobranças, mas não pode criar novas.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                     <Button
-                       type="submit"
-                       className="w-full"
-                       disabled={isLoading || !isAllowed() || readOnly}
-                     >
-                       {isLoading ? (
-                         <>
-                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                           Criando...
-                         </>
-                       ) : (
-                         <>
-                           <CreditCard className="w-4 h-4 mr-2" />
-                           Criar Cobrança
-                         </>
-                       )}
-                     </Button>
-                   </CardContent>
-                 </Card>
-                </div>
+            {/* Sidebar - 1/3 */}
+            <div className="xl:col-span-1">
+              <SummaryCard
+                totalAmount={watchAmount ? formatAmount(watchAmount) : 0}
+                recurrenceType={watchRecurrenceType}
+                payerName={watchPayerName}
+                isValid={isFormValid && !readOnly && isAllowed()}
+                validationErrors={validationErrors}
+                onSubmit={handleSubmit(onSubmit)}
+                isLoading={isLoading}
+              />
             </div>
           </form>
 

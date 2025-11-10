@@ -88,6 +88,16 @@ export default {
           alt: "hsl(var(--surface-alt))",
           light: "hsl(var(--surface-light))",
         },
+        feedback: {
+          error: "hsl(var(--feedback-error))",
+          "error-bg": "hsl(var(--feedback-error-bg))",
+          warning: "hsl(var(--feedback-warning))",
+          "warning-bg": "hsl(var(--feedback-warning-bg))",
+          success: "hsl(var(--feedback-success))",
+          "success-bg": "hsl(var(--feedback-success-bg))",
+          info: "hsl(var(--feedback-info))",
+          "info-bg": "hsl(var(--feedback-info-bg))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
