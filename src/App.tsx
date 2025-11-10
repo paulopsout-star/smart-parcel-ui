@@ -25,6 +25,7 @@ import MessageTemplates from "./pages/MessageTemplates";
 import MessageQueue from "./pages/MessageQueue";
 import CreateAdmin from "./pages/CreateAdmin";
 import NotFound from "./pages/NotFound";
+import Simulator from "./pages/Simulator";
 
 // Admin pages
 import UserManagement from "./pages/admin/UserManagement";
@@ -58,6 +59,7 @@ const App = () => {
                 <Route path="/payment-pix/:id" element={<PaymentPix />} />
                 <Route path="/payment-card/:id" element={<PaymentCard />} />
                 <Route path="/thank-you" element={<ThankYou />} />
+                <Route path="/simulador" element={<Simulator />} />
                 
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/new-charge" element={<ProtectedRoute><NewCharge /></ProtectedRoute>} />
