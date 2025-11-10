@@ -215,44 +215,49 @@ export function PaymentForm({
     });
 
     try {
-      console.log('[PaymentForm] Iniciando processamento de pagamento...');
+      console.log('[PaymentForm] Iniciando pré-pagamento Quita+...');
+      console.log('[PaymentForm] Dados:', {
+        amount: Math.round(amount * 100),
+        installments,
+        hasBoleto,
+        hasLinhaDigitavel: !!boletoLinhaDigitavel
+      });
 
-      // Chamar edge function quitaplus-proxy com contrato canônico
+      // ETAPA 1: Pré-pagamento (autorização do cartão)
       const { data: prePaymentData, error: prePaymentError } = await supabase.functions.invoke(
-        'quitaplus-proxy',
+        'quitaplus-prepayment',
         {
           body: {
-            orderType: "boleto", // Tipo para API Quita+
-            amount: Math.round(amount * 100), // Valor em centavos
-            orderId: chargeId,
-            description: productName,
+            chargeId,
+            paymentLinkId,
+            amount: Math.round(amount * 100),
+            installments,
+            card: {
+              holderName: formData.cardHolderName,
+              number: formData.cardNumber.replace(/\s/g, ''),
+              expirationDate: formData.cardExpirationDate.replace('/', ''),
+              cvv: formData.cardCvv,
+            },
             payer: {
               name: formData.payerName,
               document: formData.payerDocument.replace(/\D/g, ''),
               email: formData.payerEmail,
               phoneNumber: formData.payerPhoneNumber.replace(/\D/g, ''),
             },
-            bankslip: hasBoleto && boletoLinhaDigitavel ? {
-              number: boletoLinhaDigitavel.replace(/\D/g, ''),
-            } : {},
-            checkout: {
-              maskFee: false,
-              installments: installments,
-            },
           },
         }
       );
 
       if (prePaymentError) {
-        console.error('[PaymentForm] Erro na chamada quitaplus-proxy:', prePaymentError);
-        throw new Error('Falha ao processar pagamento via proxy');
+        console.error('[PaymentForm] Erro no pré-pagamento:', prePaymentError);
+        throw new Error(prePaymentError.message || 'Falha ao autorizar cartão');
       }
 
-      // Verificar se há erro na resposta da API
       if (prePaymentData?.error) {
-        const errorMessage = prePaymentData.details || prePaymentData.error || 'Pagamento recusado';
+        const errorMessage = prePaymentData.message || prePaymentData.error || 'Cartão recusado';
+        console.error('[PaymentForm] Cartão recusado:', errorMessage);
         toast({
-          title: "Pagamento recusado",
+          title: "Cartão recusado",
           description: errorMessage,
           variant: "destructive",
         });
@@ -265,26 +270,77 @@ export function PaymentForm({
         return;
       }
 
-      // Extrair ID da transação da resposta Quita+ (pode variar conforme API)
-      const transactionId = prePaymentData?.orderId || 
-                           prePaymentData?.linkId || 
-                           prePaymentData?.guid ||
-                           chargeId;
-      
-      console.log('[PaymentForm] Pagamento processado com sucesso:', transactionId);
-      console.log('[PaymentForm] Resposta completa:', prePaymentData);
+      const prePaymentKey = prePaymentData?.prePaymentKey;
+      if (!prePaymentKey) {
+        throw new Error('Chave de pré-pagamento não retornada pela API');
+      }
 
-      // Sucesso!
+      console.log('[PaymentForm] Cartão autorizado! PrePaymentKey:', prePaymentKey);
+
+      // ETAPA 2: Vincular boleto (se existir)
+      if (hasBoleto && boletoLinhaDigitavel && creditorDocument && creditorName) {
+        console.log('[PaymentForm] Vinculando boleto à autorização...');
+
+        const { data: linkData, error: linkError } = await supabase.functions.invoke(
+          'quitaplus-link-boleto',
+          {
+            body: {
+              prePaymentKey,
+              paymentLinkId,
+              boleto: {
+                number: boletoLinhaDigitavel.replace(/\D/g, ''),
+                creditorDocument: creditorDocument.replace(/\D/g, ''),
+                creditorName,
+              },
+            },
+          }
+        );
+
+        if (linkError) {
+          console.error('[PaymentForm] Erro ao vincular boleto:', linkError);
+          throw new Error(linkError.message || 'Falha ao vincular boleto');
+        }
+
+        if (linkData?.error) {
+          const errorMessage = linkData.message || linkData.error || 'Erro ao vincular boleto';
+          console.error('[PaymentForm] Boleto não vinculado:', errorMessage);
+          toast({
+            title: "Erro ao vincular boleto",
+            description: errorMessage,
+            variant: "destructive",
+          });
+          setPaymentState({
+            isProcessing: false,
+            isSuccess: false,
+            error: errorMessage,
+            transactionId: null,
+          });
+          return;
+        }
+
+        console.log('[PaymentForm] Boleto vinculado com sucesso!');
+      }
+
+      // ETAPA 3: Sucesso total
+      const transactionId = prePaymentData?.transactionId || prePaymentKey;
+      
+      console.log('[PaymentForm] ✅ Pagamento concluído:', {
+        transactionId,
+        boletoVinculado: hasBoleto && boletoLinhaDigitavel
+      });
+
       setPaymentState({
         isProcessing: false,
         isSuccess: true,
         error: null,
-        transactionId: transactionId,
+        transactionId,
       });
 
       toast({
         title: "Pagamento autorizado!",
-        description: `Transação processada com sucesso em ${installments}x.`,
+        description: hasBoleto 
+          ? `Cartão autorizado e boleto vinculado com sucesso!`
+          : `Transação processada com sucesso em ${installments}x.`,
       });
 
       onSuccess?.(transactionId);

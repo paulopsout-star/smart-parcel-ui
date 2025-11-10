@@ -396,6 +396,18 @@ export default function NewCharge() {
         return;
       }
 
+      // Log para cobrança pontual com vínculo de boleto
+      if (data.recurrence_type === 'pontual' && data.has_boleto_link && normalizedLinhaDigitavel) {
+        console.log('[NewCharge] ℹ️ Cobrança pontual com boleto criada:', {
+          chargeId: charge.id,
+          temLinhaDigitavel: true,
+          comprimentoLinha: normalizedLinhaDigitavel.length,
+          creditorDocument: creditorSettings?.creditor_document,
+          creditorName: creditorSettings?.creditor_name,
+          info: 'O boleto será vinculado no checkout quando o cliente pagar com cartão (quitaplus-link-boleto)'
+        });
+      }
+
       // Para cobranças pontuais de cartão, gerar link de checkout interno (sem API externa)
       console.log('[NewCharge] Gerando link de checkout para cobrança pontual...');
       if (data.recurrence_type === 'pontual' && !data.has_boleto) {
