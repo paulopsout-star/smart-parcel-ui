@@ -26,14 +26,40 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
   customResult
 }) => {
   const [localAmount, setLocalAmount] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
 
   const handleAmountChange = (value: string) => {
-    setLocalAmount(value);
-    const cleanValue = value.replace(/[^\d]/g, '');
-    const cents = parseInt(cleanValue) || 0;
+    // Aceitar apenas números, vírgula e ponto
+    const cleanValue = value.replace(/[^\d,]/g, '');
+    setLocalAmount(cleanValue);
+    
+    // Se o campo foi limpo, resetar o estado de busca
+    if (!cleanValue) {
+      setIsSearching(false);
+      if (onCustomValueChange) {
+        onCustomValueChange(0); // Notificar pai para limpar resultado
+      }
+      return;
+    }
+    
+    // Converter para centavos
+    let cents = 0;
+    if (cleanValue.includes(',')) {
+      const parts = cleanValue.split(',');
+      const reais = parseInt(parts[0]) || 0;
+      const centavos = parts[1] ? parseInt(parts[1].padEnd(2, '0').slice(0, 2)) : 0;
+      cents = reais * 100 + centavos;
+    } else {
+      cents = (parseInt(cleanValue) || 0) * 100;
+    }
     
     if (onCustomValueChange && cents > 0) {
-      onCustomValueChange(cents);
+      setIsSearching(true);
+      // Simular um pequeno delay para mostrar "buscando"
+      setTimeout(() => {
+        onCustomValueChange(cents);
+        setIsSearching(false);
+      }, 300);
     }
   };
 
@@ -43,32 +69,49 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
         <div className="space-y-3">
           {customResult ? (
             <>
-              <div className="text-2xl font-bold text-ink">
+              <div className="text-3xl font-bold text-primary animate-in fade-in duration-300">
                 {formatCurrency(customResult.installmentValueCents)}
               </div>
-              <div className="text-sm text-ink-secondary">
+              <div className="text-sm text-ink font-medium">
                 <strong>{customResult.installments}x</strong> de{' '}
                 <strong>{formatCurrency(customResult.installmentValueCents)}</strong>
                 {' '}= Total <strong>{formatCurrency(customResult.totalCents)}</strong>
               </div>
+              <div className="mt-3 p-3 bg-primary/10 rounded-lg border border-primary/30 animate-in slide-in-from-top duration-300">
+                <p className="text-sm text-primary font-medium flex items-center gap-2">
+                  <span className="text-lg">✓</span>
+                  <span>Parcela mais próxima ao valor desejado</span>
+                </p>
+              </div>
             </>
           ) : (
             <>
-              <div className="text-2xl font-bold text-ink">R$ 0,00</div>
+              <div className="text-2xl font-bold text-muted-foreground">R$ --,--</div>
               <div className="text-sm text-ink-secondary">
                 Digite o valor da parcela desejada
               </div>
             </>
           )}
           
-          <div className="space-y-3">
-            <Input
-              type="text"
-              placeholder="Ex: 50,00"
-              value={localAmount}
-              onChange={(e) => handleAmountChange(e.target.value)}
-              className="text-sm bg-gray-50 border-gray-200"
-            />
+          <div className="space-y-2 mt-4">
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+                R$
+              </span>
+              <Input
+                type="text"
+                placeholder="0,00"
+                value={localAmount}
+                onChange={(e) => handleAmountChange(e.target.value)}
+                className="text-base pl-10 bg-background border-border focus:border-primary font-medium"
+              />
+            </div>
+            {isSearching && (
+              <p className="text-xs text-primary animate-pulse flex items-center gap-1">
+                <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+                Buscando parcela mais próxima...
+              </p>
+            )}
           </div>
         </div>
       );

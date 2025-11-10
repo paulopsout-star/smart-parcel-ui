@@ -206,6 +206,14 @@ export default function PaymentDirect() {
     : 1;
 
   const handleCustomValueChange = (desiredValueCents: number) => {
+    // Se valor for 0, limpar resultado
+    if (desiredValueCents === 0) {
+      setCustomAmount(0);
+      setCustomInstallments(1);
+      setCustomResult(null);
+      return;
+    }
+
     if (!simulation?.simulation?.conditions) {
       toast({
         title: "Erro",
@@ -227,12 +235,6 @@ export default function PaymentDirect() {
         installments: closest.installments,
         totalCents: closest.totalAmount,
         installmentValueCents: closest.installmentAmount
-      });
-
-      toast({
-        title: "Parcela encontrada",
-        description: `${closest.installments}x de R$ ${(closest.installmentAmount / 100).toFixed(2)} = Total R$ ${(closest.totalAmount / 100).toFixed(2)}`,
-        duration: 3000
       });
     }
   };
