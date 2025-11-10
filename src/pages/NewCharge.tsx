@@ -166,14 +166,27 @@ export default function NewCharge() {
       setCheckingPayoutAccount(true);
 
       try {
+        console.log('[NewCharge] 🔄 Chamando company-settings...');
+        
         // Buscar configurações do credor
         const { data: settingsData, error: settingsError } = await supabase.functions.invoke('company-settings');
         
+        console.log('[NewCharge] 📦 Resposta recebida:', { 
+          hasData: !!settingsData, 
+          hasError: !!settingsError,
+          data: settingsData ? {
+            creditor_document: settingsData.creditor_document ? '***' + settingsData.creditor_document.slice(-4) : 'VAZIO',
+            creditor_name: settingsData.creditor_name || 'VAZIO',
+            merchant_id: settingsData.merchant_id ? '***' + settingsData.merchant_id.slice(-4) : 'VAZIO'
+          } : null,
+          error: settingsError 
+        });
+        
         if (settingsError || !settingsData) {
-          console.error('[NewCharge] ❌ Erro ao carregar configurações do credor:', settingsError);
+          console.error('[NewCharge] ❌ Erro ao carregar configurações:', settingsError);
           setError('Erro ao carregar configurações da empresa. Tente novamente.');
           setCreditorSettings(null);
-          return; // Bloqueia criação de cobranças
+          return;
         }
 
         if (!settingsData.creditor_document || !settingsData.creditor_name) {
@@ -185,8 +198,9 @@ export default function NewCharge() {
 
         setCreditorSettings(settingsData);
         console.log('[NewCharge] ✅ Creditor settings loaded:', {
-          document: settingsData.creditor_document ? '***' + settingsData.creditor_document.slice(-4) : '',
-          name: settingsData.creditor_name
+          document: '***' + settingsData.creditor_document.slice(-4),
+          name: settingsData.creditor_name,
+          merchant_id: '***' + settingsData.merchant_id.slice(-4)
         });
 
         // Verificar conta PIX ativa
@@ -201,7 +215,10 @@ export default function NewCharge() {
         setHasPayoutAccount((payoutData ?? []).length > 0);
 
       } catch (error) {
-        console.error('Error loading payout account:', error);
+        console.error('[NewCharge] ❌ Exceção ao carregar dados:', error);
+        if (!creditorSettings) {
+          setError('Erro inesperado ao carregar configurações.');
+        }
       } finally {
         setCheckingPayoutAccount(false);
       }

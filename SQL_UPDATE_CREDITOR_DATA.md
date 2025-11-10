@@ -46,11 +46,11 @@ WHERE
   AND (creditor_document IS NULL OR creditor_name IS NULL)
 ORDER BY created_at DESC;
 
--- 2. Atualizar cobranças (EXECUTE APENAS APÓS SUBSTITUIR OS VALORES)
+-- 2. Atualizar cobranças (EXECUTE APENAS UMA VEZ)
 UPDATE charges
 SET 
-  creditor_document = '<CREDITOR_DOCUMENT>', -- ⚠️ SUBSTITUA pelo valor real (ex: '54.329.414/0001-98')
-  creditor_name = '<CREDITOR_NAME>',         -- ⚠️ SUBSTITUA pelo valor real (ex: 'AUTONEGOCIE')
+  creditor_document = '54329414001414',        -- ✅ Novo valor correto
+  creditor_name = 'Auto Negocie Digital Full', -- ✅ Novo valor correto
   updated_at = now()
 WHERE 
   has_boleto_link = true

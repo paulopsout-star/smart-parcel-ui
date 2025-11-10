@@ -20,18 +20,23 @@ serve(async (req) => {
   }
 
   try {
+    console.log('[company-settings] 📥 Requisição recebida');
+    console.log('[company-settings] 🔐 Authorization header:', req.headers.get('Authorization') ? 'Presente' : 'AUSENTE');
+    
     // Verificar autenticação
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const authHeader = req.headers.get('Authorization');
 
     if (!authHeader) {
+      console.error('[company-settings] ❌ Authorization header ausente');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    console.log('[company-settings] 🔍 Verificando usuário...');
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: {
         headers: { Authorization: authHeader },
@@ -42,13 +47,14 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
     if (userError || !user) {
+      console.error('[company-settings] ❌ Usuário não autenticado:', userError);
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    console.log('[company-settings] User authenticated:', user.id);
+    console.log('[company-settings] ✅ User authenticated:', user.id);
 
     // Retornar configurações do credor a partir das variáveis de ambiente
     const settings = {
@@ -57,10 +63,19 @@ serve(async (req) => {
       merchant_id: Deno.env.get('QUITA_MAIS_MERCHANT_ID') || '',
     };
 
-    console.log('[company-settings] Returning settings (censored):', {
-      creditor_document: settings.creditor_document ? '***' + settings.creditor_document.slice(-4) : '',
-      creditor_name: settings.creditor_name,
-      merchant_id: settings.merchant_id ? '***' + settings.merchant_id.slice(-4) : '',
+    console.log('[company-settings] 🔍 Secrets carregados:', {
+      has_creditor_document: !!settings.creditor_document,
+      has_creditor_name: !!settings.creditor_name,
+      has_merchant_id: !!settings.merchant_id,
+      creditor_document_length: settings.creditor_document.length,
+      creditor_name_length: settings.creditor_name.length,
+      merchant_id_length: settings.merchant_id.length
+    });
+
+    console.log('[company-settings] 📤 Retornando configurações (censurado):', {
+      creditor_document: settings.creditor_document ? '***' + settings.creditor_document.slice(-4) : 'VAZIO',
+      creditor_name: settings.creditor_name || 'VAZIO',
+      merchant_id: settings.merchant_id ? '***' + settings.merchant_id.slice(-4) : 'VAZIO',
     });
 
     return new Response(JSON.stringify(settings), {

@@ -288,8 +288,19 @@ export function PaymentForm({
         creditorName: creditorName || 'VAZIO'
       });
 
+      console.log('[PaymentForm] 🔍 Verificando condições para vincular boleto:', {
+        hasBoleto,
+        temLinhaDigitavel: !!boletoLinhaDigitavel,
+        comprimentoLinha: boletoLinhaDigitavel?.length,
+        temCreditorDocument: !!creditorDocument,
+        creditorDocument: creditorDocument ? '***' + creditorDocument.slice(-4) : 'VAZIO',
+        temCreditorName: !!creditorName,
+        creditorName: creditorName || 'VAZIO'
+      });
+
       // ETAPA 2: Vincular boleto (se existir)
       if (hasBoleto && boletoLinhaDigitavel && creditorDocument && creditorName) {
+        console.log('[PaymentForm] ✅ Vinculando boleto ao pré-pagamento...');
         console.log('[PaymentForm] Vinculando boleto à autorização...');
 
         const { data: linkData, error: linkError } = await supabase.functions.invoke(
