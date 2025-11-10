@@ -30,8 +30,22 @@ const formSchema = z.object({
   // Dados do pagador
   payer_name: z.string().min(1, "Nome é obrigatório").max(200, "Nome deve ter no máximo 200 caracteres"),
   payer_email: z.string().email("Email inválido"),
-  payer_phone: z.string().min(10, "Telefone deve ter pelo menos 10 dígitos").max(11, "Telefone deve ter no máximo 11 dígitos"),
-  payer_document: z.string().min(11, "Documento inválido"),
+  payer_phone: z.string()
+    .min(1, "Telefone é obrigatório")
+    .refine((val) => {
+      const digits = val.replace(/\D/g, '');
+      return digits.length >= 10 && digits.length <= 11;
+    }, {
+      message: "Telefone deve ter 10 ou 11 dígitos"
+    }),
+  payer_document: z.string()
+    .min(1, "CPF/CNPJ é obrigatório")
+    .refine((val) => {
+      const digits = val.replace(/\D/g, '');
+      return digits.length === 11 || digits.length === 14;
+    }, {
+      message: "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos"
+    }),
   
   // Dados da cobrança
   amount: z.string().min(1, "Valor é obrigatório"),
