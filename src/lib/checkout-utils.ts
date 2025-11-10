@@ -1,4 +1,5 @@
 import { PaymentOption } from '@/types/payment-options';
+import { InstallmentCondition, SimulationResponse } from '@/hooks/usePaymentSimulation';
 
 export interface CheckoutConfig {
   oneTimeDiscountPct: number;
@@ -118,4 +119,102 @@ export const distributeCentsInInstallments = (totalCents: number, installments: 
   }
   
   return values;
+};
+
+/**
+ * Mapeia resultados da simulação da API para as 4 opções de checkout
+ */
+export const mapSimulationToPaymentOptions = (
+  simulation: SimulationResponse | undefined,
+  originalTotalCents: number
+): PaymentOption[] => {
+  if (!simulation?.simulation?.conditions || simulation.simulation.conditions.length === 0) {
+    return [];
+  }
+
+  const conditions = simulation.simulation.conditions;
+  const options: PaymentOption[] = [];
+
+  // 1️⃣ À vista (1x)
+  const oneTime = conditions.find(c => c.installments === 1);
+  if (oneTime) {
+    const discountCents = originalTotalCents - oneTime.totalAmount > 0 
+      ? originalTotalCents - oneTime.totalAmount 
+      : 0;
+    
+    options.push({
+      id: 'single',
+      title: 'À vista',
+      type: 'single',
+      totalCents: oneTime.totalAmount,
+      installments: 1,
+      installmentValueCents: oneTime.installmentAmount,
+      discountCents
+    });
+  }
+
+  // 2️⃣ Mais escolhido (6x)
+  const popular = conditions.find(c => c.installments === 6);
+  if (popular) {
+    options.push({
+      id: 'popular',
+      title: '6x sem juros',
+      type: 'popular',
+      totalCents: popular.totalAmount,
+      installments: 6,
+      installmentValueCents: popular.installmentAmount
+    });
+  }
+
+  // 3️⃣ Menor valor de parcela (máximo de parcelas disponível)
+  const maxInstallments = Math.max(...conditions.map(c => c.installments));
+  const minimum = conditions.find(c => c.installments === maxInstallments);
+  if (minimum) {
+    options.push({
+      id: 'minimum',
+      title: `${maxInstallments}x de menor valor`,
+      type: 'minimum',
+      totalCents: minimum.totalAmount,
+      installments: maxInstallments,
+      installmentValueCents: minimum.installmentAmount
+    });
+  }
+
+  // 4️⃣ Valor personalizado (placeholder - será preenchido dinamicamente)
+  options.push({
+    id: 'custom',
+    title: 'Valor Personalizado',
+    type: 'custom',
+    totalCents: originalTotalCents,
+    installments: 1,
+    installmentValueCents: originalTotalCents,
+    isCustom: true
+  });
+
+  return options;
+};
+
+/**
+ * Encontra a parcela mais próxima do valor desejado
+ */
+export const findClosestInstallment = (
+  desiredInstallmentValueCents: number,
+  conditions: InstallmentCondition[]
+): InstallmentCondition | null => {
+  if (!conditions || conditions.length === 0) {
+    return null;
+  }
+
+  let closest = conditions[0];
+  let minDiff = Math.abs(conditions[0].installmentAmount - desiredInstallmentValueCents);
+
+  for (const condition of conditions) {
+    const diff = Math.abs(condition.installmentAmount - desiredInstallmentValueCents);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = condition;
+    }
+  }
+
+  return closest;
 };

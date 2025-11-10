@@ -39,7 +39,8 @@ export function usePaymentSimulation(amountCents: number | null) {
       return data as SimulationResponse;
     },
     enabled: !!amountCents && amountCents > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 0, // ✅ SEM CACHE - resimular sempre
+    gcTime: 0, // ✅ Não manter em cache
     retry: 1,
   });
 }

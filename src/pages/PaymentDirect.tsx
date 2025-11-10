@@ -7,9 +7,11 @@ import { CheckoutOptionCard } from '@/components/CheckoutOptionCard';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
-import { calculatePaymentOptions } from '@/lib/checkout-utils';
+import { mapSimulationToPaymentOptions, findClosestInstallment } from '@/lib/checkout-utils';
 import { PaymentOption } from '@/types/payment-options';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
+import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function PaymentDirect() {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +23,18 @@ export default function PaymentDirect() {
   const [selectedOption, setSelectedOption] = useState<PaymentOption | null>(null);
   const [customAmount, setCustomAmount] = useState(0);
   const [customInstallments, setCustomInstallments] = useState(1);
+  const [customResult, setCustomResult] = useState<{
+    installments: number;
+    totalCents: number;
+    installmentValueCents: number;
+  } | null>(null);
+
+  // Hook de simulação em tempo real
+  const { 
+    data: simulation, 
+    isLoading: isSimulating, 
+    error: simulationError 
+  } = usePaymentSimulation(charge?.amount_cents || null);
 
   useEffect(() => {
     const fetchCharge = async () => {
@@ -146,11 +160,12 @@ export default function PaymentDirect() {
     }
   };
 
-  if (loading) {
+  if (loading || isSimulating) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="max-w-2xl w-full p-8">
           <Skeleton className="h-8 w-48 mb-6" />
+          <Skeleton className="h-24 w-full mb-4" />
           <Skeleton className="h-24 w-full mb-4" />
           <Skeleton className="h-24 w-full mb-4" />
           <Skeleton className="h-12 w-full" />
@@ -177,8 +192,10 @@ export default function PaymentDirect() {
     );
   }
 
-  // Calcular opções de pagamento
-  const paymentOptions = calculatePaymentOptions(charge.amount_cents);
+  // Mapear opções de pagamento da simulação
+  const paymentOptions = charge 
+    ? mapSimulationToPaymentOptions(simulation, charge.amount_cents)
+    : [];
 
   // Calcular valor e parcelas finais baseado na seleção
   const finalAmount = selectedOption 
@@ -188,9 +205,36 @@ export default function PaymentDirect() {
     ? (selectedOption.isCustom ? customInstallments : selectedOption.installments)
     : 1;
 
-  const handleCustomValueChange = (amountCents: number, installments: number) => {
-    setCustomAmount(amountCents);
-    setCustomInstallments(installments);
+  const handleCustomValueChange = (desiredValueCents: number) => {
+    if (!simulation?.simulation?.conditions) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível buscar opções de parcelamento.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const closest = findClosestInstallment(
+      desiredValueCents,
+      simulation.simulation.conditions
+    );
+
+    if (closest) {
+      setCustomAmount(closest.totalAmount);
+      setCustomInstallments(closest.installments);
+      setCustomResult({
+        installments: closest.installments,
+        totalCents: closest.totalAmount,
+        installmentValueCents: closest.installmentAmount
+      });
+
+      toast({
+        title: "Parcela encontrada",
+        description: `${closest.installments}x de R$ ${(closest.installmentAmount / 100).toFixed(2)} = Total R$ ${(closest.totalAmount / 100).toFixed(2)}`,
+        duration: 3000
+      });
+    }
   };
 
   return (
@@ -206,6 +250,16 @@ export default function PaymentDirect() {
           </p>
         </div>
 
+        {/* Alerta de erro na simulação */}
+        {simulationError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Não foi possível simular as opções de parcelamento. Por favor, tente novamente.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Coluna Esquerda: Opções de Pagamento */}
           <div>
@@ -220,6 +274,7 @@ export default function PaymentDirect() {
                   isSelected={selectedOption?.id === option.id}
                   onSelect={() => setSelectedOption(option)}
                   onCustomValueChange={handleCustomValueChange}
+                  customResult={option.isCustom ? customResult : undefined}
                 />
               ))}
             </div>
@@ -233,7 +288,7 @@ export default function PaymentDirect() {
               productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
               onSuccess={handlePaymentSuccess}
               skipSplitCheck={true}
-              disableSubmit={!selectedOption}
+              disableSubmit={!selectedOption || isSimulating}
               initialPayerData={{
                 name: charge.payer_name || '',
                 email: charge.payer_email || '',

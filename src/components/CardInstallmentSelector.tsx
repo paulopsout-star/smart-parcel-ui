@@ -39,12 +39,6 @@ export function CardInstallmentSelector({
     }
   }, [selectedInstallments, options]);
 
-  const handleCustomValueChange = (amountCents: number, installments: number) => {
-    setCustomAmount(amountCents);
-    setCustomInstallments(installments);
-    onInstallmentsChange(installments);
-  };
-
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-foreground mb-2">
@@ -57,7 +51,25 @@ export function CardInstallmentSelector({
             option={option}
             isSelected={selectedOption === option.id}
             onSelect={() => setSelectedOption(option.id)}
-            onCustomValueChange={handleCustomValueChange}
+            onCustomValueChange={
+              option.isCustom 
+                ? (desiredCents) => {
+                    // Para este componente, usamos lógica local sem simulação
+                    setCustomAmount(desiredCents);
+                    setCustomInstallments(1);
+                    onInstallmentsChange(1);
+                  }
+                : undefined
+            }
+            customResult={
+              option.isCustom && selectedOption === option.id
+                ? {
+                    installments: customInstallments,
+                    totalCents: customAmount,
+                    installmentValueCents: Math.floor(customAmount / customInstallments)
+                  }
+                : undefined
+            }
           />
         ))}
       </div>

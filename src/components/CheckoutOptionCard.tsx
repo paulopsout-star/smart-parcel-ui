@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { PaymentOption } from '@/types/payment-options';
 import { formatCurrency } from '@/lib/utils';
-import { validateCustomPayment, distributeCentsInInstallments } from '@/lib/checkout-utils';
 import { Clock, Zap, TrendingUp, DollarSign } from 'lucide-react';
 
 interface CheckoutOptionCardProps {
   option: PaymentOption;
   isSelected: boolean;
   onSelect: () => void;
-  onCustomValueChange?: (amountCents: number, installments: number) => void;
-  customAmount?: number;
-  customInstallments?: number;
+  onCustomValueChange?: (desiredValueCents: number) => void;
+  customResult?: {
+    installments: number;
+    totalCents: number;
+    installmentValueCents: number;
+  } | null;
 }
 
 export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
@@ -22,82 +23,52 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
   isSelected,
   onSelect,
   onCustomValueChange,
-  customAmount = 0,
-  customInstallments = 1
+  customResult
 }) => {
-  const [localAmount, setLocalAmount] = useState(customAmount ? (customAmount / 100).toFixed(2) : '');
-  const [localInstallments, setLocalInstallments] = useState(customInstallments.toString());
+  const [localAmount, setLocalAmount] = useState('');
 
   const handleAmountChange = (value: string) => {
     setLocalAmount(value);
-    const cents = Math.round(parseFloat(value.replace(',', '.')) * 100) || 0;
-    const installments = parseInt(localInstallments) || 1;
+    const cleanValue = value.replace(/[^\d]/g, '');
+    const cents = parseInt(cleanValue) || 0;
     
     if (onCustomValueChange && cents > 0) {
-      onCustomValueChange(cents, installments);
-    }
-  };
-
-  const handleInstallmentsChange = (value: string) => {
-    setLocalInstallments(value);
-    const installments = parseInt(value) || 1;
-    const cents = Math.round(parseFloat(localAmount.replace(',', '.')) * 100) || 0;
-    
-    if (onCustomValueChange && cents > 0) {
-      onCustomValueChange(cents, installments);
+      onCustomValueChange(cents);
     }
   };
 
   const renderOptionContent = () => {
     if (option.isCustom) {
-      const amountCents = Math.round(parseFloat(localAmount.replace(',', '.')) * 100) || 0;
-      const installments = parseInt(localInstallments) || 1;
-      const validation = validateCustomPayment(amountCents, installments);
-      
       return (
         <div className="space-y-3">
-          <div className="text-2xl font-bold text-ink">
-            {validation.valid && amountCents > 0 ? (
-              formatCurrency(amountCents)
-            ) : (
-              'R$ 0,00'
-            )}
-          </div>
-          
-          <div className="text-sm text-ink-secondary">
-            Digite o valor da parcela desejada
-          </div>
+          {customResult ? (
+            <>
+              <div className="text-2xl font-bold text-ink">
+                {formatCurrency(customResult.installmentValueCents)}
+              </div>
+              <div className="text-sm text-ink-secondary">
+                <strong>{customResult.installments}x</strong> de{' '}
+                <strong>{formatCurrency(customResult.installmentValueCents)}</strong>
+                {' '}= Total <strong>{formatCurrency(customResult.totalCents)}</strong>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-2xl font-bold text-ink">R$ 0,00</div>
+              <div className="text-sm text-ink-secondary">
+                Digite o valor da parcela desejada
+              </div>
+            </>
+          )}
           
           <div className="space-y-3">
             <Input
               type="text"
-              placeholder="Digite o valor da parcela desejada"
+              placeholder="Ex: 50,00"
               value={localAmount}
               onChange={(e) => handleAmountChange(e.target.value)}
               className="text-sm bg-gray-50 border-gray-200"
             />
-            
-            {!validation.valid && validation.errors.length > 0 && (
-              <div className="text-sm text-destructive">
-                {validation.errors.map((error, index) => (
-                  <div key={index}>• {error}</div>
-                ))}
-              </div>
-            )}
-            
-            {validation.valid && amountCents > 0 && (
-              <div className="text-sm text-ink-secondary">
-                <div>
-                  <strong>{installments}x</strong> de{' '}
-                  <strong>{formatCurrency(Math.floor(amountCents / installments))}</strong>
-                </div>
-                {installments > 1 && (
-                  <div className="text-xs text-ink-muted mt-1">
-                    * Última parcela: {formatCurrency(amountCents - Math.floor(amountCents / installments) * (installments - 1))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       );
