@@ -130,7 +130,7 @@ serve(async (req) => {
         },
         checkout: {
           maskFee: false,
-          installments: requestData.installments > 1 ? requestData.installments : null
+          installments: null  // Sempre null - o campo Installments no cardPayload é suficiente
         }
       }
     };
