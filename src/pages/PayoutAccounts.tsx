@@ -127,6 +127,7 @@ export default function PayoutAccounts() {
     try {
       const accountData = {
         user_id: profile.id,
+        company_id: profile.company_id,
         pix_key: data.pix_key,
         pix_key_type: data.pix_key_type,
         account_holder_name: data.account_holder_name,

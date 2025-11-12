@@ -17,8 +17,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
-import { SubscriptionBanner } from '@/components/SubscriptionBanner';
-import { useSubscription } from '@/hooks/useSubscription';
 import { SimulatorModal } from '@/components/SimulatorModal';
 
 interface DashboardStats {
@@ -30,9 +28,8 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const { profile, signOut, user } = useAuth();
+  const { profile, signOut } = useAuth();
   const { toast } = useToast();
-  const { subscription } = useSubscription();
   const [stats, setStats] = useState<DashboardStats>({
     totalCharges: 0,
     activeCharges: 0,
@@ -44,23 +41,16 @@ export default function Dashboard() {
   const [showSimulatorModal, setShowSimulatorModal] = useState(false);
 
   useEffect(() => {
-    loadDashboardStats();
-  }, []);
-
-  // Audit log for subscription status on Dashboard mount
-  useEffect(() => {
-    if (subscription && user) {
-      console.log('📊 Dashboard Subscription Audit:', {
-        companyId: subscription.companyId,
-        userId: subscription.userId,
-        canonicalStatus: subscription.canonicalStatus,
-        timestamp: new Date().toISOString()
-      });
+    if (profile?.company_id) {
+      loadDashboardStats();
     }
-  }, [subscription, user]);
+  }, [profile?.company_id]);
 
   const loadDashboardStats = async () => {
+    if (!profile?.company_id) return;
+    
     try {
+      // RLS agora filtra automaticamente por company_id
       const { data: charges, error } = await supabase
         .from('charges')
         .select('*');
@@ -126,8 +116,6 @@ export default function Dashboard() {
           {profile?.role === 'admin' ? 'Administrador' : 'Operador'}
         </Badge>
       </div>
-
-      <SubscriptionBanner />
 
       {/* Quick Actions */}
       <div className="flex flex-col sm:flex-row gap-4">

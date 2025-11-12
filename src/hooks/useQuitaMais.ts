@@ -119,8 +119,8 @@ export const useQuitaMais = () => {
       const { data: savedLink, error: saveError } = await supabase
         .from('payment_links')
         .insert({
-          link_id: paymentLink.linkId,
-          link_url: paymentLink.linkUrl,
+          url: paymentLink.linkUrl,
+          link_url: paymentLink.linkUrl, // mantém compatibilidade
           guid: paymentLink.guid,
           amount: extrasToStore.amount || request.amount,
           payer_name: request.payer.name,

@@ -17,10 +17,10 @@ export function useMessageTemplates(companyId?: string) {
     refetchOnWindowFocus: false,
     retry: 1,
     queryFn: async () => {
+      // RLS agora filtra automaticamente por company_id
       const { data, error } = await supabase
         .from('message_templates')
         .select('id, name, variables, is_active, updated_at')
-        .eq('user_id', companyId!)
         .eq('is_active', true)
         .order('updated_at', { ascending: false })
         .limit(100);

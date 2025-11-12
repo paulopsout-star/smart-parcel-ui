@@ -114,6 +114,7 @@ export default function MessageTemplates() {
     try {
       const templateData = {
         user_id: profile.id,
+        company_id: profile.company_id,
         name: data.name,
         content: data.content,
         variables: extractVariables(data.content),

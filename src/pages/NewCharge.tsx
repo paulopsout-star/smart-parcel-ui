@@ -323,6 +323,7 @@ export default function NewCharge() {
       const { data: charge, error: chargeError } = await supabase
         .from('charges')
         .insert({
+          company_id: profile.company_id, // CRITICAL: isolamento por empresa
           created_by: profile.id,
           payer_name: data.payer_name,
           payer_email: data.payer_email,
