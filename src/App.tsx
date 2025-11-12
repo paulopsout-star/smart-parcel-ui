@@ -36,6 +36,7 @@ import CheckoutNew from "./pages/admin/CheckoutNew";
 import CheckoutHistory from "./pages/admin/CheckoutHistory";
 import Reports from "./pages/admin/Reports";
 import CompanySettings from "./pages/admin/CompanySettings";
+import CompanyManagement from "./pages/admin/CompanyManagement";
 import { useState } from "react";
 
 const App = () => {
@@ -70,6 +71,7 @@ const App = () => {
                 <Route path="/create-admin" element={<ProtectedRoute requiredRole="admin"><CreateAdmin /></ProtectedRoute>} />
                 
                 <Route path="/admin/users" element={<ProtectedRoute requiredRole="admin"><UserManagement /></ProtectedRoute>} />
+                <Route path="/admin/companies" element={<ProtectedRoute requiredRole="admin"><CompanyManagement /></ProtectedRoute>} />
                 <Route path="/admin/subscriptions" element={<ProtectedRoute requiredRole="admin"><SubscriptionManagement /></ProtectedRoute>} />
                 <Route path="/admin/refunds" element={<ProtectedRoute requiredRole="admin"><RefundManagement /></ProtectedRoute>} />
                 <Route path="/admin/recurrences" element={<ProtectedRoute requiredRole="admin"><RecurrenceManagement /></ProtectedRoute>} />

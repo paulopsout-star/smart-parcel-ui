@@ -23,7 +23,8 @@ import {
   Repeat,
   BarChart3,
   Settings,
-  Wrench
+  Wrench,
+  Building2
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -58,6 +59,7 @@ export function Layout({ children }: LayoutProps) {
     { name: 'Mensagens', href: '/message-queue', icon: MessageSquare },
     ...(isAdmin ? [
       { name: 'Usuários', href: '/admin/users', icon: Users },
+      { name: 'Empresas', href: '/admin/companies', icon: Building2 },
       { name: 'Estornos', href: '/admin/refunds', icon: RefreshCw },
       { name: 'Recorrentes', href: '/admin/recurrences', icon: Repeat },
       { name: 'Relatórios', href: '/admin/reports', icon: BarChart3 },
