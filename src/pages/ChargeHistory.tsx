@@ -4,22 +4,25 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, MessageSquare, User, Mail, Phone, Calendar, CreditCard, FileText, Filter, X, Search } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useSubscriptionContext } from '@/contexts/SubscriptionContext';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon } from 'lucide-react';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
+import { Link } from 'react-router-dom';
 
 interface Charge {
   id: string;
@@ -52,11 +55,130 @@ interface ChargeFilters {
   payer_document: string;
 }
 
+// Helper functions
+const getInitials = (name: string) => {
+  return name
+    .split(' ')
+    .slice(0, 2)
+    .map(n => n[0])
+    .join('')
+    .toUpperCase();
+};
+
+const formatPhone = (phone: string) => {
+  const clean = phone.replace(/\D/g, '');
+  if (clean.length === 11) {
+    return `(${clean.slice(0,2)}) ${clean.slice(2,7)}-${clean.slice(7)}`;
+  }
+  return phone;
+};
+
+const getModernStatusBadge = (status: string) => {
+  const configs = {
+    pending: { 
+      label: 'Pendente', 
+      className: 'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400'
+    },
+    processing: { 
+      label: 'Processando', 
+      className: 'bg-blue-500/10 text-blue-700 border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400'
+    },
+    completed: { 
+      label: 'Concluída', 
+      className: 'bg-primary/10 text-primary border-primary/20 dark:bg-primary/10 dark:text-primary'
+    },
+    failed: { 
+      label: 'Falhou', 
+      className: 'bg-gray-500/10 text-gray-700 border-gray-500/20 dark:bg-gray-500/10 dark:text-gray-400'
+    },
+    cancelled: { 
+      label: 'Cancelada', 
+      className: 'bg-gray-400/10 text-gray-600 border-gray-400/20 dark:bg-gray-400/10 dark:text-gray-300'
+    },
+  };
+  
+  const config = configs[status as keyof typeof configs] || configs.cancelled;
+  return (
+    <Badge className={cn("gap-1.5 font-medium", config.className)}>
+      {config.label}
+    </Badge>
+  );
+};
+
+// InfoCard Component
+interface InfoCardProps {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  subvalue?: string;
+  variant?: 'default' | 'primary' | 'success' | 'info';
+}
+
+const InfoCard = ({ icon: Icon, label, value, subvalue, variant = 'default' }: InfoCardProps) => {
+  const variants = {
+    default: 'bg-muted/30 border-border/50',
+    primary: 'bg-gradient-to-br from-primary/5 to-primary/[0.02] border-primary/10',
+    success: 'bg-green-500/5 border-green-500/10',
+    info: 'bg-blue-500/5 border-blue-500/10',
+  };
+  
+  const iconVariants = {
+    default: 'bg-background text-muted-foreground',
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-green-500/10 text-green-600',
+    info: 'bg-blue-500/10 text-blue-600',
+  };
+
+  return (
+    <div className={cn("flex items-start gap-3 p-4 rounded-xl border", variants[variant])}>
+      <div className={cn("p-2.5 rounded-lg", iconVariants[variant])}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+          {label}
+        </p>
+        <p className="text-base font-semibold truncate">{value}</p>
+        {subvalue && (
+          <p className="text-xs text-muted-foreground mt-0.5">{subvalue}</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Skeleton Component
+const ChargeCardSkeleton = () => (
+  <Card className="overflow-hidden rounded-2xl">
+    <CardHeader className="pb-4 bg-muted/30">
+      <div className="flex items-start gap-4">
+        <Skeleton className="h-14 w-14 rounded-full" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="flex gap-2">
+          <Skeleton className="h-6 w-20" />
+          <Skeleton className="h-6 w-20" />
+        </div>
+      </div>
+    </CardHeader>
+    <CardContent className="pt-6 space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+        <Skeleton className="h-24 rounded-xl" />
+      </div>
+      <Skeleton className="h-16 rounded-xl" />
+      <Skeleton className="h-20 rounded-xl" />
+    </CardContent>
+  </Card>
+);
+
 // Executions Dialog Component
 const ExecutionsDialogContent = ({ 
   executionsDialog, 
   setExecutionsDialog, 
-  getStatusBadge, 
   openPaymentLink, 
   copyToClipboard 
 }: any) => {
@@ -80,7 +202,7 @@ const ExecutionsDialogContent = ({
                 <div key={execution.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      {getStatusBadge(execution.status)}
+                      {getModernStatusBadge(execution.status)}
                       <span className="font-medium">
                         {execution.scheduled_for ? 
                           format(new Date(execution.scheduled_for), 'dd/MM/yyyy HH:mm', { locale: ptBR }) :
@@ -168,6 +290,7 @@ export default function ChargeHistory() {
 
   const fetchCharges = async () => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
         .from('charges')
         .select(`
@@ -198,17 +321,14 @@ export default function ChargeHistory() {
   const applyFilters = () => {
     let filtered = [...charges];
 
-    // Filter by status
     if (filters.status !== 'all') {
       filtered = filtered.filter(charge => charge.status === filters.status);
     }
 
-    // Filter by recurrence type
     if (filters.recurrence_type !== 'all') {
       filtered = filtered.filter(charge => charge.recurrence_type === filters.recurrence_type);
     }
 
-    // Filter by date range
     if (filters.date_from) {
       filtered = filtered.filter(charge => {
         const chargeDate = new Date(charge.created_at);
@@ -225,7 +345,6 @@ export default function ChargeHistory() {
       });
     }
 
-    // Filter by CPF
     if (filters.payer_document) {
       const searchTerm = filters.payer_document.replace(/\D/g, '');
       filtered = filtered.filter(charge => 
@@ -264,7 +383,7 @@ export default function ChargeHistory() {
       if (error) throw error;
 
       toast({
-        title: "Cobrança processada",
+        title: "✓ Cobrança processada",
         description: "A cobrança foi processada com sucesso",
       });
 
@@ -290,7 +409,6 @@ export default function ChargeHistory() {
       try {
         const newLink = await generateLink(charge.id);
         if (newLink?.url) {
-          // Open ModalCheckoutLink with the generated link
           const event = new CustomEvent('openCheckoutModal', {
             detail: {
               checkoutUrl: newLink.url,
@@ -319,25 +437,32 @@ export default function ChargeHistory() {
 
     if (linkQuery.isError || !linkQuery.data?.url) {
       return (
-        <div className="flex flex-wrap gap-2">
-          <span className="text-sm text-muted-foreground">Indisponível</span>
-          <Button 
-            onClick={() => { resetLinkState(charge.id); linkQuery.refetch(); }} 
-            size="sm" 
-            variant="outline"
-            disabled={readOnly}
-          >
-            Tentar novamente
-          </Button>
-          <Button 
-            onClick={handleGenerateLink} 
-            size="sm" 
-            variant="default" 
-            disabled={isGenerating || readOnly}
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Gerar Link
-          </Button>
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <AlertCircle className="h-4 w-4" />
+            <span>Link de pagamento indisponível</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button 
+              onClick={() => { resetLinkState(charge.id); linkQuery.refetch(); }} 
+              size="sm" 
+              variant="outline"
+              disabled={readOnly}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Tentar Novamente
+            </Button>
+            <Button 
+              onClick={handleGenerateLink} 
+              size="sm" 
+              className="bg-primary hover:bg-primary/90 gap-2"
+              disabled={isGenerating || readOnly}
+            >
+              <Plus className="h-4 w-4" />
+              Gerar Link
+            </Button>
+          </div>
         </div>
       );
     }
@@ -348,29 +473,38 @@ export default function ChargeHistory() {
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
-          variant="outline"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
           onClick={() => openPaymentLink(checkoutUrl)}
           disabled={readOnly}
         >
-          <ExternalLink className="w-4 h-4 mr-1" />
-          Abrir
+          <ExternalLink className="h-4 w-4" />
+          Abrir Link
         </Button>
         <Button
           size="sm"
           variant="outline"
-          onClick={() => copyToClipboard(checkoutUrl)}
+          onClick={() => {
+            copyToClipboard(checkoutUrl);
+            toast({
+              title: "✓ Link copiado!",
+              description: "O link de pagamento foi copiado para a área de transferência",
+              duration: 3000,
+            });
+          }}
           disabled={readOnly}
+          className="gap-2"
         >
-          <Copy className="w-4 h-4 mr-1" />
+          <Copy className="h-4 w-4" />
           Copiar
         </Button>
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
           onClick={handleGenerateLink}
           disabled={isGenerating || readOnly}
+          className="gap-2"
         >
-          <Plus className="w-4 h-4 mr-1" />
+          <Plus className="h-4 w-4" />
           Abrir Modal
         </Button>
       </div>
@@ -382,7 +516,6 @@ export default function ChargeHistory() {
       fetchCharges();
     }
 
-    // Listen for custom event to open checkout modal
     const handleOpenCheckoutModal = (event: any) => {
       const data = event.detail;
       setCheckoutModalData({
@@ -418,27 +551,6 @@ export default function ChargeHistory() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
-    );
-  }
-
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      pending: { label: 'Pendente', variant: 'secondary' as const },
-      processing: { label: 'Processando', variant: 'default' as const },
-      completed: { label: 'Concluída', variant: 'default' as const },
-      failed: { label: 'Falhou', variant: 'destructive' as const },
-      cancelled: { label: 'Cancelada', variant: 'outline' as const },
-    };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || { label: status, variant: 'outline' as const };
-    return <Badge variant={config.variant}>{config.label}</Badge>;
-  };
-
   const getRecurrenceLabel = (type: string) => {
     const labels = {
       pontual: 'Pontual',
@@ -461,33 +573,114 @@ export default function ChargeHistory() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Histórico de Cobranças</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {filteredCharges.length} de {charges.length} cobranças
-            {hasActiveFilters() && ' (filtrado)'}
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">Histórico de Cobranças</h1>
+          <p className="text-base text-muted-foreground">
+            Exibindo <span className="font-semibold text-foreground">{filteredCharges.length}</span> de <span className="font-semibold">{charges.length}</span> cobranças
+            {hasActiveFilters() && <Badge variant="secondary" className="ml-2">Filtrado</Badge>}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-3">
           <Button 
             onClick={() => setShowFilters(!showFilters)} 
             variant={hasActiveFilters() ? "default" : "outline"}
+            className="gap-2"
           >
-            <Filter className="w-4 h-4 mr-2" />
-            Filtros
+            <Filter className="h-4 w-4" />
+            <span>Filtros</span>
             {hasActiveFilters() && (
-              <Badge variant="secondary" className="ml-2 bg-background">
+              <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] rounded-full bg-primary-foreground text-primary">
                 {Object.values(filters).filter(v => v && v !== 'all' && v !== '').length}
               </Badge>
             )}
           </Button>
-          <Button onClick={fetchCharges} variant="outline">
-            <RefreshCw className="w-4 h-4 mr-2" />
+          <Button onClick={fetchCharges} variant="outline" className="gap-2">
+            <RefreshCw className="h-4 w-4" />
             Atualizar
           </Button>
         </div>
       </div>
+
+      {/* Active Filter Chips */}
+      {hasActiveFilters() && (
+        <div className="flex flex-wrap items-center gap-2 p-4 rounded-xl bg-muted/30 border border-border/50">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Filtros ativos:
+          </span>
+          
+          {filters.status !== 'all' && (
+            <Badge variant="secondary" className="gap-1.5">
+              Status: {filters.status}
+              <button 
+                onClick={() => setFilters(prev => ({ ...prev, status: 'all' }))}
+                className="ml-1 hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          
+          {filters.recurrence_type !== 'all' && (
+            <Badge variant="secondary" className="gap-1.5">
+              Tipo: {getRecurrenceLabel(filters.recurrence_type)}
+              <button 
+                onClick={() => setFilters(prev => ({ ...prev, recurrence_type: 'all' }))}
+                className="ml-1 hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          
+          {filters.date_from && (
+            <Badge variant="secondary" className="gap-1.5">
+              De: {format(filters.date_from, 'dd/MM/yy', { locale: ptBR })}
+              <button 
+                onClick={() => setFilters(prev => ({ ...prev, date_from: undefined }))}
+                className="ml-1 hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          
+          {filters.date_to && (
+            <Badge variant="secondary" className="gap-1.5">
+              Até: {format(filters.date_to, 'dd/MM/yy', { locale: ptBR })}
+              <button 
+                onClick={() => setFilters(prev => ({ ...prev, date_to: undefined }))}
+                className="ml-1 hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          
+          {filters.payer_document && (
+            <Badge variant="secondary" className="gap-1.5">
+              CPF: {filters.payer_document}
+              <button 
+                onClick={() => setFilters(prev => ({ ...prev, payer_document: '' }))}
+                className="ml-1 hover:text-destructive"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          )}
+          
+          <Button 
+            onClick={clearFilters} 
+            size="sm" 
+            variant="ghost" 
+            className="ml-auto h-7 text-xs gap-1"
+          >
+            <X className="h-3 w-3" />
+            Limpar Tudo
+          </Button>
+        </div>
+      )}
 
       {/* Filters Section */}
       {showFilters && (
@@ -620,324 +813,363 @@ export default function ChargeHistory() {
         </Card>
       )}
 
-      <div className="grid gap-6">
-        {filteredCharges.map((charge) => (
-          <Card key={charge.id} className="overflow-hidden">
-            <CardHeader className="bg-muted/30 pb-4">
-              <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-                {/* Cliente Info Section */}
-                <div className="flex-1 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <User className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <CardTitle className="text-xl mb-2">{charge.payer_name}</CardTitle>
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Mail className="h-4 w-4 flex-shrink-0" />
+      {/* Charges List */}
+      {loading ? (
+        <div className="grid gap-6">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <ChargeCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : (
+        <div className="grid gap-6">
+          {filteredCharges.map((charge) => (
+            <Card key={charge.id} className="group overflow-hidden rounded-2xl border shadow-sm transition-all duration-200 hover:shadow-md">
+              {/* Card Header */}
+              <CardHeader className="pb-4 bg-gradient-to-br from-muted/30 to-muted/10">
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                  {/* Avatar + Cliente */}
+                  <div className="flex items-start gap-4 flex-1 min-w-0">
+                    <Avatar className="h-14 w-14 border-2 border-primary/20">
+                      <AvatarFallback className="bg-gradient-to-br from-primary/10 to-primary/5 text-primary text-lg font-semibold">
+                        {getInitials(charge.payer_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <h3 className="text-xl font-semibold tracking-tight truncate">
+                        {charge.payer_name}
+                      </h3>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5 flex-shrink-0" />
                           <span className="truncate">{charge.payer_email}</span>
                         </div>
                         {charge.payer_phone && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Phone className="h-4 w-4 flex-shrink-0" />
-                            <span>{charge.payer_phone}</span>
+                          <>
+                            <span className="hidden sm:inline text-muted-foreground/50">•</span>
+                            <div className="flex items-center gap-1.5">
+                              <Phone className="h-3.5 w-3.5 flex-shrink-0" />
+                              <span>{formatPhone(charge.payer_phone)}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Badges */}
+                  <div className="flex flex-wrap gap-2 lg:flex-shrink-0">
+                    {getModernStatusBadge(charge.status)}
+                    <Badge variant="outline" className="gap-1.5 border-primary/20">
+                      <RefreshCw className="h-3 w-3" />
+                      {getRecurrenceLabel(charge.recurrence_type)}
+                    </Badge>
+                    {charge.has_boleto_link && (
+                      <Badge className="gap-1.5 bg-amber-500/10 text-amber-700 border-amber-500/20">
+                        <FileText className="h-3 w-3" />
+                        Boleto
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+
+              {/* Card Content */}
+              <CardContent className="pt-6 space-y-6">
+                {/* Resumo Financeiro - Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <InfoCard
+                    icon={CreditCard}
+                    label="Valor Total"
+                    value={formatCurrency(charge.amount)}
+                    variant="primary"
+                  />
+                  
+                  <InfoCard
+                    icon={CalendarIcon}
+                    label="Criado em"
+                    value={format(new Date(charge.created_at), 'dd/MM/yyyy', { locale: ptBR })}
+                    subvalue={`às ${format(new Date(charge.created_at), 'HH:mm', { locale: ptBR })}`}
+                  />
+                  
+                  {charge.next_charge_date && (
+                    <InfoCard
+                      icon={CalendarIcon}
+                      label="Próxima Cobrança"
+                      value={format(new Date(charge.next_charge_date), 'dd/MM/yyyy', { locale: ptBR })}
+                      variant="info"
+                    />
+                  )}
+                </div>
+
+                {/* Descrição */}
+                {charge.description && (
+                  <div className="p-4 rounded-xl bg-muted/20 border border-border/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        Descrição
+                      </span>
+                    </div>
+                    <p className="text-sm leading-relaxed">{charge.description}</p>
+                  </div>
+                )}
+
+                {/* Área de Link de Pagamento */}
+                <div className="p-5 rounded-xl bg-primary/[0.03] border-2 border-primary/10 transition-colors hover:border-primary/20">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="p-1.5 rounded-md bg-primary/10">
+                      <Link2 className="h-4 w-4 text-primary" />
+                    </div>
+                    <span className="text-sm font-semibold text-primary">Link de Pagamento</span>
+                  </div>
+                  <CheckoutButtons charge={charge} />
+                </div>
+
+                {/* Ações do Card */}
+                <div className="flex flex-wrap gap-2 pt-2 border-t border-border/50">
+                  {charge.status === 'pending' && (
+                    <Button 
+                      size="sm" 
+                      onClick={() => processCharge(charge.id)}
+                      variant="outline"
+                      className="gap-2"
+                      disabled={readOnly}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Processar Agora
+                    </Button>
+                  )}
+                  {charge.recurrence_type !== 'pontual' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleViewExecutions(charge.id, charge.payer_name)}
+                      className="gap-2"
+                    >
+                      <List className="h-4 w-4" />
+                      Ver Execuções
+                    </Button>
+                  )}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setSelectedCharge(charge)}
+                    className="gap-2 ml-auto"
+                  >
+                    <Eye className="h-4 w-4" />
+                    Ver Detalhes
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* Empty States */}
+          {filteredCharges.length === 0 && (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                {charges.length === 0 ? (
+                  <>
+                    <div className="p-4 rounded-full bg-muted/50 mb-4">
+                      <FileText className="h-12 w-12 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">Nenhuma cobrança criada</h3>
+                    <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                      Comece criando sua primeira cobrança para gerenciar pagamentos
+                    </p>
+                    <Button className="bg-primary hover:bg-primary/90" asChild>
+                      <Link to="/new-charge">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Criar Primeira Cobrança
+                      </Link>
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <div className="p-4 rounded-full bg-muted/50 mb-4">
+                      <Search className="h-12 w-12 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">Nenhum resultado encontrado</h3>
+                    <p className="text-sm text-muted-foreground mb-6 max-w-sm">
+                      Nenhuma cobrança corresponde aos filtros aplicados. Tente ajustar os critérios de busca.
+                    </p>
+                    <Button onClick={clearFilters} variant="outline" className="gap-2">
+                      <X className="h-4 w-4" />
+                      Limpar Filtros
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Sheet de Detalhes */}
+      <Sheet open={!!selectedCharge} onOpenChange={(open) => !open && setSelectedCharge(null)}>
+        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
+          <SheetHeader className="pb-6 border-b">
+            <SheetTitle className="text-2xl">Detalhes da Cobrança</SheetTitle>
+            <SheetDescription className="text-base">
+              Informações completas e histórico de execuções
+            </SheetDescription>
+          </SheetHeader>
+
+          {selectedCharge && (
+            <div className="py-6 space-y-6">
+              {/* Seção 1: Info Cliente */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Dados do Pagador
+                </h4>
+                <div className="p-4 rounded-xl bg-muted/30 border space-y-3">
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-12 w-12">
+                      <AvatarFallback className="bg-primary/10 text-primary">
+                        {getInitials(selectedCharge.payer_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="font-semibold text-lg">{selectedCharge.payer_name}</p>
+                      <div className="space-y-1.5 mt-2 text-sm">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Mail className="h-3.5 w-3.5" />
+                          <span>{selectedCharge.payer_email}</span>
+                        </div>
+                        {selectedCharge.payer_phone && (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Phone className="h-3.5 w-3.5" />
+                            <span>{formatPhone(selectedCharge.payer_phone)}</span>
+                          </div>
+                        )}
+                        {selectedCharge.payer_document && (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>CPF: {selectedCharge.payer_document}</span>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
                 </div>
-                
-                {/* Status & Type Badges */}
-                <div className="flex flex-wrap gap-2">
-                  {getStatusBadge(charge.status)}
-                  <Badge variant="outline" className="gap-1">
-                    <RefreshCw className="h-3 w-3" />
-                    {getRecurrenceLabel(charge.recurrence_type)}
-                  </Badge>
-                  {charge.has_boleto_link && (
-                    <Badge variant="secondary" className="gap-1">
-                      <FileText className="h-3 w-3" />
-                      Com Boleto
-                    </Badge>
+              </div>
+
+              {/* Seção 2: Info Financeira */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Informações Financeiras
+                </h4>
+                <div className="p-5 rounded-xl bg-gradient-to-br from-primary/5 to-primary/[0.02] border border-primary/10">
+                  <p className="text-sm text-muted-foreground mb-1">Valor Total</p>
+                  <p className="text-3xl font-bold text-primary">{formatCurrency(selectedCharge.amount)}</p>
+                  
+                  {selectedCharge.description && (
+                    <div className="mt-4 pt-4 border-t border-primary/10">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground mb-2">Descrição</p>
+                      <p className="text-sm leading-relaxed">{selectedCharge.description}</p>
+                    </div>
                   )}
                 </div>
               </div>
-            </CardHeader>
-            
-            <CardContent className="space-y-6 pt-6">
-              {/* Financial & Date Info Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                  <CreditCard className="h-5 w-5 text-primary mt-0.5" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Valor</p>
-                    <p className="text-2xl font-bold">{formatCurrency(charge.amount)}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                  <Calendar className="h-5 w-5 text-primary mt-0.5" />
-                  <div>
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Criado em</p>
-                    <p className="text-sm font-semibold">{format(new Date(charge.created_at), 'dd/MM/yyyy', { locale: ptBR })}</p>
-                    <p className="text-xs text-muted-foreground">{format(new Date(charge.created_at), 'HH:mm', { locale: ptBR })}</p>
-                  </div>
-                </div>
-                
-                {charge.next_charge_date && (
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                    <Calendar className="h-5 w-5 text-primary mt-0.5" />
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Próxima cobrança</p>
-                      <p className="text-sm font-semibold">{format(new Date(charge.next_charge_date), 'dd/MM/yyyy', { locale: ptBR })}</p>
-                      <p className="text-xs text-muted-foreground">{format(new Date(charge.next_charge_date), 'HH:mm', { locale: ptBR })}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
 
-              {/* Description */}
-              {charge.description && (
-                <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-                  <p className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-2">
-                    <FileText className="h-3.5 w-3.5" />
-                    Descrição
-                  </p>
-                  <p className="text-sm">{charge.description}</p>
-                </div>
-              )}
-
-              {/* Checkout Actions */}
-              <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
-                <p className="text-sm font-medium mb-3 flex items-center gap-2">
-                  <Link2 className="h-4 w-4 text-primary" />
-                  Link de Pagamento
-                </p>
-                <CheckoutButtons charge={charge} />
-              </div>
-
-              {charge.executions.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium mb-2">Execuções</p>
-                  <div className="space-y-2">
-                    {charge.executions.map((execution) => (
-                      <div key={execution.id} className="flex items-center justify-between p-2 bg-secondary/50 rounded">
-                        <div className="flex items-center gap-2">
-                          {getStatusBadge(execution.status)}
-                          <span className="text-sm">
-                            {format(new Date(execution.execution_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                          </span>
-                        </div>
-                        {execution.payment_link_url && (
-                          <Button size="sm" variant="outline" asChild>
-                            <a href={execution.payment_link_url} target="_blank" rel="noopener noreferrer">
-                              <Eye className="w-4 h-4 mr-1" />
-                              Ver Link
-                            </a>
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                {charge.status === 'pending' && (
-                  <Button 
-                    size="sm" 
-                    onClick={() => processCharge(charge.id)}
-                    variant="outline"
-                  >
-                    <RefreshCw className="w-4 h-4 mr-1" />
-                    Processar Agora
-                  </Button>
-                )}
-                {charge.recurrence_type !== 'pontual' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewExecutions(charge.id, charge.payer_name)}
-                  >
-                    <List className="w-4 h-4 mr-1" />
-                    Ver Execuções
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedCharge(charge)}
-                >
-                  <Eye className="w-4 h-4 mr-1" />
-                  Ver Detalhes
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-
-        {filteredCharges.length === 0 && !loading && (
-          <Card>
-            <CardContent className="text-center py-12">
-              {charges.length === 0 ? (
-                <>
-                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-lg font-medium mb-1">Nenhuma cobrança encontrada</p>
-                  <p className="text-sm text-muted-foreground">
-                    Comece criando uma nova cobrança
-                  </p>
-                </>
-              ) : (
-                <>
-                  <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-lg font-medium mb-1">Nenhum resultado encontrado</p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Tente ajustar os filtros de busca
-                  </p>
-                  <Button onClick={clearFilters} variant="outline">
-                    <X className="w-4 h-4 mr-2" />
-                    Limpar Filtros
-                  </Button>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Charge Details Dialog */}
-      <Dialog open={!!selectedCharge} onOpenChange={(open) => !open && setSelectedCharge(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalhes da Cobrança</DialogTitle>
-          </DialogHeader>
-          {selectedCharge && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-muted/30 border">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                      <User className="h-4 w-4 text-primary" />
-                      Informações do Cliente
-                    </h4>
-                    <div className="space-y-3 text-sm">
-                      <div className="flex items-start gap-2">
-                        <User className="h-4 w-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          <span className="text-xs text-muted-foreground">Nome</span>
-                          <p className="font-medium">{selectedCharge.payer_name}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
-                        <div>
-                          <span className="text-xs text-muted-foreground">Email</span>
-                          <p className="font-medium break-all">{selectedCharge.payer_email}</p>
-                        </div>
-                      </div>
-                      {selectedCharge.payer_phone && (
-                        <div className="flex items-start gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground mt-0.5" />
-                          <div>
-                            <span className="text-xs text-muted-foreground">Telefone</span>
-                            <p className="font-medium">{selectedCharge.payer_phone}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+              {/* Seção 3: Datas e Configuração */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  Datas e Configuração
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-muted/30 border">
+                    <p className="text-xs text-muted-foreground mb-1">Criado em</p>
+                    <p className="text-sm font-semibold">
+                      {format(new Date(selectedCharge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                    </p>
                   </div>
                   
-                  <div className="p-4 rounded-lg bg-muted/30 border">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                      <CreditCard className="h-4 w-4 text-primary" />
-                      Informações Financeiras
-                    </h4>
-                    <div className="space-y-3 text-sm">
-                      <div>
-                        <span className="text-xs text-muted-foreground">Valor</span>
-                        <p className="text-xl font-bold text-primary">{formatCurrency(selectedCharge.amount)}</p>
-                      </div>
-                      {selectedCharge.description && (
-                        <div>
-                          <span className="text-xs text-muted-foreground">Descrição</span>
-                          <p className="font-medium">{selectedCharge.description}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-muted/30 border">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-primary" />
-                      Datas e Tipo
-                    </h4>
-                    <div className="space-y-3 text-sm">
-                      <div>
-                        <span className="text-xs text-muted-foreground">Criado em</span>
-                        <p className="font-medium">{format(new Date(selectedCharge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-                      </div>
-                      {selectedCharge.next_charge_date && (
-                        <div>
-                          <span className="text-xs text-muted-foreground">Próxima cobrança</span>
-                          <p className="font-medium">{format(new Date(selectedCharge.next_charge_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-                        </div>
-                      )}
-                      <div>
-                        <span className="text-xs text-muted-foreground">Tipo de Cobrança</span>
-                        <p className="font-medium">{getRecurrenceLabel(selectedCharge.recurrence_type)}</p>
-                      </div>
-                    </div>
+                  <div className="p-3 rounded-lg bg-muted/30 border">
+                    <p className="text-xs text-muted-foreground mb-1">Tipo</p>
+                    <p className="text-sm font-semibold">
+                      {getRecurrenceLabel(selectedCharge.recurrence_type)}
+                    </p>
                   </div>
                   
-                  <div className="p-4 rounded-lg bg-muted/30 border">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-primary" />
-                      Status e Detalhes
-                    </h4>
-                    <div className="space-y-3 text-sm">
-                      <div>
-                        <span className="text-xs text-muted-foreground">Status</span>
-                        <div className="mt-1">{getStatusBadge(selectedCharge.status)}</div>
-                      </div>
-                      {selectedCharge.has_boleto_link && (
-                        <div>
-                          <span className="text-xs text-muted-foreground">Boleto</span>
-                          <div className="mt-1">
-                            <Badge variant="secondary">Com vínculo</Badge>
-                          </div>
-                        </div>
-                      )}
+                  {selectedCharge.next_charge_date && (
+                    <div className="col-span-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                      <p className="text-xs text-muted-foreground mb-1">Próxima Cobrança</p>
+                      <p className="text-sm font-semibold text-blue-600">
+                        {format(new Date(selectedCharge.next_charge_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                      </p>
                     </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Seção 4: Status e Link */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <Link2 className="h-4 w-4" />
+                  Status e Link de Pagamento
+                </h4>
+                <div className="p-4 rounded-xl bg-muted/30 border space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Status Atual:</span>
+                    {getModernStatusBadge(selectedCharge.status)}
+                  </div>
+                  
+                  <div className="pt-3 border-t">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3">Link de Pagamento</p>
+                    <CheckoutButtons charge={selectedCharge} />
                   </div>
                 </div>
               </div>
 
-              <ChargeRefundTimeline 
-                chargeId={selectedCharge.id} 
-                hasBoletoLink={selectedCharge.has_boleto_link}
-              />
+              {/* Seção 5: Timeline de Execuções */}
+              {selectedCharge.recurrence_type !== 'pontual' && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4" />
+                    Histórico de Execuções
+                  </h4>
+                  <ChargeExecutions chargeId={selectedCharge.id} />
+                </div>
+              )}
 
-              <ChargeExecutions chargeId={selectedCharge.id} />
+              {/* Seção 6: Timeline de Refunds */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Histórico de Estornos
+                </h4>
+                <ChargeRefundTimeline chargeId={selectedCharge.id} hasBoletoLink={selectedCharge.has_boleto_link} />
+              </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
 
-      {/* Executions Dialog for Recurring Charges */}
-      <ExecutionsDialogContent 
+          <SheetFooter className="pt-6 border-t mt-6">
+            <Button 
+              variant="outline" 
+              onClick={() => setSelectedCharge(null)}
+              className="w-full"
+            >
+              Fechar
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {/* Executions Dialog */}
+      <ExecutionsDialogContent
         executionsDialog={executionsDialog}
         setExecutionsDialog={setExecutionsDialog}
-        getStatusBadge={getStatusBadge}
         openPaymentLink={openPaymentLink}
         copyToClipboard={copyToClipboard}
       />
 
-      {/* Checkout Success Modal */}
-      {checkoutModalData && (
+      {/* Checkout Modal */}
+      {showCheckoutModal && checkoutModalData && (
         <CheckoutSuccessModal
           open={showCheckoutModal}
           onOpenChange={setShowCheckoutModal}
