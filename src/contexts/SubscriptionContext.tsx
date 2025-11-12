@@ -32,7 +32,7 @@ const PUBLIC_ROUTES = [
 
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, profile } = useAuth();
   
   // Verificar se é rota pública ANTES de chamar useSubscription
   const isPublicRoute = PUBLIC_ROUTES.some(pattern => pattern.test(location.pathname));
@@ -46,7 +46,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     );
   }
 
-  const { subscription, loading: subLoading } = useSubscription(user?.id);
+  const { subscription, loading: subLoading } = useSubscription(profile?.company_id);
 
   // Se ainda está carregando auth ou subscription
   if (authLoading || subLoading) {
