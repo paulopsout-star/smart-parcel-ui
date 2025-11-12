@@ -115,13 +115,25 @@ export const useQuitaMais = () => {
       // Extract extras data returned by proxy (from EXTRAS_TO_STORE)
       const extrasToStore = paymentLink._extrasToStore || {};
       
+      // Get company_id from user profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', (await supabase.auth.getUser()).data.user?.id)
+        .single();
+
+      if (!profile?.company_id) {
+        throw new Error('Company ID not found for user');
+      }
+      
       // Save complete data to database using both API response and EXTRAS_TO_STORE
       const { data: savedLink, error: saveError } = await supabase
         .from('payment_links')
         .insert({
+          link_id: paymentLink.linkId || `link_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           url: paymentLink.linkUrl,
-          link_url: paymentLink.linkUrl, // mantém compatibilidade
           guid: paymentLink.guid,
+          company_id: profile.company_id,
           amount: extrasToStore.amount || request.amount,
           payer_name: request.payer.name,
           payer_email: request.payer.email,
@@ -142,7 +154,7 @@ export const useQuitaMais = () => {
             orderType: orderType,
             originalRequest: request
           }
-        })
+        } as any)
         .select()
         .single();
 

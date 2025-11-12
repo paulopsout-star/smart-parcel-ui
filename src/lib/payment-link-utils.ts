@@ -52,8 +52,10 @@ export async function createPaymentLinkForCharge(chargeId: string): Promise<Paym
     const { data: newLink, error: createError } = await supabase
       .from('payment_links')
       .insert({
-        link_url: linkUrl,
+        link_id: linkId,
+        url: linkUrl,
         guid: guid,
+        company_id: charge.company_id,
         order_id: chargeId,
         order_type: 'credit_card',
         status: 'active',
@@ -75,7 +77,7 @@ export async function createPaymentLinkForCharge(chargeId: string): Promise<Paym
           mask_fee: charge.mask_fee,
           has_boleto_link: charge.has_boleto_link
         }
-      })
+      } as any)
       .select()
       .single();
 
