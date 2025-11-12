@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, MessageSquare } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, MessageSquare, User, Mail, Phone, Calendar, CreditCard, FileText } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -20,6 +20,7 @@ interface Charge {
   id: string;
   payer_name: string;
   payer_email: string;
+  payer_phone: string;
   amount: number;
   description: string;
   status: string;
@@ -380,52 +381,101 @@ export default function ChargeHistory() {
 
       <div className="grid gap-6">
         {charges.map((charge) => (
-          <Card key={charge.id}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{charge.payer_name}</CardTitle>
-                  <p className="text-sm text-muted-foreground">{charge.payer_email}</p>
+          <Card key={charge.id} className="overflow-hidden">
+            <CardHeader className="bg-muted/30 pb-4">
+              <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
+                {/* Cliente Info Section */}
+                <div className="flex-1 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <User className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-xl mb-2">{charge.payer_name}</CardTitle>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Mail className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{charge.payer_email}</span>
+                        </div>
+                        {charge.payer_phone && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Phone className="h-4 w-4 flex-shrink-0" />
+                            <span>{charge.payer_phone}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Status & Type Badges */}
+                <div className="flex flex-wrap gap-2">
+                  {getStatusBadge(charge.status)}
+                  <Badge variant="outline" className="gap-1">
+                    <RefreshCw className="h-3 w-3" />
+                    {getRecurrenceLabel(charge.recurrence_type)}
+                  </Badge>
                   {charge.has_boleto_link && (
-                    <Badge variant="outline" className="mt-1">
+                    <Badge variant="secondary" className="gap-1">
+                      <FileText className="h-3 w-3" />
                       Com Boleto
                     </Badge>
                   )}
                 </div>
-                <div className="flex gap-2">
-                  {getStatusBadge(charge.status)}
-                  <Badge variant="outline">{getRecurrenceLabel(charge.recurrence_type)}</Badge>
-                </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-sm font-medium">Valor</p>
-                  <p className="text-lg">{formatCurrency(charge.amount)}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Criado em</p>
-                  <p>{format(new Date(charge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-                </div>
-                {charge.next_charge_date && (
+            
+            <CardContent className="space-y-6 pt-6">
+              {/* Financial & Date Info Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                  <CreditCard className="h-5 w-5 text-primary mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium">Próxima cobrança</p>
-                    <p>{format(new Date(charge.next_charge_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Valor</p>
+                    <p className="text-2xl font-bold">{formatCurrency(charge.amount)}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                  <Calendar className="h-5 w-5 text-primary mt-0.5" />
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Criado em</p>
+                    <p className="text-sm font-semibold">{format(new Date(charge.created_at), 'dd/MM/yyyy', { locale: ptBR })}</p>
+                    <p className="text-xs text-muted-foreground">{format(new Date(charge.created_at), 'HH:mm', { locale: ptBR })}</p>
+                  </div>
+                </div>
+                
+                {charge.next_charge_date && (
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                    <Calendar className="h-5 w-5 text-primary mt-0.5" />
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Próxima cobrança</p>
+                      <p className="text-sm font-semibold">{format(new Date(charge.next_charge_date), 'dd/MM/yyyy', { locale: ptBR })}</p>
+                      <p className="text-xs text-muted-foreground">{format(new Date(charge.next_charge_date), 'HH:mm', { locale: ptBR })}</p>
+                    </div>
                   </div>
                 )}
-                <div>
-                  <p className="text-sm font-medium">Checkout</p>
-                  <CheckoutButtons charge={charge} />
-                </div>
               </div>
 
+              {/* Description */}
               {charge.description && (
-                <div>
-                  <p className="text-sm font-medium">Descrição</p>
-                  <p className="text-sm text-muted-foreground">{charge.description}</p>
+                <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5" />
+                    Descrição
+                  </p>
+                  <p className="text-sm">{charge.description}</p>
                 </div>
               )}
+
+              {/* Checkout Actions */}
+              <div className="p-4 rounded-lg bg-primary/5 border border-primary/10">
+                <p className="text-sm font-medium mb-3 flex items-center gap-2">
+                  <Link2 className="h-4 w-4 text-primary" />
+                  Link de Pagamento
+                </p>
+                <CheckoutButtons charge={charge} />
+              </div>
 
               {charge.executions.length > 0 && (
                 <div>
@@ -504,28 +554,103 @@ export default function ChargeHistory() {
           </DialogHeader>
           {selectedCharge && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h4 className="font-medium mb-2">Informações Básicas</h4>
-                  <div className="space-y-2 text-sm">
-                    <div><strong>Pagador:</strong> {selectedCharge.payer_name}</div>
-                    <div><strong>Email:</strong> {selectedCharge.payer_email}</div>
-                    <div><strong>Valor:</strong> {formatCurrency(selectedCharge.amount)}</div>
-                    <div><strong>Descrição:</strong> {selectedCharge.description}</div>
-                    <div><strong>Tipo:</strong> {getRecurrenceLabel(selectedCharge.recurrence_type)}</div>
-                    <div><strong>Status:</strong> {getStatusBadge(selectedCharge.status)}</div>
-                    {selectedCharge.has_boleto_link && (
-                      <div><strong>Boleto:</strong> <Badge variant="outline">Com vínculo</Badge></div>
-                    )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-muted/30 border">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <User className="h-4 w-4 text-primary" />
+                      Informações do Cliente
+                    </h4>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <span className="text-xs text-muted-foreground">Nome</span>
+                          <p className="font-medium">{selectedCharge.payer_name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <span className="text-xs text-muted-foreground">Email</span>
+                          <p className="font-medium break-all">{selectedCharge.payer_email}</p>
+                        </div>
+                      </div>
+                      {selectedCharge.payer_phone && (
+                        <div className="flex items-start gap-2">
+                          <Phone className="h-4 w-4 text-muted-foreground mt-0.5" />
+                          <div>
+                            <span className="text-xs text-muted-foreground">Telefone</span>
+                            <p className="font-medium">{selectedCharge.payer_phone}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 rounded-lg bg-muted/30 border">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-primary" />
+                      Informações Financeiras
+                    </h4>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <span className="text-xs text-muted-foreground">Valor</span>
+                        <p className="text-xl font-bold text-primary">{formatCurrency(selectedCharge.amount)}</p>
+                      </div>
+                      {selectedCharge.description && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Descrição</span>
+                          <p className="font-medium">{selectedCharge.description}</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <h4 className="font-medium mb-2">Datas</h4>
-                  <div className="space-y-2 text-sm">
-                    <div><strong>Criado em:</strong> {format(new Date(selectedCharge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</div>
-                    {selectedCharge.next_charge_date && (
-                      <div><strong>Próxima cobrança:</strong> {format(new Date(selectedCharge.next_charge_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</div>
-                    )}
+                
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-muted/30 border">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-primary" />
+                      Datas e Tipo
+                    </h4>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <span className="text-xs text-muted-foreground">Criado em</span>
+                        <p className="font-medium">{format(new Date(selectedCharge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
+                      </div>
+                      {selectedCharge.next_charge_date && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Próxima cobrança</span>
+                          <p className="font-medium">{format(new Date(selectedCharge.next_charge_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-xs text-muted-foreground">Tipo de Cobrança</span>
+                        <p className="font-medium">{getRecurrenceLabel(selectedCharge.recurrence_type)}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="p-4 rounded-lg bg-muted/30 border">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-primary" />
+                      Status e Detalhes
+                    </h4>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <span className="text-xs text-muted-foreground">Status</span>
+                        <div className="mt-1">{getStatusBadge(selectedCharge.status)}</div>
+                      </div>
+                      {selectedCharge.has_boleto_link && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Boleto</span>
+                          <div className="mt-1">
+                            <Badge variant="secondary">Com vínculo</Badge>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
