@@ -444,7 +444,7 @@ export default function ThankYou() {
           )}
 
           <Button variant="outline" asChild>
-            <Link to="/charge-history">
+            <Link to="/charges">
               <History className="h-4 w-4 mr-2" />
               Ver histórico
             </Link>

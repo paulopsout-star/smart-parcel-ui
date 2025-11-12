@@ -139,7 +139,7 @@ export default function Dashboard() {
         </Button>
         
         <Button variant="outline" asChild size="lg" className="w-full sm:w-auto">
-          <Link to="/charge-history">
+          <Link to="/charges">
             <BarChart3 className="w-4 h-4 mr-2" />
             Histórico
           </Link>
