@@ -2,6 +2,7 @@ import React, { createContext, useContext } from 'react';
 import { useAuth } from './AuthContext';
 import { useSubscription } from '@/hooks/useSubscription';
 import { Loader2 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 
 interface SubscriptionContextType {
   readOnly: boolean;
@@ -13,8 +14,38 @@ const SubscriptionContext = createContext<SubscriptionContextType>({
   canonicalStatus: 'loading',
 });
 
+// Lista de rotas públicas que não precisam verificar assinatura
+const PUBLIC_ROUTES = [
+  /^\/$/,
+  /^\/login$/,
+  /^\/register$/,
+  /^\/forgot-password$/,
+  /^\/reset-password$/,
+  /^\/checkout\/[^/]+$/,
+  /^\/payment-direct\/[^/]+$/,
+  /^\/payment-pix\/[^/]+$/,
+  /^\/payment-card\/[^/]+$/,
+  /^\/thank-you$/,
+  /^\/simulador$/,
+  /^\/payment$/,
+];
+
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
   const { user, loading: authLoading } = useAuth();
+  
+  // Verificar se é rota pública ANTES de chamar useSubscription
+  const isPublicRoute = PUBLIC_ROUTES.some(pattern => pattern.test(location.pathname));
+  
+  // Se é rota pública, não verificar assinatura
+  if (isPublicRoute) {
+    return (
+      <SubscriptionContext.Provider value={{ readOnly: false, canonicalStatus: 'active' }}>
+        {children}
+      </SubscriptionContext.Provider>
+    );
+  }
+
   const { subscription, loading: subLoading } = useSubscription(user?.id);
 
   // Se ainda está carregando auth ou subscription
