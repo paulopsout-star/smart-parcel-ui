@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCallback, useMemo } from 'react';
 
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzYmJya2JleXhzcXFqcWhwdHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyODk5NTQsImV4cCI6MjA3Mzg2NTk1NH0.I5l0SDwsAN_rsSdoZiE9GAndkn3tkqX44O5ypu0cu7w";
+
 export interface SubscriptionData {
   canonicalStatus: 'active' | 'trialing' | 'past_due' | 'canceled';
   raw: any;
@@ -39,6 +41,7 @@ export function useSubscription(companyId?: string) {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${session.session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY,
           'Content-Type': 'application/json',
         },
       });
