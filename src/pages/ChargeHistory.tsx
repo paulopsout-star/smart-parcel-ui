@@ -8,19 +8,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, MessageSquare, User, Mail, Phone, Calendar, CreditCard, FileText } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, MessageSquare, User, Mail, Phone, Calendar, CreditCard, FileText, Filter, X, Search } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useSubscriptionContext } from '@/contexts/SubscriptionContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarIcon } from 'lucide-react';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 
 interface Charge {
   id: string;
   payer_name: string;
   payer_email: string;
   payer_phone: string;
+  payer_document: string;
   amount: number;
   description: string;
   status: string;
@@ -36,6 +42,14 @@ interface Charge {
     status: string;
     payment_link_url: string | null;
   }>;
+}
+
+interface ChargeFilters {
+  status: string;
+  recurrence_type: string;
+  date_from: Date | undefined;
+  date_to: Date | undefined;
+  payer_document: string;
 }
 
 // Executions Dialog Component
@@ -124,6 +138,7 @@ export default function ChargeHistory() {
   const { isOperador } = useAuth();
   const { readOnly } = useSubscriptionContext();
   const [charges, setCharges] = useState<Charge[]>([]);
+  const [filteredCharges, setFilteredCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
   const [executionsDialog, setExecutionsDialog] = useState<{ open: boolean; chargeId: string; chargeName: string }>({
@@ -131,6 +146,16 @@ export default function ChargeHistory() {
     chargeId: '',
     chargeName: ''
   });
+  
+  // Filter state
+  const [filters, setFilters] = useState<ChargeFilters>({
+    status: 'all',
+    recurrence_type: 'all',
+    date_from: undefined,
+    date_to: undefined,
+    payer_document: ''
+  });
+  const [showFilters, setShowFilters] = useState(false);
   
   // Checkout modal state
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -158,6 +183,7 @@ export default function ChargeHistory() {
 
       if (error) throw error;
       setCharges(data as Charge[]);
+      setFilteredCharges(data as Charge[]);
     } catch (error: any) {
       toast({
         title: "Erro ao carregar cobranças",
@@ -167,6 +193,66 @@ export default function ChargeHistory() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const applyFilters = () => {
+    let filtered = [...charges];
+
+    // Filter by status
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(charge => charge.status === filters.status);
+    }
+
+    // Filter by recurrence type
+    if (filters.recurrence_type !== 'all') {
+      filtered = filtered.filter(charge => charge.recurrence_type === filters.recurrence_type);
+    }
+
+    // Filter by date range
+    if (filters.date_from) {
+      filtered = filtered.filter(charge => {
+        const chargeDate = new Date(charge.created_at);
+        return chargeDate >= filters.date_from!;
+      });
+    }
+
+    if (filters.date_to) {
+      filtered = filtered.filter(charge => {
+        const chargeDate = new Date(charge.created_at);
+        const dateTo = new Date(filters.date_to!);
+        dateTo.setHours(23, 59, 59, 999);
+        return chargeDate <= dateTo;
+      });
+    }
+
+    // Filter by CPF
+    if (filters.payer_document) {
+      const searchTerm = filters.payer_document.replace(/\D/g, '');
+      filtered = filtered.filter(charge => 
+        charge.payer_document?.replace(/\D/g, '').includes(searchTerm)
+      );
+    }
+
+    setFilteredCharges(filtered);
+  };
+
+  const clearFilters = () => {
+    setFilters({
+      status: 'all',
+      recurrence_type: 'all',
+      date_from: undefined,
+      date_to: undefined,
+      payer_document: ''
+    });
+    setFilteredCharges(charges);
+  };
+
+  const hasActiveFilters = () => {
+    return filters.status !== 'all' || 
+           filters.recurrence_type !== 'all' || 
+           filters.date_from !== undefined || 
+           filters.date_to !== undefined || 
+           filters.payer_document !== '';
   };
 
   const processCharge = async (chargeId: string) => {
@@ -317,6 +403,10 @@ export default function ChargeHistory() {
     };
   }, [isOperador]);
 
+  useEffect(() => {
+    applyFilters();
+  }, [filters, charges]);
+
   if (!isOperador) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -371,16 +461,167 @@ export default function ChargeHistory() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Histórico de Cobranças</h1>
-        <Button onClick={fetchCharges} variant="outline">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Atualizar
-        </Button>
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Histórico de Cobranças</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {filteredCharges.length} de {charges.length} cobranças
+            {hasActiveFilters() && ' (filtrado)'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            onClick={() => setShowFilters(!showFilters)} 
+            variant={hasActiveFilters() ? "default" : "outline"}
+          >
+            <Filter className="w-4 h-4 mr-2" />
+            Filtros
+            {hasActiveFilters() && (
+              <Badge variant="secondary" className="ml-2 bg-background">
+                {Object.values(filters).filter(v => v && v !== 'all' && v !== '').length}
+              </Badge>
+            )}
+          </Button>
+          <Button onClick={fetchCharges} variant="outline">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
+      {/* Filters Section */}
+      {showFilters && (
+        <Card className="border-primary/20 bg-muted/30">
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filtros de Busca
+              </CardTitle>
+              {hasActiveFilters() && (
+                <Button onClick={clearFilters} variant="ghost" size="sm">
+                  <X className="w-4 h-4 mr-1" />
+                  Limpar
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <Select 
+                  value={filters.status} 
+                  onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover">
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="processing">Processando</SelectItem>
+                    <SelectItem value="completed">Concluída</SelectItem>
+                    <SelectItem value="failed">Falhou</SelectItem>
+                    <SelectItem value="cancelled">Cancelada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Recurrence Type Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tipo</label>
+                <Select 
+                  value={filters.recurrence_type} 
+                  onValueChange={(value) => setFilters(prev => ({ ...prev, recurrence_type: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover">
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="pontual">Pontual</SelectItem>
+                    <SelectItem value="diaria">Diária</SelectItem>
+                    <SelectItem value="semanal">Semanal</SelectItem>
+                    <SelectItem value="quinzenal">Quinzenal</SelectItem>
+                    <SelectItem value="mensal">Mensal</SelectItem>
+                    <SelectItem value="semestral">Semestral</SelectItem>
+                    <SelectItem value="anual">Anual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date From Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Data inicial</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filters.date_from ? format(filters.date_from, 'dd/MM/yyyy', { locale: ptBR }) : "Selecione"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={filters.date_from}
+                      onSelect={(date) => setFilters(prev => ({ ...prev, date_from: date }))}
+                      locale={ptBR}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Date To Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Data final</label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-left font-normal"
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filters.date_to ? format(filters.date_to, 'dd/MM/yyyy', { locale: ptBR }) : "Selecione"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={filters.date_to}
+                      onSelect={(date) => setFilters(prev => ({ ...prev, date_to: date }))}
+                      locale={ptBR}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* CPF Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">CPF do Cliente</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Digite o CPF..."
+                    value={filters.payer_document}
+                    onChange={(e) => setFilters(prev => ({ ...prev, payer_document: e.target.value }))}
+                    className="pl-9"
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-6">
-        {charges.map((charge) => (
+        {filteredCharges.map((charge) => (
           <Card key={charge.id} className="overflow-hidden">
             <CardHeader className="bg-muted/30 pb-4">
               <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
@@ -537,10 +778,30 @@ export default function ChargeHistory() {
           </Card>
         ))}
 
-        {charges.length === 0 && (
+        {filteredCharges.length === 0 && !loading && (
           <Card>
-            <CardContent className="text-center py-8">
-              <p className="text-muted-foreground">Nenhuma cobrança encontrada.</p>
+            <CardContent className="text-center py-12">
+              {charges.length === 0 ? (
+                <>
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-medium mb-1">Nenhuma cobrança encontrada</p>
+                  <p className="text-sm text-muted-foreground">
+                    Comece criando uma nova cobrança
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-medium mb-1">Nenhum resultado encontrado</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Tente ajustar os filtros de busca
+                  </p>
+                  <Button onClick={clearFilters} variant="outline">
+                    <X className="w-4 h-4 mr-2" />
+                    Limpar Filtros
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         )}
