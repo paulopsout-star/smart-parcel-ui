@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Loader2, Plus, Building2, Edit, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -188,17 +189,24 @@ export default function CompanyManagement() {
             <p className="text-muted-foreground">Gerencie empresas e suas configurações</p>
           </div>
           
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => {
-                setEditingCompany(null);
-                setFormData({ name: '', document: '', email: '', phone: '' });
-              }}>
-                <Plus className="mr-2 h-4 w-4" />
-                Nova Empresa
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/admin/users">
+                <Users className="w-4 h-4 mr-2" />
+                Gerenciar Usuários
+              </Link>
+            </Button>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={() => {
+                  setEditingCompany(null);
+                  setFormData({ name: '', document: '', email: '', phone: '' });
+                }}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Nova Empresa
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
               <DialogHeader>
                 <DialogTitle>
                   {editingCompany ? 'Editar Empresa' : 'Nova Empresa'}
