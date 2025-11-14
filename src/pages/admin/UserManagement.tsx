@@ -18,6 +18,7 @@ interface Profile {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  company_id: string;
 }
 
 export default function UserManagement() {
@@ -27,13 +28,31 @@ export default function UserManagement() {
 
   const fetchProfiles = async () => {
     try {
-      const { data, error } = await supabase
+      // Buscar profiles
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, full_name, is_active, created_at, updated_at, company_id')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setProfiles(data);
+      if (profilesError) throw profilesError;
+
+      // Buscar roles de user_roles para cada profile
+      const profilesWithRoles = await Promise.all(
+        (profilesData || []).map(async (profile) => {
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', profile.id)
+            .maybeSingle();
+
+          return {
+            ...profile,
+            role: (roleData?.role || 'operador') as 'admin' | 'operador',
+          };
+        })
+      );
+
+      setProfiles(profilesWithRoles);
     } catch (error: any) {
       toast({
         title: "Erro ao carregar usuários",
@@ -47,12 +66,46 @@ export default function UserManagement() {
 
   const updateProfile = async (id: string, updates: Partial<Profile>) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', id);
+      // Se está atualizando role, atualizar em user_roles
+      if (updates.role) {
+        // Verificar se já existe um registro em user_roles
+        const { data: existingRole } = await supabase
+          .from('user_roles')
+          .select('id')
+          .eq('user_id', id)
+          .maybeSingle();
 
-      if (error) throw error;
+        if (existingRole) {
+          // Atualizar role existente
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .update({ role: updates.role })
+            .eq('user_id', id);
+
+          if (roleError) throw roleError;
+        } else {
+          // Criar novo registro de role
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({ user_id: id, role: updates.role });
+
+          if (roleError) throw roleError;
+        }
+        
+        // Remover role do updates para não tentar atualizar em profiles
+        const { role, ...profileUpdates } = updates;
+        updates = profileUpdates;
+      }
+
+      // Atualizar apenas campos de profiles (sem role)
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', id);
+
+        if (error) throw error;
+      }
 
       toast({
         title: "Usuário atualizado",
