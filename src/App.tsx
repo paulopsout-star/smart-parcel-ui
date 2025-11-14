@@ -4,7 +4,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
-import { SubscriptionProvider } from "./contexts/SubscriptionContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -31,7 +30,7 @@ import Simulator from "./pages/Simulator";
 
 // Admin pages
 import UserManagement from "./pages/admin/UserManagement";
-import SubscriptionManagement from "./pages/admin/SubscriptionManagement";
+
 import RefundManagement from "./pages/admin/RefundManagement";
 import RecurrenceManagement from "./pages/admin/RecurrenceManagement";
 import CheckoutNew from "./pages/admin/CheckoutNew";
@@ -51,8 +50,7 @@ const App = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter>
-            <SubscriptionProvider>
-              <Routes>
+            <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
@@ -76,7 +74,7 @@ const App = () => {
                 
                 <Route path="/admin/users" element={<ProtectedRoute requiredRole="admin"><UserManagement /></ProtectedRoute>} />
                 <Route path="/admin/companies" element={<ProtectedRoute requiredRole="admin"><CompanyManagement /></ProtectedRoute>} />
-                <Route path="/admin/subscriptions" element={<ProtectedRoute requiredRole="admin"><SubscriptionManagement /></ProtectedRoute>} />
+                
                 <Route path="/admin/refunds" element={<ProtectedRoute requiredRole="admin"><RefundManagement /></ProtectedRoute>} />
                 <Route path="/admin/recurrences" element={<ProtectedRoute requiredRole="admin"><RecurrenceManagement /></ProtectedRoute>} />
                 <Route path="/admin/checkout/new" element={<ProtectedRoute requiredRole="admin"><CheckoutNew /></ProtectedRoute>} />
@@ -86,7 +84,6 @@ const App = () => {
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </SubscriptionProvider>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>
