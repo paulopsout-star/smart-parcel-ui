@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      console.log('🔍 [1/3] Fetching profile for user ID:', userId);
+      console.log('🔍 [AuthContext] Iniciando fetchProfile para:', userId);
       
       // 1. Buscar profile (SEM role - vem de user_roles)
       const { data: profileData, error: profileError } = await supabase
@@ -44,29 +44,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (profileError) {
-        console.error('❌ [1/3] Error fetching profile:', profileError);
+        console.error('❌ [AuthContext] Erro ao buscar profile:', profileError);
+        console.error('❌ [AuthContext] Detalhes do erro:', {
+          message: profileError.message,
+          code: profileError.code,
+          details: profileError.details,
+          hint: profileError.hint
+        });
         return null;
       }
       
-      console.log('✅ [2/3] Profile loaded:', profileData.full_name);
+      if (!profileData) {
+        console.error('❌ [AuthContext] Profile data está vazio/null');
+        return null;
+      }
+
+      console.log('✅ [AuthContext] Profile carregado:', {
+        id: profileData.id,
+        name: profileData.full_name,
+        company_id: profileData.company_id,
+        is_active: profileData.is_active
+      });
 
       // 2. Buscar role da tabela user_roles (fonte única de verdade)
+      console.log('🔍 [AuthContext] Buscando role em user_roles...');
       const { data: roleData, error: roleError } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', userId)
-        .maybeSingle(); // Não falha se não existir
+        .maybeSingle();
 
       if (roleError) {
-        console.error('⚠️ [2/3] Role query error (using default):', roleError);
+        console.error('⚠️ [AuthContext] Erro ao buscar role (usando default):', roleError);
       }
 
       const role = roleData?.role || 'operador';
       
-      console.log('✅ [3/3] Role determined:', role, {
-        from_user_roles: !!roleData,
+      console.log('✅ [AuthContext] Role determinada:', {
+        role: role,
+        from_db: !!roleData,
         is_admin: role === 'admin',
-        is_active: profileData.is_active
+        is_operador: role === 'operador'
       });
 
       const profile: Profile = {
@@ -74,9 +92,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
       };
 
+      console.log('✅ [AuthContext] Profile completo montado:', profile);
       return profile;
     } catch (error) {
-      console.error('❌ Unexpected error in fetchProfile:', error);
+      console.error('❌ [AuthContext] Erro inesperado em fetchProfile:', error);
       return null;
     }
   };
@@ -153,11 +172,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = profile?.role === 'admin' && profile?.is_active;
   const isOperador = (profile?.role === 'operador' || profile?.role === 'admin') && profile?.is_active;
 
-  // Debug logging
-  console.log('Auth Debug - Profile:', profile);
-  console.log('Auth Debug - isAdmin:', isAdmin);
-  console.log('Auth Debug - isOperador:', isOperador);
-  console.log('Auth Debug - loading:', loading);
+  // Debug logging detalhado
+  console.log('🔍 [AuthContext Render] Estado atual:', {
+    user_id: user?.id || 'null',
+    profile_id: profile?.id || 'null',
+    profile_name: profile?.full_name || 'null',
+    profile_role: profile?.role || 'null',
+    profile_is_active: profile?.is_active ?? 'null',
+    isAdmin,
+    isOperador,
+    loading
+  });
 
   const value = {
     user,
