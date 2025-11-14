@@ -37,6 +37,15 @@ export function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Log detalhado para debug
+  console.log('🔍 [Layout] Estado:', {
+    user_id: user?.id || 'null',
+    profile_exists: !!profile,
+    profile_role: profile?.role || 'null',
+    isAdmin,
+    admin_links_visible: isAdmin
+  });
+
   const handleSignOut = async () => {
     const { error } = await signOut();
     if (error) {

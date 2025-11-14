@@ -28,7 +28,7 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, isAdmin } = useAuth();
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats>({
     totalCharges: 0,
@@ -142,6 +142,15 @@ export default function Dashboard() {
           <Calculator className="w-4 h-4 mr-2" />
           Simular Parcelamento
         </Button>
+
+        {isAdmin && (
+          <Button asChild size="lg" variant="secondary" className="w-full sm:w-auto">
+            <Link to="/admin/users">
+              <Users className="w-4 h-4 mr-2" />
+              Gestão de Usuários
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
