@@ -263,6 +263,7 @@ export default function CompanyManagement() {
               </form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {loading ? (
