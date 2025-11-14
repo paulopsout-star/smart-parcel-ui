@@ -34,39 +34,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      console.log('Fetching profile for user ID:', userId);
+      console.log('🔍 Fetching profile for user ID:', userId);
       
-      // Buscar profile com company_id
+      // Buscar profile COM role diretamente
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, full_name, is_active, company_id, created_at, updated_at')
+        .select('id, full_name, is_active, company_id, created_at, updated_at, role')
         .eq('id', userId)
         .single();
 
       if (profileError) {
-        console.error('Error fetching profile:', profileError);
+        console.error('❌ Error fetching profile:', profileError);
         return null;
       }
 
-      // Buscar roles da tabela user_roles
-      const { data: rolesData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId);
-
-      // Determinar role (priorizar admin)
-      const role = rolesData?.find(r => r.role === 'admin') 
-        ? 'admin' 
-        : rolesData?.find(r => r.role === 'operador')
-        ? 'operador'
-        : 'operador'; // default
+      // Garantir que role existe, usar 'operador' como padrão
+      const role = profileData.role || 'operador';
+      
+      if (!profileData.role) {
+        console.warn('⚠️ Profile has no role defined, defaulting to operador');
+      }
 
       const profile: Profile = {
         ...profileData,
         role,
       };
 
-      console.log('Profile fetched successfully:', profile);
+      console.log('✅ Profile loaded:', {
+        name: profile.full_name,
+        role: profile.role,
+        is_active: profile.is_active,
+        company_id: profile.company_id
+      });
+
       return profile;
     } catch (error) {
       console.error('Error fetching profile:', error);
