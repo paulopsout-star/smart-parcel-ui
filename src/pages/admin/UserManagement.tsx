@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, RefreshCw, UserPlus, Settings } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Loader2, RefreshCw, UserPlus, Building2, Trash2, KeyRound } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -19,16 +24,62 @@ interface Profile {
   created_at: string;
   updated_at: string;
   company_id: string;
+  company_name?: string;
+}
+
+interface Company {
+  id: string;
+  name: string;
+}
+
+interface NewUserData {
+  email: string;
+  password: string;
+  full_name: string;
+  company_id: string;
+  role: 'admin' | 'operador';
 }
 
 export default function UserManagement() {
   const { isAdmin } = useAuth();
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [filteredProfiles, setFilteredProfiles] = useState<Profile[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  
+  // Filtros
+  const [searchName, setSearchName] = useState('');
+  const [filterCompany, setFilterCompany] = useState('all');
+  const [filterRole, setFilterRole] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+
+  const [newUserData, setNewUserData] = useState<NewUserData>({
+    email: '',
+    password: '',
+    full_name: '',
+    company_id: '',
+    role: 'operador'
+  });
+
+  const fetchCompanies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      setCompanies(data || []);
+    } catch (error: any) {
+      console.error('Erro ao carregar empresas:', error);
+    }
+  };
 
   const fetchProfiles = async () => {
     try {
-      // Buscar profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, full_name, is_active, created_at, updated_at, company_id')
@@ -36,7 +87,12 @@ export default function UserManagement() {
 
       if (profilesError) throw profilesError;
 
-      // Buscar roles de user_roles para cada profile
+      const { data: companiesData } = await supabase
+        .from('companies')
+        .select('id, name');
+
+      const companyMap = new Map(companiesData?.map(c => [c.id, c.name]) || []);
+
       const profilesWithRoles = await Promise.all(
         (profilesData || []).map(async (profile) => {
           const { data: roleData } = await supabase
@@ -48,11 +104,13 @@ export default function UserManagement() {
           return {
             ...profile,
             role: (roleData?.role || 'operador') as 'admin' | 'operador',
+            company_name: companyMap.get(profile.company_id) || 'Empresa não encontrada'
           };
         })
       );
 
       setProfiles(profilesWithRoles);
+      setFilteredProfiles(profilesWithRoles);
     } catch (error: any) {
       toast({
         title: "Erro ao carregar usuários",
@@ -64,11 +122,93 @@ export default function UserManagement() {
     }
   };
 
+  useEffect(() => {
+    if (isAdmin) {
+      fetchProfiles();
+      fetchCompanies();
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    let filtered = profiles;
+
+    if (searchName.trim()) {
+      filtered = filtered.filter(p => 
+        p.full_name.toLowerCase().includes(searchName.toLowerCase())
+      );
+    }
+
+    if (filterCompany !== 'all') {
+      filtered = filtered.filter(p => p.company_id === filterCompany);
+    }
+
+    if (filterRole !== 'all') {
+      filtered = filtered.filter(p => p.role === filterRole);
+    }
+
+    if (filterStatus !== 'all') {
+      const isActive = filterStatus === 'active';
+      filtered = filtered.filter(p => p.is_active === isActive);
+    }
+
+    setFilteredProfiles(filtered);
+  }, [searchName, filterCompany, filterRole, filterStatus, profiles]);
+
+  const createUser = async () => {
+    try {
+      setIsCreating(true);
+
+      if (!newUserData.email || !newUserData.password || !newUserData.full_name || !newUserData.company_id) {
+        throw new Error('Todos os campos são obrigatórios');
+      }
+
+      if (newUserData.password.length < 6) {
+        throw new Error('A senha deve ter no mínimo 6 caracteres');
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newUserData.email)) {
+        throw new Error('Email inválido');
+      }
+
+      const { data, error } = await supabase.functions.invoke('create-user-admin', {
+        body: newUserData
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao criar usuário');
+      }
+
+      toast({
+        title: "Usuário criado",
+        description: "Novo usuário cadastrado com sucesso",
+      });
+
+      setIsCreateDialogOpen(false);
+      setNewUserData({
+        email: '',
+        password: '',
+        full_name: '',
+        company_id: '',
+        role: 'operador'
+      });
+      fetchProfiles();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao criar usuário",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const updateProfile = async (id: string, updates: Partial<Profile>) => {
     try {
-      // Se está atualizando role, atualizar em user_roles
       if (updates.role) {
-        // Verificar se já existe um registro em user_roles
         const { data: existingRole } = await supabase
           .from('user_roles')
           .select('id')
@@ -76,7 +216,6 @@ export default function UserManagement() {
           .maybeSingle();
 
         if (existingRole) {
-          // Atualizar role existente
           const { error: roleError } = await supabase
             .from('user_roles')
             .update({ role: updates.role })
@@ -84,7 +223,6 @@ export default function UserManagement() {
 
           if (roleError) throw roleError;
         } else {
-          // Criar novo registro de role
           const { error: roleError } = await supabase
             .from('user_roles')
             .insert({ user_id: id, role: updates.role });
@@ -92,12 +230,10 @@ export default function UserManagement() {
           if (roleError) throw roleError;
         }
         
-        // Remover role do updates para não tentar atualizar em profiles
         const { role, ...profileUpdates } = updates;
         updates = profileUpdates;
       }
 
-      // Atualizar apenas campos de profiles (sem role)
       if (Object.keys(updates).length > 0) {
         const { error } = await supabase
           .from('profiles')
@@ -122,100 +258,141 @@ export default function UserManagement() {
     }
   };
 
-  useEffect(() => {
-    if (isAdmin) {
-      fetchProfiles();
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Email enviado",
+        description: "Um link para redefinir a senha foi enviado para o email do usuário",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao resetar senha",
+        description: error.message,
+        variant: "destructive",
+      });
     }
-  }, [isAdmin]);
+  };
+
+  const deleteUser = async (userId: string, userName: string) => {
+    try {
+      await supabase.from('user_roles').delete().eq('user_id', userId);
+      const { error } = await supabase.from('profiles').delete().eq('id', userId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Usuário removido",
+        description: `${userName} foi removido do sistema`,
+      });
+
+      fetchProfiles();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao deletar usuário",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   if (!isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h2>
-          <p className="text-muted-foreground">Apenas administradores podem acessar esta área.</p>
+          <p className="text-muted-foreground">Você não tem permissão para acessar esta área.</p>
         </div>
       </div>
     );
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
-    );
-  }
-
-  const getRoleBadge = (role: string) => {
-    return role === 'admin' ? (
-      <Badge>Administrador</Badge>
-    ) : (
-      <Badge variant="secondary">Operador</Badge>
-    );
-  };
-
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
-        <Button onClick={fetchProfiles} variant="outline">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Atualizar
-        </Button>
-      </div>
-
-      <div className="grid gap-6">
-        {profiles.map((profile) => (
-          <Card key={profile.id}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{profile.full_name}</CardTitle>
-                  <p className="text-sm text-muted-foreground">ID: {profile.id}</p>
-                </div>
-                <div className="flex gap-2">
-                  {getRoleBadge(profile.role)}
-                  {profile.is_active ? (
-                    <Badge variant="default">Ativo</Badge>
-                  ) : (
-                    <Badge variant="outline">Inativo</Badge>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium">Criado em</p>
-                  <p>{format(new Date(profile.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Atualizado em</p>
-                  <p>{format(new Date(profile.updated_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    checked={profile.is_active}
-                    onCheckedChange={(checked) => 
-                      updateProfile(profile.id, { is_active: checked })
-                    }
+    <div className="container mx-auto py-8 space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
+          <p className="text-muted-foreground">Gerencie os usuários do sistema</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/admin/companies">
+              <Building2 className="w-4 h-4 mr-2" />
+              Gerenciar Empresas
+            </Link>
+          </Button>
+          <Button onClick={fetchProfiles} variant="outline" disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <UserPlus className="w-4 h-4 mr-2" />
+                Adicionar Usuário
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Criar Novo Usuário</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados para criar um novo usuário no sistema
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="usuario@empresa.com"
+                    value={newUserData.email}
+                    onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
                   />
-                  <label className="text-sm font-medium">Usuário ativo</label>
                 </div>
-
-                <div className="flex items-center space-x-2">
-                  <label className="text-sm font-medium">Função:</label>
-                  <Select
-                    value={profile.role}
-                    onValueChange={(value) => 
-                      updateProfile(profile.id, { role: value as 'admin' | 'operador' })
-                    }
-                  >
-                    <SelectTrigger className="w-40">
+                <div className="grid gap-2">
+                  <Label htmlFor="password">Senha *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Mínimo 6 caracteres"
+                    value={newUserData.password}
+                    onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="full_name">Nome Completo *</Label>
+                  <Input
+                    id="full_name"
+                    placeholder="Nome do usuário"
+                    value={newUserData.full_name}
+                    onChange={(e) => setNewUserData({ ...newUserData, full_name: e.target.value })}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="company">Empresa *</Label>
+                  <Select value={newUserData.company_id} onValueChange={(value) => setNewUserData({ ...newUserData, company_id: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a empresa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {companies.map((company) => (
+                        <SelectItem key={company.id} value={company.id}>
+                          {company.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="role">Função *</Label>
+                  <Select value={newUserData.role} onValueChange={(value: 'admin' | 'operador') => setNewUserData({ ...newUserData, role: value })}>
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -225,18 +402,187 @@ export default function UserManagement() {
                   </Select>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        ))}
-
-        {profiles.length === 0 && (
-          <Card>
-            <CardContent className="text-center py-8">
-              <p className="text-muted-foreground">Nenhum usuário encontrado.</p>
-            </CardContent>
-          </Card>
-        )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreating}>
+                  Cancelar
+                </Button>
+                <Button onClick={createUser} disabled={isCreating}>
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Criando...
+                    </>
+                  ) : (
+                    'Criar Usuário'
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Filtros</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="search">Buscar por nome</Label>
+              <Input
+                id="search"
+                placeholder="Digite o nome..."
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filter-company">Empresa</Label>
+              <Select value={filterCompany} onValueChange={setFilterCompany}>
+                <SelectTrigger id="filter-company">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {companies.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filter-role">Função</Label>
+              <Select value={filterRole} onValueChange={setFilterRole}>
+                <SelectTrigger id="filter-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="operador">Operador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="filter-status">Status</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger id="filter-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="active">Ativo</SelectItem>
+                  <SelectItem value="inactive">Inativo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin" />
+        </div>
+      ) : filteredProfiles.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground">Nenhum usuário encontrado</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4">
+          {filteredProfiles.map((profile) => (
+            <Card key={profile.id}>
+              <CardContent className="pt-6">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-semibold">{profile.full_name}</h3>
+                      <Badge variant={profile.is_active ? "default" : "secondary"}>
+                        {profile.is_active ? 'Ativo' : 'Inativo'}
+                      </Badge>
+                      <Badge variant={profile.role === 'admin' ? "destructive" : "outline"}>
+                        {profile.role === 'admin' ? 'Administrador' : 'Operador'}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Empresa:</strong> {profile.company_name}
+                    </p>
+                    <div className="flex gap-4 text-sm text-muted-foreground">
+                      <span>Criado: {format(new Date(profile.created_at), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                      <span>Atualizado: {format(new Date(profile.updated_at), 'dd/MM/yyyy', { locale: ptBR })}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`active-${profile.id}`} className="text-sm">Ativo</Label>
+                      <Switch
+                        id={`active-${profile.id}`}
+                        checked={profile.is_active}
+                        onCheckedChange={(checked) => updateProfile(profile.id, { is_active: checked })}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor={`role-${profile.id}`} className="text-sm">Função</Label>
+                      <Select
+                        value={profile.role}
+                        onValueChange={(value: 'admin' | 'operador') => updateProfile(profile.id, { role: value })}
+                      >
+                        <SelectTrigger id={`role-${profile.id}`} className="w-[140px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="operador">Operador</SelectItem>
+                          <SelectItem value="admin">Administrador</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => resetPassword(profile.id)}
+                    >
+                      <KeyRound className="w-4 h-4 mr-2" />
+                      Resetar Senha
+                    </Button>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm">
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Deletar
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Tem certeza que deseja deletar o usuário <strong>{profile.full_name}</strong>?
+                            Esta ação não pode ser desfeita.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteUser(profile.id, profile.full_name)}>
+                            Deletar
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
