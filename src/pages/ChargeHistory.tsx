@@ -14,7 +14,7 @@ import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useSubscriptionContext } from '@/contexts/SubscriptionContext';
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -258,7 +258,6 @@ const ExecutionsDialogContent = ({
 
 export default function ChargeHistory() {
   const { isOperador } = useAuth();
-  const { readOnly } = useSubscriptionContext();
   const [charges, setCharges] = useState<Charge[]>([]);
   const [filteredCharges, setFilteredCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -447,7 +446,6 @@ export default function ChargeHistory() {
               onClick={() => { resetLinkState(charge.id); linkQuery.refetch(); }} 
               size="sm" 
               variant="outline"
-              disabled={readOnly}
               className="gap-2"
             >
               <RefreshCw className="h-4 w-4" />
@@ -457,7 +455,7 @@ export default function ChargeHistory() {
               onClick={handleGenerateLink} 
               size="sm" 
               className="bg-primary hover:bg-primary/90 gap-2"
-              disabled={isGenerating || readOnly}
+              disabled={isGenerating}
             >
               <Plus className="h-4 w-4" />
               Gerar Link
@@ -475,7 +473,6 @@ export default function ChargeHistory() {
           size="sm"
           className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
           onClick={() => openPaymentLink(checkoutUrl)}
-          disabled={readOnly}
         >
           <ExternalLink className="h-4 w-4" />
           Abrir Link
@@ -491,7 +488,6 @@ export default function ChargeHistory() {
               duration: 3000,
             });
           }}
-          disabled={readOnly}
           className="gap-2"
         >
           <Copy className="h-4 w-4" />
@@ -501,7 +497,7 @@ export default function ChargeHistory() {
           size="sm"
           variant="ghost"
           onClick={handleGenerateLink}
-          disabled={isGenerating || readOnly}
+          disabled={isGenerating}
           className="gap-2"
         >
           <Plus className="h-4 w-4" />
@@ -946,7 +942,6 @@ export default function ChargeHistory() {
                       onClick={() => processCharge(charge.id)}
                       variant="outline"
                       className="gap-2"
-                      disabled={readOnly}
                     >
                       <RefreshCw className="h-4 w-4" />
                       Processar Agora

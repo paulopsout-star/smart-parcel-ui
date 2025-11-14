@@ -13,9 +13,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
-import { SubscriptionBanner } from "@/components/SubscriptionBanner";
-import { useSubscription } from "@/hooks/useSubscription";
-import { useSubscriptionContext } from "@/contexts/SubscriptionContext";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useMessageTemplates } from '@/hooks/useMessageTemplates';
@@ -119,8 +116,6 @@ export default function NewCharge() {
   const { profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { checkSubscriptionOrThrow, isAllowed, revalidateOnNewCharge } = useSubscription();
-  const { readOnly, canonicalStatus } = useSubscriptionContext();
   
   // Hook to load message templates scoped by company_id
   const { data: messageTemplates = [], isLoading: loadingTemplates, isError: templatesError } = useMessageTemplates(profile?.id);
@@ -176,12 +171,6 @@ export default function NewCharge() {
 
     checkPayoutAccount();
   }, [profile]);
-
-  // Call revalidateOnNewCharge only once on mount (stable, no deps loop)
-  useEffect(() => {
-    revalidateOnNewCharge();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const formatAmount = (value: string) => {
     // Convert string to cents (integer)
@@ -245,18 +234,6 @@ export default function NewCharge() {
       toast({
         title: 'Configurações da empresa ausentes',
         description: 'Atualize a página e tente novamente. Se o problema persistir, entre em contato com o suporte.',
-        className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
-      });
-      return;
-    }
-    
-    // Verificar assinatura antes de criar cobrança
-    try {
-      await checkSubscriptionOrThrow();
-    } catch (error) {
-      toast({
-        title: 'Assinatura Inativa',
-        description: error instanceof Error ? error.message : 'Sua assinatura não permite criar novas cobranças.',
         className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
       });
       return;
@@ -514,8 +491,6 @@ export default function NewCharge() {
             </p>
           </div>
           
-          <SubscriptionBanner />
-          
           {!settingsLoading && !isSettingsValid && (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>
@@ -741,7 +716,7 @@ export default function NewCharge() {
                 totalAmount={watchAmount ? formatAmount(watchAmount) : 0}
                 recurrenceType={watchRecurrenceType}
                 payerName={watchPayerName}
-                isValid={isFormValid && isSettingsValid && !readOnly && isAllowed()}
+                isValid={isFormValid && isSettingsValid}
                 validationErrors={validationErrors}
                 onSubmit={handleSubmit(onSubmit)}
                 isLoading={isLoading}
