@@ -34,42 +34,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      console.log('🔍 Fetching profile for user ID:', userId);
+      console.log('🔍 [1/3] Fetching profile for user ID:', userId);
       
-      // Buscar profile COM role diretamente
+      // 1. Buscar profile (SEM role - vem de user_roles)
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, full_name, is_active, company_id, created_at, updated_at, role')
+        .select('id, full_name, is_active, company_id, created_at, updated_at')
         .eq('id', userId)
         .single();
 
       if (profileError) {
-        console.error('❌ Error fetching profile:', profileError);
+        console.error('❌ [1/3] Error fetching profile:', profileError);
         return null;
       }
-
-      // Garantir que role existe, usar 'operador' como padrão
-      const role = profileData.role || 'operador';
       
-      if (!profileData.role) {
-        console.warn('⚠️ Profile has no role defined, defaulting to operador');
+      console.log('✅ [2/3] Profile loaded:', profileData.full_name);
+
+      // 2. Buscar role da tabela user_roles (fonte única de verdade)
+      const { data: roleData, error: roleError } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle(); // Não falha se não existir
+
+      if (roleError) {
+        console.error('⚠️ [2/3] Role query error (using default):', roleError);
       }
+
+      const role = roleData?.role || 'operador';
+      
+      console.log('✅ [3/3] Role determined:', role, {
+        from_user_roles: !!roleData,
+        is_admin: role === 'admin',
+        is_active: profileData.is_active
+      });
 
       const profile: Profile = {
         ...profileData,
         role,
       };
 
-      console.log('✅ Profile loaded:', {
-        name: profile.full_name,
-        role: profile.role,
-        is_active: profile.is_active,
-        company_id: profile.company_id
-      });
-
       return profile;
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('❌ Unexpected error in fetchProfile:', error);
       return null;
     }
   };
