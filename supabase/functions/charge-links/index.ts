@@ -137,45 +137,7 @@ serve(async (req) => {
     if (req.method === 'POST' && action === 'create') {
       console.log(`Creating payment link for charge ${chargeId}`);
 
-      // Check subscription status first
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        return new Response(JSON.stringify({ 
-          code: 'UNAUTHORIZED',
-          error: 'Authentication required' 
-        }), {
-          status: 401,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const { data: subscriptionStatus, error: subError } = await supabase.functions.invoke('subscription-status', {
-        body: { userId: user.id, companyId: user.id }
-      });
-
-      if (subError) {
-        console.error('Error checking subscription:', subError);
-        return new Response(JSON.stringify({ 
-          code: 'SUBSCRIPTION_CHECK_FAILED',
-          error: 'Failed to check subscription status' 
-        }), {
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      const allowed = ['active', 'trialing'].includes(subscriptionStatus?.canonicalStatus);
-      if (!allowed) {
-        console.log(`Subscription blocked - Status: ${subscriptionStatus?.canonicalStatus}`);
-        return new Response(JSON.stringify({ 
-          code: 'SUBSCRIPTION_BLOCKED',
-          error: 'Active subscription required to generate new payment links' 
-        }), {
-          status: 403,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
+      // Subscription check removed - all authenticated users can create payment links
 
       // Check if charge exists and user has access
       const { data: charge, error: chargeError } = await supabase
