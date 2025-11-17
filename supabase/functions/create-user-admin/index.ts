@@ -75,47 +75,68 @@ serve(async (req) => {
 
     if (createError) {
       console.error('Erro ao criar usuário:', createError)
-      throw createError
+      
+      // Tratamento específico de erros
+      if (createError.message?.includes('already registered') || createError.message?.includes('duplicate')) {
+        throw new Error('Este email já está cadastrado no sistema')
+      }
+      if (createError.message?.includes('password')) {
+        throw new Error('A senha deve ter no mínimo 6 caracteres e incluir letras e números')
+      }
+      if (createError.message?.includes('email')) {
+        throw new Error('Formato de email inválido')
+      }
+      
+      throw new Error('Erro ao criar usuário: ' + createError.message)
     }
 
     console.log('Usuário criado no Auth:', userData.user.id)
 
-    // Criar profile
+    // Aguardar trigger automático completar (100ms)
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    // Atualizar profile (trigger já criou o registro)
     const { error: profileError } = await supabase
       .from('profiles')
-      .insert({
-        id: userData.user.id,
+      .update({
         full_name,
         company_id,
         is_active: true
       })
+      .eq('id', userData.user.id)
 
     if (profileError) {
-      console.error('Erro ao criar profile:', profileError)
+      console.error('Erro ao atualizar profile:', profileError)
+      
       // Tentar deletar o usuário criado
       await supabase.auth.admin.deleteUser(userData.user.id)
-      throw new Error('Erro ao criar perfil do usuário')
+      
+      if (profileError.code === '23503') {
+        throw new Error('Empresa inválida. Verifique se a empresa existe e está ativa')
+      }
+      
+      throw new Error('Erro ao configurar perfil do usuário. Tente novamente')
     }
 
-    console.log('Profile criado')
+    console.log('Profile atualizado')
 
-    // Criar role
+    // Atualizar role (trigger já criou o registro)
     const { error: roleError } = await supabase
       .from('user_roles')
-      .insert({
-        user_id: userData.user.id,
-        role
-      })
+      .update({ role })
+      .eq('user_id', userData.user.id)
 
     if (roleError) {
-      console.error('Erro ao criar role:', roleError)
+      console.error('Erro ao atualizar role:', roleError)
+      
       // Tentar deletar profile e usuário
       await supabase.from('profiles').delete().eq('id', userData.user.id)
       await supabase.auth.admin.deleteUser(userData.user.id)
-      throw new Error('Erro ao atribuir função ao usuário')
+      
+      throw new Error('Erro ao atribuir função ao usuário. Tente novamente')
     }
 
-    console.log('Role criada:', role)
+    console.log('Role atualizada:', role)
 
     return new Response(JSON.stringify({
       success: true,
@@ -128,9 +149,14 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Erro na função create-user-admin:', error)
+    
+    // Retornar mensagem de erro amigável
+    const errorMessage = error.message || 'Erro ao criar usuário. Tente novamente'
+    
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: errorMessage,
+      details: error.details || null
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,

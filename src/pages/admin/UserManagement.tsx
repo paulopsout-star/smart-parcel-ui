@@ -155,35 +155,67 @@ export default function UserManagement() {
   }, [searchName, filterCompany, filterRole, filterStatus, profiles]);
 
   const createUser = async () => {
+    // Validações preventivas com mensagens específicas
+    if (!newUserData.email || !newUserData.email.includes('@')) {
+      toast({
+        title: "❌ Email inválido",
+        description: "Por favor, insira um email válido no formato: usuario@empresa.com",
+        variant: "destructive",
+        duration: 6000,
+      });
+      return;
+    }
+
+    if (!newUserData.password || newUserData.password.length < 6) {
+      toast({
+        title: "❌ Senha muito curta",
+        description: "A senha deve ter no mínimo 6 caracteres para garantir segurança",
+        variant: "destructive",
+        duration: 6000,
+      });
+      return;
+    }
+
+    if (!newUserData.full_name || newUserData.full_name.trim().length < 3) {
+      toast({
+        title: "❌ Nome incompleto",
+        description: "Por favor, insira o nome completo do usuário (mínimo 3 caracteres)",
+        variant: "destructive",
+        duration: 6000,
+      });
+      return;
+    }
+
+    if (!newUserData.company_id) {
+      toast({
+        title: "❌ Empresa não selecionada",
+        description: "Por favor, selecione uma empresa para vincular o usuário",
+        variant: "destructive",
+        duration: 6000,
+      });
+      return;
+    }
+
     try {
       setIsCreating(true);
-
-      if (!newUserData.email || !newUserData.password || !newUserData.full_name || !newUserData.company_id) {
-        throw new Error('Todos os campos são obrigatórios');
-      }
-
-      if (newUserData.password.length < 6) {
-        throw new Error('A senha deve ter no mínimo 6 caracteres');
-      }
-
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(newUserData.email)) {
-        throw new Error('Email inválido');
-      }
 
       const { data, error } = await supabase.functions.invoke('create-user-admin', {
         body: newUserData
       });
 
-      if (error) throw error;
+      if (error) {
+        throw new Error(error.message || 'Erro de conexão com o servidor');
+      }
 
       if (!data.success) {
         throw new Error(data.error || 'Erro ao criar usuário');
       }
 
+      // Sucesso com mensagem detalhada
       toast({
-        title: "Usuário criado",
-        description: "Novo usuário cadastrado com sucesso",
+        title: "✅ Usuário criado com sucesso!",
+        description: `${newUserData.full_name} (${newUserData.email}) foi cadastrado como ${newUserData.role === 'admin' ? 'Administrador' : 'Operador'}. Um email de confirmação foi enviado.`,
+        duration: 6000,
       });
 
       setIsCreateDialogOpen(false);
@@ -196,10 +228,16 @@ export default function UserManagement() {
       });
       fetchProfiles();
     } catch (error: any) {
+      console.error('Erro ao criar usuário:', error);
+      
+      // Extrair mensagem de erro do backend ou usar mensagem genérica
+      const errorMessage = error.message || "Ocorreu um erro inesperado ao criar o usuário";
+      
       toast({
-        title: "Erro ao criar usuário",
-        description: error.message,
+        title: "❌ Erro ao criar usuário",
+        description: errorMessage,
         variant: "destructive",
+        duration: 8000,
       });
     } finally {
       setIsCreating(false);
@@ -410,7 +448,7 @@ export default function UserManagement() {
                   {isCreating ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Criando...
+                      Criando usuário...
                     </>
                   ) : (
                     'Criar Usuário'
