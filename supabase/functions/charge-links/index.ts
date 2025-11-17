@@ -218,10 +218,13 @@ serve(async (req) => {
       const tmpLinkUrl = new URL(`/checkout/${tmpLinkId}`, origin).toString();
 
       // Create new payment link with all required fields
+      console.log(`Creating payment link for charge ${chargeId} with company_id: ${charge.company_id}`);
+      
       const { data: newLink, error: insertError } = await supabase
         .from('payment_links')
         .insert({
           charge_id: chargeId,
+          company_id: charge.company_id,
           amount: charge.amount,
           payer_name: charge.payer_name,
           payer_email: charge.payer_email,
