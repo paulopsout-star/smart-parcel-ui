@@ -469,7 +469,7 @@ export default function ChargeHistory() {
       );
     }
 
-    if (linkQuery.isError || !linkQuery.data?.url) {
+    if (linkQuery.data === null || !linkQuery.data?.url) {
       return (
         <div className="space-y-3">
           {isCompleted && (
