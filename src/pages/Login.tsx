@@ -99,7 +99,7 @@ export default function Login() {
                 <Label htmlFor="password">Senha</Label>
                 <Link 
                   to="/forgot-password" 
-                  className="text-xs text-primary hover:underline"
+                  className="text-sm text-primary hover:underline font-medium"
                 >
                   Esqueci minha senha
                 </Link>
