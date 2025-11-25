@@ -126,6 +126,9 @@ verify_jwt = false
 [functions.quitaplus-simulation]
 verify_jwt = false
 
+[functions.admin-reset-password]
+verify_jwt = true
+
 [functions.abacatepay-pix-create]
 verify_jwt = true
 
