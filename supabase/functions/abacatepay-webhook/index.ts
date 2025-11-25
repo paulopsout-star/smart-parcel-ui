@@ -21,40 +21,47 @@ serve(async (req) => {
     // Parse webhook payload
     const payload = await req.json();
     
-    console.log('[abacatepay-webhook] Webhook recebido:', {
+    console.log('[abacatepay-webhook] 📥 Webhook recebido:', {
       event: payload.event,
-      billingId: payload.billing?.id,
-      status: payload.billing?.status
+      pixId: payload.data?.id,
+      status: payload.data?.status,
+      amount: payload.data?.amount
     });
 
-    // Validar que é um evento de pagamento
-    if (!payload.event || !payload.billing) {
-      console.error('[abacatepay-webhook] Payload inválido:', payload);
+    // Validar que é um evento válido
+    if (!payload.event || !payload.data?.id) {
+      console.error('[abacatepay-webhook] ❌ Payload inválido:', payload);
       return new Response(
         JSON.stringify({ error: 'Payload inválido' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const { event, billing } = payload;
-    const billingId = billing.id;
+    const { event, data } = payload;
+    const pixId = data.id;
 
-    // Buscar cobrança pelo billing_id do Abacate Pay
+    console.log('[abacatepay-webhook] 🔍 Buscando cobrança com pix_id:', pixId);
+
+    // Buscar cobrança pelo pix_id do Abacate Pay (salvo no checkout_link_id)
     const { data: charge, error: chargeError } = await supabase
       .from('charges')
       .select('*')
-      .eq('checkout_link_id', billingId)
+      .eq('checkout_link_id', pixId)
       .single();
 
     if (chargeError || !charge) {
-      console.error('[abacatepay-webhook] Cobrança não encontrada para billing_id:', billingId, chargeError);
+      console.error('[abacatepay-webhook] ❌ Cobrança não encontrada para pix_id:', pixId, chargeError);
       return new Response(
         JSON.stringify({ error: 'Cobrança não encontrada' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[abacatepay-webhook] Cobrança encontrada:', charge.id);
+    console.log('[abacatepay-webhook] ✅ Cobrança encontrada:', {
+      chargeId: charge.id,
+      currentStatus: charge.status,
+      amount: charge.amount
+    });
 
     // Processar eventos do Abacate Pay
     let newStatus = charge.status;
@@ -63,38 +70,42 @@ serve(async (req) => {
         ...charge.metadata,
         webhook_event: event,
         webhook_received_at: new Date().toISOString(),
-        billing_status: billing.status
+        pix_status: data.status,
+        pix_paid_at: data.paidAt || null
       }
     };
 
     // Mapear eventos do Abacate Pay para status da cobrança
     switch (event) {
-      case 'billing.paid':
-      case 'payment.approved':
+      case 'pixQrCode.paid':
+      case 'pixQrCode.completed':
         newStatus = 'completed';
         updateData.status = 'completed';
-        console.log('[abacatepay-webhook] Pagamento confirmado para cobrança:', charge.id);
+        console.log('[abacatepay-webhook] ✅ Pagamento PIX confirmado para cobrança:', charge.id);
         break;
       
-      case 'billing.pending':
+      case 'pixQrCode.pending':
         newStatus = 'processing';
         updateData.status = 'processing';
+        console.log('[abacatepay-webhook] ⏳ Pagamento PIX pendente para cobrança:', charge.id);
         break;
       
-      case 'billing.expired':
-      case 'billing.canceled':
+      case 'pixQrCode.expired':
         newStatus = 'cancelled';
         updateData.status = 'cancelled';
+        updateData.metadata.expired = true;
+        console.log('[abacatepay-webhook] ⏰ QR Code PIX expirado para cobrança:', charge.id);
         break;
       
-      case 'billing.refunded':
+      case 'pixQrCode.refunded':
         newStatus = 'cancelled';
         updateData.status = 'cancelled';
         updateData.metadata.refunded = true;
+        console.log('[abacatepay-webhook] 💰 Pagamento PIX reembolsado para cobrança:', charge.id);
         break;
       
       default:
-        console.log('[abacatepay-webhook] Evento não mapeado:', event);
+        console.log('[abacatepay-webhook] ⚠️ Evento não mapeado:', event);
     }
 
     // Atualizar cobrança no banco de dados
@@ -104,17 +115,18 @@ serve(async (req) => {
       .eq('id', charge.id);
 
     if (updateError) {
-      console.error('[abacatepay-webhook] Erro ao atualizar cobrança:', updateError);
+      console.error('[abacatepay-webhook] ❌ Erro ao atualizar cobrança:', updateError);
       return new Response(
         JSON.stringify({ error: 'Erro ao atualizar cobrança' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[abacatepay-webhook] Cobrança atualizada com sucesso:', {
+    console.log('[abacatepay-webhook] ✅ Cobrança atualizada com sucesso:', {
       chargeId: charge.id,
       oldStatus: charge.status,
-      newStatus: newStatus
+      newStatus: newStatus,
+      event: event
     });
 
     // Retornar sucesso para o Abacate Pay
@@ -132,7 +144,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('[abacatepay-webhook] Erro inesperado:', error);
+    console.error('[abacatepay-webhook] ❌ Erro inesperado:', error);
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Erro desconhecido' 
