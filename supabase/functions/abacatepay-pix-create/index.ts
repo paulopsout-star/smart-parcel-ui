@@ -62,16 +62,23 @@ serve(async (req) => {
     const baseUrl = Deno.env.get('BASE_URL') || supabaseUrl.replace('.supabase.co', '.lovable.app');
     
     const abacatePayload = {
+      frequency: "ONE_TIME", // Campo obrigatório - pagamento único
+      methods: ["PIX"], // Métodos de pagamento aceitos
       products: [
         {
           externalId: chargeId,
           name: description || `Cobrança ${payerName}`,
+          description: description || `Pagamento para ${payerName}`,
           quantity: 1,
           price: amountCents
         }
       ],
       returnUrl: `${baseUrl}/checkout-pix/${chargeId}`,
-      completionUrl: `${baseUrl}/thank-you`
+      completionUrl: `${baseUrl}/thank-you`,
+      customer: {
+        name: payerName,
+        email: payerEmail
+      }
     };
 
     console.log('[abacatepay-pix-create] Chamando Abacate Pay API...');
