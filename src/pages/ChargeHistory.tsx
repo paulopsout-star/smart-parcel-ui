@@ -115,6 +115,30 @@ const getModernStatusBadge = (status: string) => {
   );
 };
 
+const getPaymentMethodBadgeStyle = (method: string) => {
+  const styles = {
+    cartao: 'bg-blue-500/10 text-blue-700 border-blue-500/20',
+    pix: 'bg-green-500/10 text-green-700 border-green-500/20',
+    boleto: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
+  };
+  return styles[method as keyof typeof styles] || styles.cartao;
+};
+
+const getPaymentMethodLabel = (method: string) => {
+  const labels = { 
+    cartao: 'Cartão', 
+    pix: 'PIX', 
+    boleto: 'Boleto' 
+  };
+  return labels[method as keyof typeof labels] || 'Cartão';
+};
+
+const getPaymentMethodIcon = (method: string) => {
+  if (method === 'pix') return <span className="text-xs">📱</span>;
+  if (method === 'boleto') return <FileText className="h-3 w-3" />;
+  return <CreditCard className="h-3 w-3" />;
+};
+
 // InfoCard Component
 interface InfoCardProps {
   icon: React.ElementType;
@@ -413,6 +437,7 @@ export default function ChargeHistory() {
   const CheckoutButtons = ({ charge }: { charge: Charge }) => {
     const { getExistingLink, generateLink, isGenerating, resetLinkState } = useChargeLinks();
     const linkQuery = getExistingLink(charge.id);
+    const isCompleted = charge.status === 'completed';
 
     const handleGenerateLink = async () => {
       try {
@@ -447,16 +472,25 @@ export default function ChargeHistory() {
     if (linkQuery.isError || !linkQuery.data?.url) {
       return (
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <AlertCircle className="h-4 w-4" />
-            <span>Link de pagamento indisponível</span>
-          </div>
+          {isCompleted && (
+            <div className="flex items-center gap-2 text-sm text-green-600">
+              <Info className="h-4 w-4" />
+              <span>Pagamento já concluído</span>
+            </div>
+          )}
+          {!isCompleted && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <AlertCircle className="h-4 w-4" />
+              <span>Link de pagamento indisponível</span>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button 
               onClick={() => { resetLinkState(charge.id); linkQuery.refetch(); }} 
               size="sm" 
               variant="outline"
               className="gap-2"
+              disabled={isCompleted}
             >
               <RefreshCw className="h-4 w-4" />
               Tentar Novamente
@@ -465,7 +499,7 @@ export default function ChargeHistory() {
               onClick={handleGenerateLink} 
               size="sm" 
               className="bg-primary hover:bg-primary/90 gap-2"
-              disabled={isGenerating}
+              disabled={isGenerating || isCompleted}
             >
               <Plus className="h-4 w-4" />
               Gerar Link
@@ -478,41 +512,51 @@ export default function ChargeHistory() {
     const checkoutUrl = linkQuery.data.url;
 
     return (
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
-          onClick={() => openPaymentLink(checkoutUrl)}
-        >
-          <ExternalLink className="h-4 w-4" />
-          Abrir Link
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            copyToClipboard(checkoutUrl);
-            toast({
-              title: "✓ Link copiado!",
-              description: "O link de pagamento foi copiado para a área de transferência",
-              duration: 3000,
-            });
-          }}
-          className="gap-2"
-        >
-          <Copy className="h-4 w-4" />
-          Copiar
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={handleGenerateLink}
-          disabled={isGenerating}
-          className="gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Abrir Modal
-        </Button>
+      <div className="space-y-3">
+        {isCompleted && (
+          <div className="flex items-center gap-2 text-sm text-green-600">
+            <Info className="h-4 w-4" />
+            <span>Pagamento já concluído</span>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+            onClick={() => openPaymentLink(checkoutUrl)}
+            disabled={isCompleted}
+          >
+            <ExternalLink className="h-4 w-4" />
+            Abrir Link
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              copyToClipboard(checkoutUrl);
+              toast({
+                title: "✓ Link copiado!",
+                description: "O link de pagamento foi copiado para a área de transferência",
+                duration: 3000,
+              });
+            }}
+            disabled={isCompleted}
+            className="gap-2"
+          >
+            <Copy className="h-4 w-4" />
+            Copiar
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleGenerateLink}
+            disabled={isGenerating || isCompleted}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Abrir Modal
+          </Button>
+        </div>
       </div>
     );
   };
@@ -882,10 +926,10 @@ export default function ChargeHistory() {
                       <RefreshCw className="h-3 w-3" />
                       {getRecurrenceLabel(charge.recurrence_type)}
                     </Badge>
-                    {charge.has_boleto_link && (
-                      <Badge className="gap-1.5 bg-amber-500/10 text-amber-700 border-amber-500/20">
-                        <FileText className="h-3 w-3" />
-                        Boleto
+                    {charge.payment_method && (
+                      <Badge className={cn("gap-1.5", getPaymentMethodBadgeStyle(charge.payment_method))}>
+                        {getPaymentMethodIcon(charge.payment_method)}
+                        {getPaymentMethodLabel(charge.payment_method)}
                       </Badge>
                     )}
                   </div>
