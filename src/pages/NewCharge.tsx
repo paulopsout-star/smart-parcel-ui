@@ -360,14 +360,28 @@ export default function NewCharge() {
 
       console.log('[NewCharge] Cobrança criada com sucesso no banco:', charge.id);
 
-      // Se o método de pagamento for PIX, apenas redirecionar para checkout
+      // Se o método de pagamento for PIX, abrir modal com link
       if (data.payment_method === 'pix') {
+        const checkoutUrl = `${window.location.origin}/checkout-pix/${charge.id}`;
+        
+        const fullCheckoutData = {
+          chargeId: charge.id,
+          checkoutUrl: checkoutUrl,
+          linkId: charge.id,
+          amount: charge.amount,
+          payerName: charge.payer_name,
+          description: charge.description || undefined,
+          status: 'PENDENTE' as const
+        };
+        
         toast({
           title: "Cobrança PIX criada!",
-          description: "Redirecionando para checkout...",
+          description: "Link de pagamento gerado com sucesso.",
           className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
         });
-        navigate(`/checkout-pix/${charge.id}`);
+        
+        setCheckoutData(fullCheckoutData);
+        setShowCheckoutModal(true);
         return;
       }
 
