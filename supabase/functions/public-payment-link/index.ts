@@ -42,8 +42,12 @@ serve(async (req) => {
 
     console.log('[public-payment-link] Buscando payment_link no DB...');
 
-    // Find payment link by id and join with charge to get boleto/creditor info + payment_method
-    const { data: paymentLink, error: linkError } = await supabase
+    // Try to find payment link by id first, then by charge_id
+    let paymentLink = null;
+    let linkError = null;
+
+    // First attempt: search by payment_link.id
+    const { data: linkById, error: errorById } = await supabase
       .from('payment_links')
       .select(`
         *,
@@ -57,9 +61,45 @@ serve(async (req) => {
       `)
       .eq('id', id)
       .eq('status', 'active')
-      .single();
+      .maybeSingle();
 
-    console.log('[public-payment-link] Resultado da query:', {
+    console.log('[public-payment-link] Busca por ID:', {
+      found: !!linkById,
+      error: errorById?.message
+    });
+
+    if (linkById) {
+      paymentLink = linkById;
+    } else {
+      // Second attempt: search by charge_id (for PIX links that use charge ID)
+      console.log('[public-payment-link] Tentando buscar por charge_id...');
+      
+      const { data: linkByChargeId, error: errorByChargeId } = await supabase
+        .from('payment_links')
+        .select(`
+          *,
+          charges!payment_links_charge_id_fkey (
+            has_boleto_link,
+            boleto_linha_digitavel,
+            creditor_document,
+            creditor_name,
+            payment_method
+          )
+        `)
+        .eq('charge_id', id)
+        .eq('status', 'active')
+        .maybeSingle();
+
+      console.log('[public-payment-link] Busca por charge_id:', {
+        found: !!linkByChargeId,
+        error: errorByChargeId?.message
+      });
+
+      paymentLink = linkByChargeId;
+      linkError = errorByChargeId;
+    }
+
+    console.log('[public-payment-link] Resultado final:', {
       found: !!paymentLink,
       error: linkError?.message,
       amount: paymentLink?.amount
