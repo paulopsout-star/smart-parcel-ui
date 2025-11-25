@@ -61,6 +61,8 @@ serve(async (req) => {
       `)
       .eq('id', id)
       .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     console.log('[public-payment-link] Busca por ID:', {
@@ -88,6 +90,8 @@ serve(async (req) => {
         `)
         .eq('charge_id', id)
         .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       console.log('[public-payment-link] Busca por charge_id:', {
