@@ -40,11 +40,20 @@ export default function CheckoutPix() {
   const [generating, setGenerating] = useState(false);
   const [polling, setPolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!id) return;
     loadChargeData();
-  }, [id]);
+    
+    // Cleanup do polling quando sair da página
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        console.log('[CheckoutPix] 🧹 Polling limpo ao desmontar componente');
+      }
+    };
+  }, [id, pollInterval]);
 
   const loadChargeData = async () => {
     try {
@@ -137,39 +146,60 @@ export default function CheckoutPix() {
   };
 
   const startPaymentPolling = () => {
+    if (!pixData?.pixId) return;
+    
     setPolling(true);
-    const pollInterval = setInterval(async () => {
+    console.log('[CheckoutPix] 🔄 Iniciando polling de status do PIX:', pixData.pixId);
+    
+    const interval = setInterval(async () => {
       try {
-        const { data, error: statusError } = await supabase
-          .from('charges')
-          .select('status')
-          .eq('id', id)
-          .single();
+        console.log('[CheckoutPix] 🔍 Verificando status do PIX...');
+        
+        const { data, error: statusError } = await supabase.functions.invoke('abacatepay-check-status', {
+          body: {
+            pixId: pixData.pixId,
+            chargeId: charge?.id
+          }
+        });
 
-        if (statusError) throw statusError;
+        if (statusError) {
+          console.error('[CheckoutPix] ❌ Erro ao verificar status:', statusError);
+          return;
+        }
 
-        if (data?.status === 'completed') {
-          clearInterval(pollInterval);
+        console.log('[CheckoutPix] ✅ Status verificado:', data?.status);
+
+        if (data?.status === 'PAID') {
+          clearInterval(interval);
+          setPollInterval(null);
           setPolling(false);
+          
+          console.log('[CheckoutPix] 💰 Pagamento confirmado!');
+          
           toast({
-            title: 'Pagamento confirmado!',
-            description: 'Redirecionando...',
+            title: '✅ Pagamento Confirmado!',
+            description: 'Obrigado pelo seu pagamento. Redirecionando...',
             className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
           });
+          
           setTimeout(() => {
             navigate('/thank-you');
           }, 2000);
         }
       } catch (err) {
-        console.error('[CheckoutPix] Erro no polling:', err);
+        console.error('[CheckoutPix] ❌ Erro no polling:', err);
       }
-    }, 3000);
+    }, 5000); // Verificar a cada 5 segundos
 
-    // Limpar polling após 15 minutos
+    setPollInterval(interval);
+
+    // Limpar polling após 30 minutos
     setTimeout(() => {
-      clearInterval(pollInterval);
+      clearInterval(interval);
+      setPollInterval(null);
       setPolling(false);
-    }, 900000);
+      console.log('[CheckoutPix] ⏱️ Polling encerrado por timeout');
+    }, 1800000); // 30 minutos
   };
 
   const handleCopyBrCode = () => {
@@ -373,10 +403,10 @@ export default function CheckoutPix() {
                     </div>
 
                     {polling && (
-                      <Alert className="bg-blue-500/5 border-blue-500/20">
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                        <AlertDescription className="text-blue-700">
-                          Aguardando confirmação do pagamento...
+                      <Alert className="bg-primary/5 border-primary/20">
+                        <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        <AlertDescription className="text-primary font-medium">
+                          🔍 Verificando pagamento automaticamente a cada 5 segundos...
                         </AlertDescription>
                       </Alert>
                     )}

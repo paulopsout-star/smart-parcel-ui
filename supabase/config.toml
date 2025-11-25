@@ -134,3 +134,6 @@ verify_jwt = false
 
 [functions.abacatepay-pix-qrcode]
 verify_jwt = false
+
+[functions.abacatepay-check-status]
+verify_jwt = false
