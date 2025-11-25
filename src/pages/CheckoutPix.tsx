@@ -39,6 +39,7 @@ export default function CheckoutPix() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
 
@@ -200,6 +201,77 @@ export default function CheckoutPix() {
       setPolling(false);
       console.log('[CheckoutPix] ⏱️ Polling encerrado por timeout');
     }, 1800000); // 30 minutos
+  };
+
+  const handleManualCheck = async () => {
+    if (!pixData?.pixId || !charge?.id) {
+      toast({
+        title: 'Erro',
+        description: 'Dados do PIX não disponíveis',
+        className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
+      });
+      return;
+    }
+
+    try {
+      setChecking(true);
+      console.log('[CheckoutPix] 🔍 Verificação manual iniciada:', pixData.pixId);
+
+      const { data, error: statusError } = await supabase.functions.invoke('abacatepay-check-status', {
+        body: {
+          pixId: pixData.pixId,
+          chargeId: charge.id
+        }
+      });
+
+      if (statusError) {
+        console.error('[CheckoutPix] ❌ Erro ao verificar status:', statusError);
+        toast({
+          title: 'Erro na verificação',
+          description: 'Não foi possível verificar o status. Tente novamente.',
+          className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
+        });
+        return;
+      }
+
+      console.log('[CheckoutPix] ✅ Status verificado manualmente:', data?.status);
+
+      if (data?.status === 'PAID') {
+        // Parar polling automático
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          setPollInterval(null);
+        }
+        setPolling(false);
+        
+        console.log('[CheckoutPix] 💰 Pagamento confirmado!');
+        
+        toast({
+          title: '✅ Pagamento Confirmado!',
+          description: 'Obrigado pelo seu pagamento. Redirecionando...',
+          className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
+        });
+        
+        setTimeout(() => {
+          navigate('/thank-you');
+        }, 2000);
+      } else {
+        toast({
+          title: 'Pagamento não confirmado',
+          description: 'O pagamento ainda não foi identificado. Aguarde alguns segundos e tente novamente.',
+          className: 'bg-feedback-warning-bg border-feedback-warning text-feedback-warning'
+        });
+      }
+    } catch (err) {
+      console.error('[CheckoutPix] ❌ Erro na verificação manual:', err);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível verificar o pagamento',
+        className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
+      });
+    } finally {
+      setChecking(false);
+    }
   };
 
   const handleCopyBrCode = () => {
@@ -402,11 +474,31 @@ export default function CheckoutPix() {
                       </div>
                     </div>
 
+                    <Button
+                      onClick={handleManualCheck}
+                      disabled={checking}
+                      variant="default"
+                      size="lg"
+                      className="w-full"
+                    >
+                      {checking ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Verificando pagamento...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="mr-2 h-5 w-5" />
+                          Já Paguei
+                        </>
+                      )}
+                    </Button>
+
                     {polling && (
                       <Alert className="bg-primary/5 border-primary/20">
                         <Loader2 className="h-4 w-4 animate-spin text-primary" />
                         <AlertDescription className="text-primary font-medium">
-                          🔍 Verificando pagamento automaticamente a cada 5 segundos...
+                          🔍 Verificando pagamento automaticamente a cada 3 segundos...
                         </AlertDescription>
                       </Alert>
                     )}
