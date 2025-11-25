@@ -92,34 +92,9 @@ serve(async (req) => {
       )
     }
 
-    // Calculate canonical status on server (single source of truth)
-    let canonicalStatus: 'active' | 'trialing' | 'past_due' | 'canceled'
-    let raw = null
-
-    if (!subscription) {
-      canonicalStatus = 'canceled'
-    } else {
-      raw = subscription
-      const now = new Date()
-      const periodEnd = subscription.current_period_end ? new Date(subscription.current_period_end) : null
-      const expired = periodEnd && periodEnd <= now
-      const graceDays = subscription.grace_days ?? 7
-      const withinGrace = expired && graceDays > 0 && 
-                         periodEnd && 
-                         now <= new Date(periodEnd.getTime() + (graceDays * 86400000))
-
-      if (subscription.canceled_at) {
-        canonicalStatus = 'canceled'
-      } else if (expired && !withinGrace) {
-        canonicalStatus = 'canceled'
-      } else if (expired && withinGrace) {
-        canonicalStatus = 'past_due'
-      } else if (subscription.status?.toLowerCase() === 'trialing') {
-        canonicalStatus = 'trialing'
-      } else {
-        canonicalStatus = 'active'
-      }
-    }
+    // SUBSCRIPTION SYSTEM DISABLED: Always return active status
+    const canonicalStatus: 'active' = 'active'
+    const raw = subscription || { status: 'active', forced: true, disabled_system: true }
 
     const result = {
       canonicalStatus,
