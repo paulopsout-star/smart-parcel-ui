@@ -61,21 +61,34 @@ export default function CheckoutPix() {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
-        .from('charges')
-        .select('*')
-        .eq('id', id)
-        .single();
+      // Usar Edge Function public-payment-link para buscar dados (resolve RLS para não autenticados)
+      const response = await fetch(
+        `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`
+      );
 
-      if (fetchError) throw fetchError;
-      if (!data) throw new Error('Cobrança não encontrada');
-
-      setCharge(data);
-
-      // Se já tem checkout_link_id (billing do Abacate Pay), pode gerar QR Code
-      if (data.checkout_link_id) {
-        // QR Code será gerado ao clicar no botão
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao carregar cobrança');
       }
+
+      const data = await response.json();
+
+      if (!data?.amount_cents) {
+        throw new Error('Cobrança não encontrada ou inválida');
+      }
+
+      // Converter para formato esperado pelo componente
+      setCharge({
+        id: data.charge_id || id,
+        payer_name: data.payer_name,
+        payer_email: data.payer_email,
+        payer_phone: data.payer_phone,
+        payer_document: data.payer_document,
+        amount: data.amount_cents,
+        description: data.description,
+        checkout_link_id: data.id,
+        status: 'pending'
+      });
     } catch (err: any) {
       console.error('[CheckoutPix] Erro ao carregar cobrança:', err);
       setError(err.message || 'Erro ao carregar dados da cobrança');
