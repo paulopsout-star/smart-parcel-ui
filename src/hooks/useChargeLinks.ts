@@ -50,12 +50,15 @@ export function useChargeLinks() {
         body: { chargeId, action: 'get' }
       });
 
-      if (error || data?.code === 'NOT_FOUND') {
-        if (!shownToast.has(chargeId)) {
-          console.error('Error fetching link:', error);
-          shownToast.add(chargeId);
-        }
-        throw new Error(data?.message || 'Link não encontrado');
+      // NOT_FOUND é um estado válido (link ainda não foi gerado)
+      if (data?.code === 'NOT_FOUND') {
+        return null;
+      }
+
+      // Erros reais ainda fazem throw
+      if (error) {
+        console.error('Error fetching link:', error);
+        throw new Error(error.message || 'Erro ao buscar link');
       }
 
       if (!data?.link?.url) {
