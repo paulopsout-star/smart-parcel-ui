@@ -41,7 +41,8 @@ serve(async (req) => {
     }
 
     // Chamar endpoint de verificação do Abacate Pay
-    const abacateResponse = await fetch(`https://api.abacatepay.com/v1/pixQrCode/${pixId}`, {
+    // Endpoint correto: /v1/pixQrCode/check com query parameter ?id={pixId}
+    const abacateResponse = await fetch(`https://api.abacatepay.com/v1/pixQrCode/check?id=${pixId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${abacateApiKey}`,
