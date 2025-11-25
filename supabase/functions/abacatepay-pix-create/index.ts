@@ -25,19 +25,20 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { chargeId, amountCents, payerEmail, payerName, description } = await req.json();
+    const { chargeId, amountCents, payerEmail, payerName, payerPhone, description } = await req.json();
 
     console.log('[abacatepay-pix-create] Iniciando criação de cobrança PIX:', {
       chargeId,
       amountCents,
-      payerEmail
+      payerEmail,
+      payerPhone
     });
 
     // Validate required fields
-    if (!chargeId || !amountCents || !payerEmail) {
+    if (!chargeId || !amountCents || !payerEmail || !payerPhone) {
       return new Response(
         JSON.stringify({ 
-          error: 'Campos obrigatórios: chargeId, amountCents, payerEmail' 
+          error: 'Campos obrigatórios: chargeId, amountCents, payerEmail, payerPhone' 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -77,7 +78,8 @@ serve(async (req) => {
       completionUrl: `${baseUrl}/thank-you`,
       customer: {
         name: payerName,
-        email: payerEmail
+        email: payerEmail,
+        cellphone: payerPhone
       }
     };
 
