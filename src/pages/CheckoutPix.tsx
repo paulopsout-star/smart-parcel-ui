@@ -95,6 +95,7 @@ export default function CheckoutPix() {
           payerEmail: charge.payer_email,
           payerName: charge.payer_name,
           payerPhone: charge.payer_phone,
+          payerDocument: charge.payer_document,
           description: charge.description || 'Pagamento Autonegocie'
         }
       });
