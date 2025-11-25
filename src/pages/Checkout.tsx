@@ -64,7 +64,13 @@ export default function Checkout() {
 
         setCharge(data);
         
-        // Se modo for 'direct', redirecionar para pagamento direto
+        // Se for PIX, redirecionar para página de QR Code (sem simulação)
+        if (data.payment_method === 'pix' || data.payment_method === 'PIX') {
+          navigate(`/checkout-pix/${data.charge_id || id}`, { replace: true });
+          return;
+        }
+        
+        // Se modo for 'direct', redirecionar para pagamento direto (com simulação)
         if (mode === 'direct') {
           navigate(`/payment-direct/${id}`, { replace: true });
           return;

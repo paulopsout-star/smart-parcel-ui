@@ -237,7 +237,7 @@ serve(async (req) => {
           installments: charge.installments || 1,
           mask_fee: charge.mask_fee || false,
           status: 'active',
-          order_type: 'credit_card',
+          order_type: charge.payment_method || 'credit_card',
           link_id: tmpLinkId,
           link_url: tmpLinkUrl,
           guid: tmpGuid,

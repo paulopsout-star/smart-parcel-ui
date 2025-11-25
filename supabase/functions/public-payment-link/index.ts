@@ -42,7 +42,7 @@ serve(async (req) => {
 
     console.log('[public-payment-link] Buscando payment_link no DB...');
 
-    // Find payment link by id and join with charge to get boleto/creditor info
+    // Find payment link by id and join with charge to get boleto/creditor info + payment_method
     const { data: paymentLink, error: linkError } = await supabase
       .from('payment_links')
       .select(`
@@ -51,7 +51,8 @@ serve(async (req) => {
           has_boleto_link,
           boleto_linha_digitavel,
           creditor_document,
-          creditor_name
+          creditor_name,
+          payment_method
         )
       `)
       .eq('id', id)
@@ -89,7 +90,9 @@ serve(async (req) => {
       has_boleto_link: chargeData?.has_boleto_link || false,
       boleto_linha_digitavel: chargeData?.boleto_linha_digitavel || '',
       creditor_document: chargeData?.creditor_document || '',
-      creditor_name: chargeData?.creditor_name || ''
+      creditor_name: chargeData?.creditor_name || '',
+      payment_method: chargeData?.payment_method || null,
+      order_type: paymentLink.order_type || 'credit_card'
     };
 
     console.log('[public-payment-link] Retornando checkout data:', {
