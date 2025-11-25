@@ -215,7 +215,10 @@ serve(async (req) => {
         || req.headers.get('origin') 
         || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
         || new URL(req.url).origin;
-      const tmpLinkUrl = new URL(`/checkout/${tmpLinkId}`, origin).toString();
+      
+      // Determine checkout URL based on payment method
+      const checkoutPath = charge.payment_method === 'pix' ? `/checkout-pix/${chargeId}` : `/checkout/${tmpLinkId}`;
+      const tmpLinkUrl = new URL(checkoutPath, origin).toString();
 
       // Create new payment link with all required fields
       console.log(`Creating payment link for charge ${chargeId} with company_id: ${charge.company_id}`);
@@ -302,9 +305,10 @@ serve(async (req) => {
 
       console.log(`Created new payment link for charge ${chargeId}`);
       
-      // Use the canonical checkout URL (already calculated in origin above)
+      // Use the canonical checkout URL based on payment method
       const checkoutId = newLink.id;
-      const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
+      const checkoutPath = charge.payment_method === 'pix' ? `/checkout-pix/${chargeId}` : `/checkout/${checkoutId}`;
+      const checkoutUrl = new URL(checkoutPath, origin).toString();
       
       // Update charge with checkout URL and link ID
       await supabase

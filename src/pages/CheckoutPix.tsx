@@ -1,121 +1,143 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
-import { QrCode, Copy, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Copy, CheckCircle2, User, Mail, Phone, CreditCard, FileText, QrCode } from 'lucide-react';
+import { toast } from '@/hooks/use-toast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+
+interface ChargeData {
+  id: string;
+  payer_name: string;
+  payer_email: string;
+  payer_phone: string;
+  payer_document: string;
+  amount: number;
+  description: string | null;
+  checkout_link_id: string | null;
+  status: string;
+}
+
+interface PixData {
+  qrCode: string;
+  brCode: string;
+  checkoutUrl: string;
+}
 
 export default function CheckoutPix() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
-
+  
+  const [charge, setCharge] = useState<ChargeData | null>(null);
+  const [pixData, setPixData] = useState<PixData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [generatingQr, setGeneratingQr] = useState(false);
-  const [charge, setCharge] = useState<any>(null);
-  const [qrCodeData, setQrCodeData] = useState<{
-    qrCode: string;
-    brCode: string;
-  } | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid'>('pending');
-  const [error, setError] = useState<string>('');
+  const [generating, setGenerating] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Carregar dados da cobrança
   useEffect(() => {
     if (!id) return;
-
-    const loadCharge = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('charges')
-          .select('*')
-          .eq('id', id)
-          .maybeSingle();
-
-        if (error) throw error;
-        
-        if (!data) {
-          setError('Cobrança não encontrada');
-          return;
-        }
-
-        setCharge(data);
-      } catch (err) {
-        console.error('[CheckoutPix] Erro ao carregar cobrança:', err);
-        setError('Erro ao carregar dados da cobrança');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadCharge();
+    loadChargeData();
   }, [id]);
 
-  // Gerar QR Code PIX
+  const loadChargeData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await supabase
+        .from('charges')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!data) throw new Error('Cobrança não encontrada');
+
+      setCharge(data);
+
+      // Se já tem checkout_link_id (billing do Abacate Pay), pode gerar QR Code
+      if (data.checkout_link_id) {
+        // QR Code será gerado ao clicar no botão
+      }
+    } catch (err: any) {
+      console.error('[CheckoutPix] Erro ao carregar cobrança:', err);
+      setError(err.message || 'Erro ao carregar dados da cobrança');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleGenerateQrCode = async () => {
-    if (!charge?.checkout_url) {
+    if (!charge?.checkout_link_id) {
       toast({
         title: 'Erro',
-        description: 'Link de checkout não encontrado',
+        description: 'Cobrança não possui billing ID do Abacate Pay',
         className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
       });
       return;
     }
 
-    setGeneratingQr(true);
-    setError('');
-
     try {
-      // Abrir checkout do Abacate Pay em nova aba
-      // O Abacate Pay gerencia o fluxo de pagamento PIX
-      window.open(charge.checkout_url, '_blank');
+      setGenerating(true);
+      setError(null);
 
+      const { data, error: qrError } = await supabase.functions.invoke('abacatepay-pix-qrcode', {
+        body: { billingId: charge.checkout_link_id }
+      });
+
+      if (qrError) throw qrError;
+      if (!data?.qrCode || !data?.brCode) {
+        throw new Error('Dados do PIX não retornados');
+      }
+
+      setPixData(data);
+      
       toast({
-        title: 'Checkout Aberto',
-        description: 'Complete o pagamento na janela aberta',
-        className: 'bg-feedback-info-bg border-feedback-info text-feedback-info'
+        title: 'QR Code gerado!',
+        description: 'Escaneie o código ou use o copia e cola',
+        className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
       });
 
       // Iniciar polling para verificar pagamento
       startPaymentPolling();
-    } catch (err) {
-      console.error('[CheckoutPix] Erro ao abrir checkout:', err);
+    } catch (err: any) {
+      console.error('[CheckoutPix] Erro ao gerar QR Code:', err);
+      setError(err.message || 'Erro ao gerar QR Code PIX');
       toast({
-        title: 'Erro',
-        description: 'Não foi possível abrir o checkout',
+        title: 'Erro ao gerar QR Code',
+        description: err.message || 'Tente novamente',
         className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
       });
     } finally {
-      setGeneratingQr(false);
+      setGenerating(false);
     }
   };
 
-  // Polling para verificar pagamento
   const startPaymentPolling = () => {
+    setPolling(true);
     const pollInterval = setInterval(async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error: statusError } = await supabase
           .from('charges')
           .select('status')
           .eq('id', id)
           .single();
 
-        if (error) throw error;
+        if (statusError) throw statusError;
 
-        if (data.status === 'completed') {
-          setPaymentStatus('paid');
+        if (data?.status === 'completed') {
           clearInterval(pollInterval);
-          
+          setPolling(false);
           toast({
-            title: 'Pagamento Confirmado!',
+            title: 'Pagamento confirmado!',
             description: 'Redirecionando...',
             className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
           });
-
           setTimeout(() => {
             navigate('/thank-you');
           }, 2000);
@@ -123,37 +145,65 @@ export default function CheckoutPix() {
       } catch (err) {
         console.error('[CheckoutPix] Erro no polling:', err);
       }
-    }, 5000); // Verificar a cada 5 segundos
+    }, 3000);
 
-    // Limpar polling após 10 minutos
+    // Limpar polling após 15 minutos
     setTimeout(() => {
       clearInterval(pollInterval);
-    }, 600000);
+      setPolling(false);
+    }, 900000);
   };
 
-  // Copiar código PIX
   const handleCopyBrCode = () => {
-    if (!qrCodeData?.brCode) return;
-
-    navigator.clipboard.writeText(qrCodeData.brCode);
+    if (!pixData?.brCode) return;
+    
+    navigator.clipboard.writeText(pixData.brCode);
     toast({
-      title: 'Copiado!',
-      description: 'Código PIX copiado para área de transferência',
+      title: 'Código copiado!',
+      description: 'Cole no app do seu banco',
       className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
     });
   };
 
+  const formatCurrency = (cents: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(cents / 100);
+  };
+
+  const formatPhone = (phone: string) => {
+    const clean = phone.replace(/\D/g, '');
+    if (clean.length === 11) {
+      return `(${clean.slice(0,2)}) ${clean.slice(2,7)}-${clean.slice(7)}`;
+    }
+    return phone;
+  };
+
+  const formatDocument = (doc: string) => {
+    const clean = doc.replace(/\D/g, '');
+    if (clean.length === 11) {
+      return `${clean.slice(0,3)}.${clean.slice(3,6)}.${clean.slice(6,9)}-${clean.slice(9)}`;
+    }
+    if (clean.length === 14) {
+      return `${clean.slice(0,2)}.${clean.slice(2,5)}.${clean.slice(5,8)}/${clean.slice(8,12)}-${clean.slice(12)}`;
+    }
+    return doc;
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-surface py-12">
-        <div className="container mx-auto px-4 max-w-2xl">
+      <div className="min-h-screen bg-gradient-to-br from-background via-surface-light/20 to-background p-4 sm:p-6 lg:p-8">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <Skeleton className="h-12 w-64" />
           <Card>
             <CardHeader>
-              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-6 w-48" />
             </CardHeader>
             <CardContent className="space-y-4">
-              <Skeleton className="h-32 w-full" />
-              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
+              <Skeleton className="h-20 w-full" />
             </CardContent>
           </Card>
         </div>
@@ -163,17 +213,13 @@ export default function CheckoutPix() {
 
   if (error || !charge) {
     return (
-      <div className="min-h-screen bg-surface py-12">
-        <div className="container mx-auto px-4 max-w-2xl">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
+      <div className="min-h-screen bg-gradient-to-br from-background via-surface-light/20 to-background p-4 sm:p-6 lg:p-8">
+        <div className="max-w-2xl mx-auto">
+          <Alert className="bg-feedback-error-bg border-feedback-error">
+            <AlertDescription className="text-feedback-error">
               {error || 'Cobrança não encontrada'}
             </AlertDescription>
           </Alert>
-          <Button onClick={() => navigate('/')} className="mt-4">
-            Voltar ao Início
-          </Button>
         </div>
       </div>
     );
@@ -181,113 +227,168 @@ export default function CheckoutPix() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-surface py-12">
-        <div className="container mx-auto px-4 max-w-2xl">
+      <div className="min-h-screen bg-gradient-to-br from-background via-surface-light/20 to-background p-4 sm:p-6 lg:p-8">
+        <div className="max-w-2xl mx-auto space-y-6">
+          {/* Header */}
+          <div className="text-center space-y-2">
+            <div className="flex items-center justify-center gap-2">
+              <QrCode className="h-8 w-8 text-primary" />
+              <h1 className="text-3xl font-bold">Pagamento via PIX</h1>
+            </div>
+            <Badge className="bg-primary/10 text-primary border-primary/20">
+              Instantâneo e Seguro
+            </Badge>
+          </div>
+
+          {/* Informações do Pagador */}
           <Card>
-            <CardHeader>
+            <CardHeader className="bg-muted/30">
               <CardTitle className="flex items-center gap-2">
-                <QrCode className="h-6 w-6 text-brand" />
-                Pagamento via PIX
+                <User className="h-5 w-5" />
+                Dados do Pagador
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Informações da Cobrança */}
-              <div className="space-y-4 p-4 bg-surface-light rounded-lg border border-border">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-ink-secondary">Pagador</span>
-                  <span className="font-medium text-ink">{charge.payer_name}</span>
+            <CardContent className="pt-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Nome</p>
+                  <p className="text-base font-semibold">{charge.payer_name}</p>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-ink-secondary">Valor</span>
-                  <span className="text-2xl font-bold text-brand">
-                    {new Intl.NumberFormat('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL'
-                    }).format(charge.amount / 100)}
-                  </span>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase">CPF/CNPJ</p>
+                  <p className="text-base font-semibold">{formatDocument(charge.payer_document)}</p>
                 </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Email</p>
+                  <p className="text-base truncate">{charge.payer_email}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase">Telefone</p>
+                  <p className="text-base">{formatPhone(charge.payer_phone)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Valor e Descrição */}
+          <Card>
+            <CardHeader className="bg-gradient-to-br from-primary/5 to-primary/[0.02] border-b border-primary/10">
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Valor da Cobrança
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="text-center space-y-3">
+                <p className="text-5xl font-bold text-primary">
+                  {formatCurrency(charge.amount)}
+                </p>
                 {charge.description && (
-                  <div className="pt-2 border-t border-border">
-                    <p className="text-sm text-ink-secondary">{charge.description}</p>
+                  <div className="pt-3 border-t">
+                    <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Descrição</p>
+                    <p className="text-sm">{charge.description}</p>
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
 
-              {/* Status do Pagamento */}
-              {paymentStatus === 'paid' ? (
-                <Alert className="bg-feedback-success-bg border-feedback-success">
-                  <CheckCircle className="h-4 w-4 text-feedback-success" />
-                  <AlertDescription className="text-feedback-success">
-                    Pagamento confirmado! Redirecionando...
-                  </AlertDescription>
-                </Alert>
-              ) : (
-                <>
-                  {/* Botão para Gerar QR Code */}
-                  {!qrCodeData && (
-                    <Button
-                      onClick={handleGenerateQrCode}
-                      disabled={generatingQr}
-                      className="w-full"
-                      size="lg"
-                    >
-                      {generatingQr ? (
-                        <>
-                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                          Abrindo Checkout...
-                        </>
-                      ) : (
-                        <>
-                          <QrCode className="mr-2 h-5 w-5" />
-                          Gerar QR Code PIX
-                        </>
-                      )}
-                    </Button>
+          {/* Gerador de QR Code ou QR Code Exibido */}
+          {!pixData ? (
+            <Card>
+              <CardContent className="pt-6">
+                <Button
+                  onClick={handleGenerateQrCode}
+                  disabled={generating || !charge.checkout_link_id}
+                  className="w-full h-14 text-lg font-semibold bg-primary hover:bg-primary/90"
+                >
+                  {generating ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Gerando QR Code...
+                    </>
+                  ) : (
+                    <>
+                      <QrCode className="mr-2 h-5 w-5" />
+                      Gerar QR Code PIX
+                    </>
                   )}
-
-                  {/* QR Code e Código Copia-e-Cola */}
-                  {qrCodeData && (
-                    <div className="space-y-4">
-                      {/* QR Code Image */}
-                      <div className="flex justify-center p-6 bg-white rounded-lg border-2 border-border">
-                        <img
-                          src={qrCodeData.qrCode}
-                          alt="QR Code PIX"
-                          className="w-64 h-64"
-                        />
-                      </div>
-
-                      {/* Código Copia-e-Cola */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-ink">
-                          Ou copie o código abaixo:
-                        </label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={qrCodeData.brCode}
-                            readOnly
-                            className="flex-1 px-3 py-2 text-sm font-mono bg-surface border border-border rounded-md"
-                          />
-                          <Button
-                            onClick={handleCopyBrCode}
-                            variant="outline"
-                            size="icon"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* QR Code Exibido */}
+              <Card>
+                <CardHeader className="bg-muted/30 text-center">
+                  <CardTitle>Escaneie o QR Code</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="flex flex-col items-center gap-6">
+                    <div className="bg-white p-4 rounded-lg">
+                      <img 
+                        src={pixData.qrCode} 
+                        alt="QR Code PIX" 
+                        className="w-64 h-64"
+                      />
+                    </div>
+                    
+                    <div className="w-full space-y-3">
+                      <p className="text-sm text-center text-muted-foreground">
+                        Ou use o código copia e cola:
+                      </p>
+                      <div className="flex gap-2">
+                        <div className="flex-1 bg-muted/50 p-3 rounded-lg border border-border">
+                          <p className="text-xs font-mono break-all">
+                            {pixData.brCode}
+                          </p>
                         </div>
+                        <Button
+                          onClick={handleCopyBrCode}
+                          variant="outline"
+                          size="icon"
+                          className="h-auto"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
                       </div>
+                    </div>
 
-                      <Alert>
-                        <AlertDescription>
-                          Após realizar o pagamento, aguarde alguns instantes. A confirmação é automática.
+                    {polling && (
+                      <Alert className="bg-blue-500/5 border-blue-500/20">
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        <AlertDescription className="text-blue-700">
+                          Aguardando confirmação do pagamento...
                         </AlertDescription>
                       </Alert>
-                    </div>
-                  )}
-                </>
-              )}
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* Instruções */}
+          <Card className="bg-muted/30">
+            <CardContent className="pt-6">
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 text-primary flex-shrink-0" />
+                  <span>Abra o aplicativo do seu banco</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 text-primary flex-shrink-0" />
+                  <span>Escolha pagar com PIX via QR Code ou copia e cola</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 text-primary flex-shrink-0" />
+                  <span>Confirme o pagamento</span>
+                </p>
+                <p className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 text-primary flex-shrink-0" />
+                  <span>A confirmação é instantânea</span>
+                </p>
+              </div>
             </CardContent>
           </Card>
         </div>

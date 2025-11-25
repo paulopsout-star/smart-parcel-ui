@@ -131,3 +131,6 @@ verify_jwt = true
 
 [functions.abacatepay-webhook]
 verify_jwt = false
+
+[functions.abacatepay-pix-qrcode]
+verify_jwt = false

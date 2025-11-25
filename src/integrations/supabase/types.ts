@@ -170,6 +170,7 @@ export type Database = {
           payer_email: string
           payer_name: string
           payer_phone: string
+          payment_method: string | null
           recurrence_end_date: string | null
           recurrence_interval: number | null
           recurrence_type: Database["public"]["Enums"]["recurrence_type"]
@@ -202,6 +203,7 @@ export type Database = {
           payer_email: string
           payer_name: string
           payer_phone: string
+          payment_method?: string | null
           recurrence_end_date?: string | null
           recurrence_interval?: number | null
           recurrence_type?: Database["public"]["Enums"]["recurrence_type"]
@@ -234,6 +236,7 @@ export type Database = {
           payer_email?: string
           payer_name?: string
           payer_phone?: string
+          payment_method?: string | null
           recurrence_end_date?: string | null
           recurrence_interval?: number | null
           recurrence_type?: Database["public"]["Enums"]["recurrence_type"]
