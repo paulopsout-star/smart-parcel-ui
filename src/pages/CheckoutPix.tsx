@@ -23,9 +23,11 @@ interface ChargeData {
 }
 
 interface PixData {
-  qrCode: string;
+  brCodeBase64: string;
   brCode: string;
-  checkoutUrl: string;
+  pixId: string;
+  status: string;
+  expiresAt: string;
 }
 
 export default function CheckoutPix() {
@@ -101,14 +103,16 @@ export default function CheckoutPix() {
       });
 
       if (pixError) throw pixError;
-      if (!data?.qrCode || !data?.brCode) {
+      if (!data?.brCodeBase64 || !data?.brCode) {
         throw new Error('QR Code não retornado pela API');
       }
 
       setPixData({
-        qrCode: data.qrCode,
+        brCodeBase64: data.brCodeBase64,
         brCode: data.brCode,
-        checkoutUrl: data.checkoutUrl
+        pixId: data.pixId,
+        status: data.status,
+        expiresAt: data.expiresAt
       });
       
       toast({
@@ -341,7 +345,7 @@ export default function CheckoutPix() {
                   <div className="flex flex-col items-center gap-6">
                     <div className="bg-white p-4 rounded-lg">
                       <img 
-                        src={pixData.qrCode} 
+                        src={pixData.brCodeBase64} 
                         alt="QR Code PIX" 
                         className="w-64 h-64"
                       />
