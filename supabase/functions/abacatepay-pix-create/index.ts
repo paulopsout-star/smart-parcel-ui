@@ -25,20 +25,21 @@ serve(async (req) => {
     }
 
     // Parse request body
-    const { chargeId, amountCents, payerEmail, payerName, payerPhone, description } = await req.json();
+    const { chargeId, amountCents, payerEmail, payerName, payerPhone, payerDocument, description } = await req.json();
 
     console.log('[abacatepay-pix-create] Iniciando criação de cobrança PIX:', {
       chargeId,
       amountCents,
       payerEmail,
-      hasPhone: !!payerPhone
+      hasPhone: !!payerPhone,
+      hasDocument: !!payerDocument
     });
 
     // Validate required fields
-    if (!chargeId || !amountCents || !payerEmail || !payerPhone) {
+    if (!chargeId || !amountCents || !payerEmail || !payerPhone || !payerDocument) {
       return new Response(
         JSON.stringify({ 
-          error: 'Campos obrigatórios: chargeId, amountCents, payerEmail, payerPhone' 
+          error: 'Campos obrigatórios: chargeId, amountCents, payerEmail, payerPhone, payerDocument' 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -79,7 +80,8 @@ serve(async (req) => {
       customer: {
         name: payerName,
         email: payerEmail,
-        cellphone: payerPhone.replace(/\D/g, '') // Remove formatação
+        cellphone: payerPhone.replace(/\D/g, ''), // Remove formatação
+        taxId: payerDocument.replace(/\D/g, '') // CPF/CNPJ sem formatação
       }
     };
 
