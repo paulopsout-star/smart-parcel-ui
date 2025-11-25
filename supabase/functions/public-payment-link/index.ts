@@ -109,8 +109,55 @@ serve(async (req) => {
       amount: paymentLink?.amount
     });
 
+    // Third attempt: search directly in charges table (fallback for PIX charges without payment_link)
+    if (!paymentLink) {
+      console.log('[public-payment-link] Tentando buscar diretamente na tabela charges...');
+      
+      const { data: chargeData, error: chargeError } = await supabase
+        .from('charges')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      console.log('[public-payment-link] Busca em charges:', {
+        found: !!chargeData,
+        error: chargeError?.message
+      });
+
+      if (chargeData) {
+        // Return charge data formatted as checkout data
+        const checkoutData = {
+          id: chargeData.id,
+          charge_id: chargeData.id,
+          title: chargeData.description || 'Pagamento',
+          description: chargeData.description || '',
+          amount_cents: chargeData.amount,
+          payer_name: chargeData.payer_name || 'Cliente',
+          payer_email: chargeData.payer_email || '',
+          payer_document: chargeData.payer_document || '',
+          payer_phone: chargeData.payer_phone || '',
+          has_boleto_link: chargeData.has_boleto_link || false,
+          boleto_linha_digitavel: chargeData.boleto_linha_digitavel || '',
+          creditor_document: chargeData.creditor_document || '',
+          creditor_name: chargeData.creditor_name || '',
+          payment_method: chargeData.payment_method || null,
+          order_type: 'pix'
+        };
+
+        console.log('[public-payment-link] Retornando dados da charge:', {
+          id: checkoutData.id,
+          amount_cents: checkoutData.amount_cents
+        });
+
+        return new Response(JSON.stringify(checkoutData), {
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     if (linkError || !paymentLink) {
-      console.log('[public-payment-link] Payment link não encontrado ou inativo');
+      console.log('[public-payment-link] Nenhum payment_link ou charge encontrado');
       return new Response(JSON.stringify({ error: 'Payment link not found or inactive' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
