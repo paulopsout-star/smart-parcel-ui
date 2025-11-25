@@ -156,6 +156,8 @@ export type Database = {
           creditor_document: string | null
           creditor_name: string | null
           description: string | null
+          fee_amount: number | null
+          fee_percentage: number | null
           has_boleto: boolean | null
           has_boleto_link: boolean
           id: string
@@ -189,6 +191,8 @@ export type Database = {
           creditor_document?: string | null
           creditor_name?: string | null
           description?: string | null
+          fee_amount?: number | null
+          fee_percentage?: number | null
           has_boleto?: boolean | null
           has_boleto_link?: boolean
           id?: string
@@ -222,6 +226,8 @@ export type Database = {
           creditor_document?: string | null
           creditor_name?: string | null
           description?: string | null
+          fee_amount?: number | null
+          fee_percentage?: number | null
           has_boleto?: boolean | null
           has_boleto_link?: boolean
           id?: string
