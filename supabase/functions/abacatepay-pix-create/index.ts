@@ -27,16 +27,24 @@ serve(async (req) => {
     // Parse request body
     const { chargeId, amountCents, payerEmail, payerName, payerPhone, payerDocument, description } = await req.json();
 
-    console.log('[abacatepay-pix-create] Iniciando criação de cobrança PIX:', {
+    console.log('[abacatepay-pix-create] ✅ Iniciando criação de cobrança PIX:', {
       chargeId,
       amountCents,
       payerEmail,
       hasPhone: !!payerPhone,
-      hasDocument: !!payerDocument
+      hasDocument: !!payerDocument,
+      documentLength: payerDocument?.length || 0
     });
 
     // Validate required fields
     if (!chargeId || !amountCents || !payerEmail || !payerPhone || !payerDocument) {
+      console.error('[abacatepay-pix-create] ❌ Campos obrigatórios faltando:', {
+        hasChargeId: !!chargeId,
+        hasAmountCents: !!amountCents,
+        hasPayerEmail: !!payerEmail,
+        hasPayerPhone: !!payerPhone,
+        hasPayerDocument: !!payerDocument
+      });
       return new Response(
         JSON.stringify({ 
           error: 'Campos obrigatórios: chargeId, amountCents, payerEmail, payerPhone, payerDocument' 
@@ -63,6 +71,15 @@ serve(async (req) => {
     // Preparar payload para Abacate Pay API
     const baseUrl = Deno.env.get('BASE_URL') || supabaseUrl.replace('.supabase.co', '.lovable.app');
     
+    const cleanPhone = payerPhone.replace(/\D/g, '');
+    const cleanDocument = payerDocument.replace(/\D/g, '');
+    
+    console.log('[abacatepay-pix-create] 📋 Dados limpos:', {
+      cleanPhone,
+      cleanDocumentLength: cleanDocument.length,
+      cleanDocumentPreview: cleanDocument.substring(0, 3) + '***'
+    });
+    
     const abacatePayload = {
       frequency: "ONE_TIME", // Campo obrigatório - pagamento único
       methods: ["PIX"], // Métodos de pagamento aceitos
@@ -80,10 +97,17 @@ serve(async (req) => {
       customer: {
         name: payerName,
         email: payerEmail,
-        cellphone: payerPhone.replace(/\D/g, ''), // Remove formatação
-        taxId: payerDocument.replace(/\D/g, '') // CPF/CNPJ sem formatação
+        cellphone: cleanPhone,
+        taxId: cleanDocument
       }
     };
+
+    console.log('[abacatepay-pix-create] 📤 Payload para Abacate Pay (customer):', {
+      name: payerName,
+      email: payerEmail,
+      cellphoneLength: cleanPhone.length,
+      taxIdLength: cleanDocument.length
+    });
 
     console.log('[abacatepay-pix-create] Chamando Abacate Pay API...');
 
