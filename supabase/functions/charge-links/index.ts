@@ -307,8 +307,8 @@ serve(async (req) => {
       
       // Use the canonical checkout URL based on payment method
       const checkoutId = newLink.id;
-      const checkoutPath = charge.payment_method === 'pix' ? `/checkout-pix/${chargeId}` : `/checkout/${checkoutId}`;
-      const checkoutUrl = new URL(checkoutPath, origin).toString();
+      const finalCheckoutPath = charge.payment_method === 'pix' ? `/checkout-pix/${chargeId}` : `/checkout/${checkoutId}`;
+      const checkoutUrl = new URL(finalCheckoutPath, origin).toString();
       
       // Update charge with checkout URL and link ID
       await supabase
