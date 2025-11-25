@@ -176,8 +176,12 @@ export default function NewCharge() {
   }, [profile]);
 
   const formatAmount = (value: string) => {
-    // Convert string to cents (integer)
-    const numericValue = parseFloat(value.replace(/[^\d.,]/g, '').replace(',', '.'));
+    // Remove separadores de milhar (.) e converte vírgula decimal para ponto
+    const numericValue = parseFloat(
+      value.replace(/[^\d.,]/g, '')
+        .replace(/\./g, '')  // Remove todos os pontos (separador de milhar)
+        .replace(',', '.')   // Converte vírgula para ponto (decimal)
+    );
     return Math.round(numericValue * 100);
   };
 
