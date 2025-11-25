@@ -311,6 +311,7 @@ export default function NewCharge() {
           payer_phone: unformatPhone(data.payer_phone),
           amount: amountInCents,
           description: data.description || null,
+          payment_method: data.payment_method,
           installments: parseInt(data.installments),
           mask_fee: data.mask_fee,
           has_boleto: data.has_boleto,
