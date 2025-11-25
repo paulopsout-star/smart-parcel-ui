@@ -73,10 +73,10 @@ export default function CheckoutPix() {
   };
 
   const handleGenerateQrCode = async () => {
-    if (!charge?.checkout_link_id) {
+    if (!charge) {
       toast({
         title: 'Erro',
-        description: 'Cobrança não possui billing ID do Abacate Pay',
+        description: 'Dados da cobrança não carregados',
         className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
       });
       return;
@@ -86,16 +86,29 @@ export default function CheckoutPix() {
       setGenerating(true);
       setError(null);
 
-      const { data, error: qrError } = await supabase.functions.invoke('abacatepay-pix-qrcode', {
-        body: { billingId: charge.checkout_link_id }
+      console.log('[CheckoutPix] Gerando PIX via Abacate Pay...');
+
+      const { data, error: pixError } = await supabase.functions.invoke('abacatepay-pix-create', {
+        body: {
+          chargeId: charge.id,
+          amountCents: charge.amount,
+          payerEmail: charge.payer_email,
+          payerName: charge.payer_name,
+          payerPhone: charge.payer_phone,
+          description: charge.description || 'Pagamento Autonegocie'
+        }
       });
 
-      if (qrError) throw qrError;
+      if (pixError) throw pixError;
       if (!data?.qrCode || !data?.brCode) {
-        throw new Error('Dados do PIX não retornados');
+        throw new Error('QR Code não retornado pela API');
       }
 
-      setPixData(data);
+      setPixData({
+        qrCode: data.qrCode,
+        brCode: data.brCode,
+        checkoutUrl: data.checkoutUrl
+      });
       
       toast({
         title: 'QR Code gerado!',
@@ -299,7 +312,7 @@ export default function CheckoutPix() {
               <CardContent className="pt-6">
                 <Button
                   onClick={handleGenerateQrCode}
-                  disabled={generating || !charge.checkout_link_id}
+                  disabled={generating}
                   className="w-full h-14 text-lg font-semibold bg-primary hover:bg-primary/90"
                 >
                   {generating ? (
