@@ -583,7 +583,7 @@ export default function NewCharge() {
                         />
                         <div className="flex-1">
                           <div className="font-medium text-ink">📱 PIX</div>
-                          <div className="text-sm text-ink-secondary">Via Abacate Pay</div>
+                          <div className="text-sm text-ink-secondary">Pagamento instantâneo</div>
                         </div>
                       </label>
                     </div>
