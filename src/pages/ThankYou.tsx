@@ -94,7 +94,12 @@ export default function ThankYou() {
 
   const loadData = async () => {
     if (!token) {
-      setError('Token de pagamento não encontrado');
+      // Se não há token, é um redirecionamento direto (ex: PIX confirmado)
+      // Mostrar página de agradecimento simples
+      setData({
+        paid: true,
+        message: 'Pagamento confirmado com sucesso!'
+      });
       setLoading(false);
       return;
     }
@@ -311,59 +316,61 @@ export default function ThankYou() {
             Pagamento Confirmado! 🎉
           </h1>
           <p className="text-muted-foreground print:text-xs">
-            Obrigado! Seu pagamento foi processado com sucesso.
+            {data?.message || 'Obrigado! Seu pagamento foi processado com sucesso.'}
           </p>
         </div>
 
-        {/* Resumo Principal */}
-        <Card className="mb-6 print:shadow-none print:border-gray-300">
-          <CardHeader className="print:pb-2">
-            <CardTitle className="print:text-lg">Resumo da Transação</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 print:space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="font-medium print:text-sm">Valor Total:</span>
-              <span className="text-2xl font-bold text-green-600 print:text-lg">
-                {formatCurrency(data?.charge?.total_amount_cents || 0)}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center print:text-sm">
-              <span>Data/Hora:</span>
-              <span>{data?.charge?.paid_at ? formatDate(data.charge.paid_at) : '-'}</span>
-            </div>
-
-            <div className="flex justify-between items-center print:text-sm">
-              <span>ID da Cobrança:</span>
-              <span className="font-mono text-xs">
-                {data?.charge?.id.slice(0, 8)}...
-              </span>
-            </div>
-
-            <div className="flex justify-between items-start print:text-sm">
-              <span>Meios Utilizados:</span>
-              <div className="flex flex-wrap gap-1">
-                {data?.splits?.map((split) => (
-                  <Badge 
-                    key={split.id} 
-                    variant={getMethodBadgeVariant(split.method)}
-                    className="print:text-xs print:px-1 print:py-0"
-                  >
-                    {getMethodLabel(split.method)}
-                  </Badge>
-                ))}
+        {/* Resumo Principal - apenas se houver dados completos */}
+        {data?.charge && (
+          <Card className="mb-6 print:shadow-none print:border-gray-300">
+            <CardHeader className="print:pb-2">
+              <CardTitle className="print:text-lg">Resumo da Transação</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 print:space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="font-medium print:text-sm">Valor Total:</span>
+                <span className="text-2xl font-bold text-green-600 print:text-lg">
+                  {formatCurrency(data?.charge?.total_amount_cents || 0)}
+                </span>
               </div>
-            </div>
 
-            {data?.charge?.has_boleto_link && (
-              <div className="bg-muted p-3 rounded-lg print:p-2 print:text-xs">
-                <p className="text-sm text-muted-foreground">
-                  ℹ️ Pagamento vinculado a boleto (simulado)
-                </p>
+              <div className="flex justify-between items-center print:text-sm">
+                <span>Data/Hora:</span>
+                <span>{data?.charge?.paid_at ? formatDate(data.charge.paid_at) : '-'}</span>
               </div>
-            )}
-          </CardContent>
-        </Card>
+
+              <div className="flex justify-between items-center print:text-sm">
+                <span>ID da Cobrança:</span>
+                <span className="font-mono text-xs">
+                  {data?.charge?.id.slice(0, 8)}...
+                </span>
+              </div>
+
+              <div className="flex justify-between items-start print:text-sm">
+                <span>Meios Utilizados:</span>
+                <div className="flex flex-wrap gap-1">
+                  {data?.splits?.map((split) => (
+                    <Badge 
+                      key={split.id} 
+                      variant={getMethodBadgeVariant(split.method)}
+                      className="print:text-xs print:px-1 print:py-0"
+                    >
+                      {getMethodLabel(split.method)}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {data?.charge?.has_boleto_link && (
+                <div className="bg-muted p-3 rounded-lg print:p-2 print:text-xs">
+                  <p className="text-sm text-muted-foreground">
+                    ℹ️ Pagamento vinculado a boleto (simulado)
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Detalhes dos Splits */}
         {data?.splits && data.splits.length > 0 && (
@@ -429,40 +436,37 @@ export default function ThankYou() {
 
         {/* CTAs */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center print:hidden">
-          {data?.ui?.return_url ? (
-            <Button onClick={() => window.open(data.ui!.return_url, '_self')}>
+          <Button asChild>
+            <Link to="/">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar ao site
-            </Button>
-          ) : (
-            <Button asChild>
-              <Link to="/">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Voltar ao início
-              </Link>
-            </Button>
-          )}
-
-          <Button variant="outline" asChild>
-            <Link to="/charges">
-              <History className="h-4 w-4 mr-2" />
-              Ver histórico
+              Voltar ao início
             </Link>
           </Button>
 
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="h-4 w-4 mr-2" />
-            Imprimir
-          </Button>
+          {data?.charge && (
+            <>
+              <Button variant="outline" asChild>
+                <Link to="/charges">
+                  <History className="h-4 w-4 mr-2" />
+                  Ver histórico
+                </Link>
+              </Button>
 
-          <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloadingPDF}>
-            {isDownloadingPDF ? (
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Baixar PDF
-          </Button>
+              <Button variant="outline" onClick={handlePrint}>
+                <Printer className="h-4 w-4 mr-2" />
+                Imprimir
+              </Button>
+
+              <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloadingPDF}>
+                {isDownloadingPDF ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                Baixar PDF
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Footer */}
