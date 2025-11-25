@@ -104,12 +104,13 @@ serve(async (req) => {
       }
 
       if (!existingLink) {
+        console.log('No active payment link found for charge:', chargeId);
         return new Response(JSON.stringify({ 
           code: 'NOT_FOUND',
           link: null,
           message: 'No active payment link found' 
         }), {
-          status: 404,
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
