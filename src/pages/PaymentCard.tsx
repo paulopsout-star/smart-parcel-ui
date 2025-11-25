@@ -20,63 +20,68 @@ export default function PaymentCard() {
     const fetchData = async () => {
       if (!id) return;
 
-      const { data: splitData, error } = await supabase
-        .from('payment_splits')
-        .select('*')
-        .eq('payment_link_id', id)
-        .order('order_index');
+      try {
+        // Usar Edge Function pública para buscar dados
+        const { data, error } = await supabase.functions.invoke('public-payment-splits', {
+          body: { id },
+        });
 
-      if (error || !splitData || splitData.length === 0) {
+        if (error || !data) {
+          console.error('[PaymentCard] Error fetching payment data:', error);
+          toast({
+            title: 'Erro',
+            description: 'Link de pagamento inválido ou expirado.',
+            variant: 'destructive',
+          });
+          navigate('/');
+          return;
+        }
+
+        const { payment_link: paymentLink, payment_splits: splitData } = data;
+
+        if (!paymentLink || !splitData || splitData.length === 0) {
+          toast({
+            title: 'Erro',
+            description: 'Dados do pagamento não encontrados.',
+            variant: 'destructive',
+          });
+          navigate('/');
+          return;
+        }
+
+        const cardSplit = splitData.find((s: any) => s.method === 'credit_card');
+
+        if (!cardSplit) {
+          toast({
+            title: 'Erro',
+            description: 'Pagamento via cartão não encontrado.',
+            variant: 'destructive',
+          });
+          navigate('/');
+          return;
+        }
+
+        setCharge({ ...paymentLink, payment_splits: splitData });
+        setCardAmount(cardSplit.amount_cents);
+        
+        // Usar dados SALVOS do split - ir direto para o formulário
+        setSelectedOption({
+          id: 'saved',
+          totalCents: cardSplit.amount_cents,
+          installments: cardSplit.installments || 1,
+          installmentValueCents: Math.floor(cardSplit.amount_cents / (cardSplit.installments || 1))
+        });
+        
+        setLoading(false);
+      } catch (err) {
+        console.error('[PaymentCard] Unexpected error:', err);
         toast({
           title: 'Erro',
-          description: 'Link de pagamento inválido ou expirado.',
+          description: 'Falha ao carregar dados do pagamento.',
           variant: 'destructive',
         });
         navigate('/');
-        return;
       }
-
-      // Buscar payment_link separadamente
-      const { data: paymentLink, error: linkError } = await supabase
-        .from('payment_links')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-      if (linkError || !paymentLink) {
-        toast({
-          title: 'Erro',
-          description: 'Dados do pagamento não encontrados.',
-          variant: 'destructive',
-        });
-        navigate('/');
-        return;
-      }
-
-      const cardSplit = splitData.find((s: any) => s.method === 'credit_card');
-
-      if (!cardSplit) {
-        toast({
-          title: 'Erro',
-          description: 'Pagamento via cartão não encontrado.',
-          variant: 'destructive',
-        });
-        navigate('/');
-        return;
-      }
-
-      setCharge({ ...paymentLink, payment_splits: splitData });
-      setCardAmount(cardSplit.amount_cents);
-      
-      // Usar dados SALVOS do split - ir direto para o formulário
-      setSelectedOption({
-        id: 'saved',
-        totalCents: cardSplit.amount_cents,
-        installments: cardSplit.installments || 1,
-        installmentValueCents: Math.floor(cardSplit.amount_cents / (cardSplit.installments || 1))
-      });
-      
-      setLoading(false);
     };
 
     fetchData();

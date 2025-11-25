@@ -129,6 +129,9 @@ verify_jwt = false
 [functions.admin-reset-password]
 verify_jwt = true
 
+[functions.public-payment-splits]
+verify_jwt = false
+
 [functions.abacatepay-pix-create]
 verify_jwt = true
 
