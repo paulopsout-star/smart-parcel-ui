@@ -342,55 +342,15 @@ export default function NewCharge() {
 
       console.log('[NewCharge] Cobrança criada com sucesso no banco:', charge.id);
 
-      // Se o método de pagamento for PIX, chamar edge function abacatepay-pix-create
+      // Se o método de pagamento for PIX, apenas redirecionar para checkout
       if (data.payment_method === 'pix') {
-        try {
-          console.log('[NewCharge] Criando cobrança PIX via Abacate Pay...');
-          
-          const { data: pixData, error: pixError } = await supabase.functions.invoke('abacatepay-pix-create', {
-            body: {
-              chargeId: charge.id,
-              amountCents: amountInCents,
-              payerEmail: data.payer_email,
-              payerName: data.payer_name,
-              description: data.description || 'Cobrança Autonegocie'
-            }
-          });
-
-          if (pixError) {
-            console.error('[NewCharge] Erro ao criar PIX:', pixError);
-            throw new Error(pixError.message || 'Falha ao criar cobrança PIX');
-          }
-
-          if (!pixData?.checkoutUrl) {
-            console.error('[NewCharge] Checkout URL não retornada:', pixData);
-            throw new Error('URL de checkout não foi gerada');
-          }
-
-          console.log('[NewCharge] Cobrança PIX criada:', pixData.checkoutUrl);
-
-          toast({
-            title: "Cobrança PIX criada!",
-            description: "Redirecionando para checkout...",
-            className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
-          });
-
-          // Redirecionar para página de checkout PIX
-          setTimeout(() => {
-            navigate(`/checkout-pix/${charge.id}`);
-          }, 1500);
-
-          return;
-        } catch (error: any) {
-          console.error('[NewCharge] Erro ao gerar checkout PIX:', error);
-          toast({
-            title: "Cobrança criada com aviso",
-            description: "A cobrança foi criada, mas o checkout PIX não pôde ser gerado. Tente novamente no histórico.",
-            className: 'bg-feedback-warning-bg border-feedback-warning text-feedback-warning'
-          });
-          setTimeout(() => navigate('/charges'), 2000);
-          return;
-        }
+        toast({
+          title: "Cobrança PIX criada!",
+          description: "Redirecionando para checkout...",
+          className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
+        });
+        navigate(`/checkout-pix/${charge.id}`);
+        return;
       }
 
       // Se houver template de mensagem, enviar mensagem mock
