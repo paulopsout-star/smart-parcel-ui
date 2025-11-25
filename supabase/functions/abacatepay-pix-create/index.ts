@@ -68,9 +68,7 @@ serve(async (req) => {
       );
     }
 
-    // Preparar payload para Abacate Pay API
-    const baseUrl = Deno.env.get('BASE_URL') || supabaseUrl.replace('.supabase.co', '.lovable.app');
-    
+    // Preparar dados limpos para envio
     const cleanPhone = payerPhone.replace(/\D/g, '');
     const cleanDocument = payerDocument.replace(/\D/g, '');
     
@@ -80,39 +78,33 @@ serve(async (req) => {
       cleanDocumentPreview: cleanDocument.substring(0, 3) + '***'
     });
     
+    // Payload correto para endpoint /v1/pixQrCode/create
     const abacatePayload = {
-      frequency: "ONE_TIME", // Campo obrigatório - pagamento único
-      methods: ["PIX"], // Métodos de pagamento aceitos
-      products: [
-        {
-          externalId: chargeId,
-          name: description || `Cobrança ${payerName}`,
-          description: description || `Pagamento para ${payerName}`,
-          quantity: 1,
-          price: amountCents
-        }
-      ],
-      returnUrl: `${baseUrl}/checkout-pix/${chargeId}`,
-      completionUrl: `${baseUrl}/thank-you`,
+      amount: amountCents, // valor em centavos
+      expiresIn: 3600, // 1 hora para expirar (em segundos)
+      description: description || `Cobrança PIX - ${payerName}`,
       customer: {
         name: payerName,
         email: payerEmail,
         cellphone: cleanPhone,
         taxId: cleanDocument
+      },
+      metadata: {
+        externalId: chargeId // ID da cobrança para referência
       }
     };
 
-    console.log('[abacatepay-pix-create] 📤 Payload para Abacate Pay (customer):', {
+    console.log('[abacatepay-pix-create] 📤 Payload para endpoint /v1/pixQrCode/create (customer):', {
       name: payerName,
       email: payerEmail,
       cellphoneLength: cleanPhone.length,
       taxIdLength: cleanDocument.length
     });
 
-    console.log('[abacatepay-pix-create] Chamando Abacate Pay API...');
+    console.log('[abacatepay-pix-create] Chamando Abacate Pay API (pixQrCode/create)...');
 
-    // Chamar API do Abacate Pay
-    const abacateResponse = await fetch('https://api.abacatepay.com/v1/billing/create', {
+    // Chamar endpoint correto do Abacate Pay
+    const abacateResponse = await fetch('https://api.abacatepay.com/v1/pixQrCode/create', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${abacateApiKey}`,
@@ -129,7 +121,7 @@ serve(async (req) => {
       });
       return new Response(
         JSON.stringify({ 
-          error: 'Erro ao criar cobrança no Abacate Pay',
+          error: 'Erro ao criar QR Code PIX no Abacate Pay',
           details: errorText 
         }),
         { status: abacateResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -138,51 +130,31 @@ serve(async (req) => {
 
     const abacateData = await abacateResponse.json();
     
-    console.log('[abacatepay-pix-create] Cobrança PIX criada com sucesso:', {
-      billingId: abacateData.id,
-      checkoutUrl: abacateData.url
+    console.log('[abacatepay-pix-create] ✅ QR Code PIX criado com sucesso:', {
+      pixId: abacateData.data?.id,
+      status: abacateData.data?.status,
+      expiresAt: abacateData.data?.expiresAt
     });
 
-    // Buscar QR Code do billing criado
-    console.log('[abacatepay-pix-create] Buscando QR Code...');
-    const billingResponse = await fetch(`https://api.abacatepay.com/v1/billing/${abacateData.id}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${abacateApiKey}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!billingResponse.ok) {
-      const errorText = await billingResponse.text();
-      console.error('[abacatepay-pix-create] Erro ao buscar QR Code:', errorText);
-      throw new Error('Erro ao buscar QR Code do PIX');
+    // Validar resposta
+    if (!abacateData.data?.brCode || !abacateData.data?.brCodeBase64) {
+      console.error('[abacatepay-pix-create] Resposta incompleta:', abacateData);
+      throw new Error('QR Code não retornado pela API');
     }
-
-    const billingData = await billingResponse.json();
-    const qrCode = billingData.pix?.qrCode;
-    const brCode = billingData.pix?.brCode;
-
-    if (!qrCode || !brCode) {
-      console.error('[abacatepay-pix-create] QR Code não disponível ainda:', billingData);
-      throw new Error('QR Code ainda não disponível. Aguarde alguns segundos.');
-    }
-
-    console.log('[abacatepay-pix-create] QR Code obtido com sucesso');
 
     // Atualizar cobrança no DB com dados do Abacate Pay
     const { error: updateError } = await supabase
       .from('charges')
       .update({
-        checkout_url: abacateData.url,
-        checkout_link_id: abacateData.id,
+        checkout_link_id: abacateData.data.id,
         metadata: {
           ...charge.metadata,
-          pix_billing_id: abacateData.id,
+          pix_id: abacateData.data.id,
           abacate_pay_data: {
             created_at: new Date().toISOString(),
-            billing_id: abacateData.id,
-            checkout_url: abacateData.url,
+            pix_id: abacateData.data.id,
+            status: abacateData.data.status,
+            expires_at: abacateData.data.expiresAt,
             qr_code_generated: true
           }
         }
@@ -197,11 +169,12 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        billingId: abacateData.id,
-        checkoutUrl: abacateData.url,
-        qrCode: qrCode,
-        brCode: brCode,
-        message: 'Cobrança PIX criada com QR Code'
+        pixId: abacateData.data.id,
+        brCode: abacateData.data.brCode, // Código copia-e-cola
+        brCodeBase64: abacateData.data.brCodeBase64, // Imagem QR Code em base64
+        status: abacateData.data.status,
+        expiresAt: abacateData.data.expiresAt,
+        message: 'QR Code PIX gerado com sucesso'
       }),
       { 
         status: 200, 
