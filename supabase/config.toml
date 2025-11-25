@@ -125,3 +125,6 @@ verify_jwt = false
 
 [functions.quitaplus-simulation]
 verify_jwt = false
+
+[functions.abacatepay-pix-create]
+verify_jwt = true

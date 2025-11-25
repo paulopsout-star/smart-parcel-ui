@@ -20,6 +20,7 @@ import Checkout from "./pages/Checkout";
 import PaymentDirect from "./pages/PaymentDirect";
 import PaymentPix from "./pages/PaymentPix";
 import PaymentCard from "./pages/PaymentCard";
+import CheckoutPix from "./pages/CheckoutPix";
 import ThankYou from "./pages/ThankYou";
 import PayoutAccounts from "./pages/PayoutAccounts";
 import MessageTemplates from "./pages/MessageTemplates";
@@ -61,6 +62,7 @@ const App = () => {
                 <Route path="/payment-direct/:id" element={<PaymentDirect />} />
                 <Route path="/payment-pix/:id" element={<PaymentPix />} />
                 <Route path="/payment-card/:id" element={<PaymentCard />} />
+                <Route path="/checkout-pix/:id" element={<CheckoutPix />} />
                 <Route path="/thank-you" element={<ThankYou />} />
                 <Route path="/simulador" element={<Simulator />} />
                 

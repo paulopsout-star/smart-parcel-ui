@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
 import { User, Receipt, Banknote, Wallet, Calculator } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +48,9 @@ const formSchema = z.object({
       message: "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos"
     }),
   
+  // Método de pagamento
+  payment_method: z.enum(["pix", "cartao"]).default("cartao"),
+  
   // Dados da cobrança
   amount: z.string().min(1, "Valor é obrigatório"),
   description: z.string().optional(),
@@ -55,14 +60,9 @@ const formSchema = z.object({
   boleto_barcode: z.string().optional(),
   message_template_id: z.string().optional(),
   
-  // Novos campos para vínculo de boleto
+  // Novos campos para vínculo de boleto (condicional para cartão)
   has_boleto_link: z.boolean().default(true),
-  boleto_linha_digitavel: z.string().min(1, "Linha digitável é obrigatória").refine((val) => {
-    const digitsOnly = val.replace(/\D/g, '');
-    return digitsOnly.length === 47 || digitsOnly.length === 48;
-  }, {
-    message: "Linha digitável deve ter 47 ou 48 dígitos"
-  }),
+  boleto_linha_digitavel: z.string().optional(),
   
   // Recorrência
   recurrence_type: z.enum(["pontual", "diaria", "semanal", "quinzenal", "mensal", "semestral", "anual"]),
@@ -75,6 +75,7 @@ interface FormData {
   payer_email: string;
   payer_phone: string;
   payer_document: string;
+  payment_method: "pix" | "cartao";
   amount: string;
   description?: string;
   installments: string;
@@ -130,6 +131,7 @@ export default function NewCharge() {
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      payment_method: "cartao",
       mask_fee: false,
       has_boleto: false,
       has_boleto_link: true,
@@ -145,6 +147,7 @@ export default function NewCharge() {
   const watchHasBoletoLink = watch("has_boleto_link");
   const watchBoletoLinhaDigitavel = watch("boleto_linha_digitavel");
   const watchPayerName = watch("payer_name");
+  const watchPaymentMethod = watch("payment_method");
 
   // Verificar conta PIX e revalidar assinatura
   useEffect(() => {
@@ -338,6 +341,57 @@ export default function NewCharge() {
 
       console.log('[NewCharge] Cobrança criada com sucesso no banco:', charge.id);
 
+      // Se o método de pagamento for PIX, chamar edge function abacatepay-pix-create
+      if (data.payment_method === 'pix') {
+        try {
+          console.log('[NewCharge] Criando cobrança PIX via Abacate Pay...');
+          
+          const { data: pixData, error: pixError } = await supabase.functions.invoke('abacatepay-pix-create', {
+            body: {
+              chargeId: charge.id,
+              amountCents: amountInCents,
+              payerEmail: data.payer_email,
+              payerName: data.payer_name,
+              description: data.description || 'Cobrança Autonegocie'
+            }
+          });
+
+          if (pixError) {
+            console.error('[NewCharge] Erro ao criar PIX:', pixError);
+            throw new Error(pixError.message || 'Falha ao criar cobrança PIX');
+          }
+
+          if (!pixData?.checkoutUrl) {
+            console.error('[NewCharge] Checkout URL não retornada:', pixData);
+            throw new Error('URL de checkout não foi gerada');
+          }
+
+          console.log('[NewCharge] Cobrança PIX criada:', pixData.checkoutUrl);
+
+          toast({
+            title: "Cobrança PIX criada!",
+            description: "Redirecionando para checkout...",
+            className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
+          });
+
+          // Redirecionar para página de checkout PIX
+          setTimeout(() => {
+            navigate(`/checkout-pix/${charge.id}`);
+          }, 1500);
+
+          return;
+        } catch (error: any) {
+          console.error('[NewCharge] Erro ao gerar checkout PIX:', error);
+          toast({
+            title: "Cobrança criada com aviso",
+            description: "A cobrança foi criada, mas o checkout PIX não pôde ser gerado. Tente novamente no histórico.",
+            className: 'bg-feedback-warning-bg border-feedback-warning text-feedback-warning'
+          });
+          setTimeout(() => navigate('/charges'), 2000);
+          return;
+        }
+      }
+
       // Se houver template de mensagem, enviar mensagem mock
       if (data.message_template_id && data.message_template_id !== "none" && messageTemplateSnapshot) {
         try {
@@ -465,19 +519,31 @@ export default function NewCharge() {
     }
   };
 
+  // Validação customizada da linha digitável para método cartão
+  const linhaDigitavelError = watchPaymentMethod === 'cartao' && watchBoletoLinhaDigitavel 
+    ? (() => {
+        const digits = watchBoletoLinhaDigitavel.replace(/\D/g, '');
+        if (digits.length !== 47 && digits.length !== 48) {
+          return "Linha digitável deve ter 47 ou 48 dígitos";
+        }
+        return null;
+      })()
+    : null;
+
   // Calcular erros de validação para o SummaryCard
   const validationErrors = [
     !watchAmount && "Valor não informado",
-    !watchBoletoLinhaDigitavel && "Linha digitável obrigatória",
+    watchPaymentMethod === 'cartao' && !watchBoletoLinhaDigitavel && "Linha digitável obrigatória",
+    watchPaymentMethod === 'cartao' && linhaDigitavelError,
     errors.payer_name?.message,
     errors.payer_email?.message,
     errors.payer_phone?.message,
     errors.payer_document?.message,
-    errors.boleto_linha_digitavel?.message,
     errors.amount?.message
   ].filter(Boolean) as string[];
 
-  const isFormValid = Object.keys(errors).length === 0 && !!watchAmount && !!watchBoletoLinhaDigitavel;
+  const isFormValid = Object.keys(errors).length === 0 && !!watchAmount && 
+    (watchPaymentMethod === 'pix' || (!!watchBoletoLinhaDigitavel && !linhaDigitavelError));
 
   return (
     <ErrorBoundary>
@@ -504,7 +570,51 @@ export default function NewCharge() {
             <div className="xl:col-span-2 space-y-6">
               
                 
-                  {/* Dados do Pagador */}
+                  {/* Método de Pagamento */}
+                  <FormSection
+                    title="Método de Pagamento"
+                    icon={<Wallet className="w-5 h-5 text-brand" />}
+                  >
+                    <div className="flex gap-4">
+                      <label className={cn(
+                        "flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all",
+                        watchPaymentMethod === 'cartao' 
+                          ? "border-brand bg-brand/5" 
+                          : "border-border hover:border-brand/50"
+                      )}>
+                        <input
+                          type="radio"
+                          value="cartao"
+                          {...register("payment_method")}
+                          className="sr-only"
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium text-ink">💳 Cartão de Crédito</div>
+                          <div className="text-sm text-ink-secondary">Com vínculo de boleto</div>
+                        </div>
+                      </label>
+                      
+                      <label className={cn(
+                        "flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all",
+                        watchPaymentMethod === 'pix' 
+                          ? "border-brand bg-brand/5" 
+                          : "border-border hover:border-brand/50"
+                      )}>
+                        <input
+                          type="radio"
+                          value="pix"
+                          {...register("payment_method")}
+                          className="sr-only"
+                        />
+                        <div className="flex-1">
+                          <div className="font-medium text-ink">📱 PIX</div>
+                          <div className="text-sm text-ink-secondary">Via Abacate Pay</div>
+                        </div>
+                      </label>
+                    </div>
+                  </FormSection>
+                
+                   {/* Dados do Pagador */}
                   <FormSection
                     title="Dados do Pagador"
                     icon={<User className="w-5 h-5 text-brand" />}
@@ -641,42 +751,44 @@ export default function NewCharge() {
                         </div>
                       </FormField>
 
-                      {/* Linha Digitável */}
-                      <FormField
-                        label="Linha Digitável do Boleto"
-                        htmlFor="boleto_linha_digitavel"
-                        error={errors.boleto_linha_digitavel?.message}
-                        helpText="47 ou 48 dígitos (apenas números)"
-                        helpIcon
-                        required
-                      >
-                        <Textarea
-                          id="boleto_linha_digitavel"
-                          placeholder="Digite ou cole a linha digitável do boleto"
-                          {...register("boleto_linha_digitavel")}
-                          className={cn(
-                            "font-mono resize-none transition-all duration-200",
-                            errors.boleto_linha_digitavel && "border-feedback-error focus:ring-feedback-error"
+                      {/* Linha Digitável - Mostrar apenas para Cartão */}
+                      {watchPaymentMethod === 'cartao' && (
+                        <FormField
+                          label="Linha Digitável do Boleto"
+                          htmlFor="boleto_linha_digitavel"
+                          error={linhaDigitavelError || undefined}
+                          helpText="47 ou 48 dígitos (apenas números)"
+                          helpIcon
+                          required
+                        >
+                          <Textarea
+                            id="boleto_linha_digitavel"
+                            placeholder="Digite ou cole a linha digitável do boleto"
+                            {...register("boleto_linha_digitavel")}
+                            className={cn(
+                              "font-mono resize-none transition-all duration-200",
+                              errors.boleto_linha_digitavel && "border-feedback-error focus:ring-feedback-error"
+                            )}
+                            rows={3}
+                          />
+                          
+                          {/* Contador de dígitos */}
+                          {watchBoletoLinhaDigitavel && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <Banknote className="w-4 h-4 text-brand" />
+                              <span className={cn(
+                                "text-sm font-medium",
+                                watchBoletoLinhaDigitavel.replace(/\D/g, '').length === 47 ||
+                                watchBoletoLinhaDigitavel.replace(/\D/g, '').length === 48
+                                  ? "text-feedback-success"
+                                  : "text-ink-muted"
+                              )}>
+                                {watchBoletoLinhaDigitavel.replace(/\D/g, '').length} dígitos
+                              </span>
+                            </div>
                           )}
-                          rows={3}
-                        />
-                        
-                        {/* Contador de dígitos */}
-                        {watchBoletoLinhaDigitavel && (
-                          <div className="flex items-center gap-2 mt-2">
-                            <Banknote className="w-4 h-4 text-brand" />
-                            <span className={cn(
-                              "text-sm font-medium",
-                              watchBoletoLinhaDigitavel.replace(/\D/g, '').length === 47 ||
-                              watchBoletoLinhaDigitavel.replace(/\D/g, '').length === 48
-                                ? "text-feedback-success"
-                                : "text-ink-muted"
-                            )}>
-                              {watchBoletoLinhaDigitavel.replace(/\D/g, '').length} dígitos
-                            </span>
-                          </div>
-                        )}
-                      </FormField>
+                        </FormField>
+                      )}
 
                       {/* Descrição */}
                       <FormField
