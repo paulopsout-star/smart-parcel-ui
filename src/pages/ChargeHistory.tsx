@@ -39,6 +39,9 @@ interface Charge {
   next_charge_date: string | null;
   checkout_url?: string;
   checkout_link_id?: string;
+  payment_method?: string;
+  fee_amount?: number;
+  fee_percentage?: number;
   executions: Array<{
     id: string;
     execution_date: string;
@@ -71,6 +74,13 @@ const formatPhone = (phone: string) => {
     return `(${clean.slice(0,2)}) ${clean.slice(2,7)}-${clean.slice(7)}`;
   }
   return phone;
+};
+
+const formatCurrency = (cents: number) => {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(cents / 100);
 };
 
 const getModernStatusBadge = (status: string) => {
@@ -1070,8 +1080,32 @@ export default function ChargeHistory() {
                   Informações Financeiras
                 </h4>
                 <div className="p-5 rounded-xl bg-gradient-to-br from-primary/5 to-primary/[0.02] border border-primary/10">
-                  <p className="text-sm text-muted-foreground mb-1">Valor Total</p>
-                  <p className="text-3xl font-bold text-primary">{formatCurrency(selectedCharge.amount)}</p>
+                  {selectedCharge.payment_method === 'pix' && selectedCharge.fee_amount && selectedCharge.fee_amount > 0 ? (
+                    <>
+                      <p className="text-sm text-muted-foreground mb-1">Valor Total</p>
+                      <p className="text-3xl font-bold text-primary">{formatCurrency(selectedCharge.amount)}</p>
+                      
+                      <div className="mt-4 pt-4 border-t border-primary/10 space-y-2">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Valor Original:</span>
+                          <span className="font-semibold">{formatCurrency(selectedCharge.amount - selectedCharge.fee_amount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Taxa PIX (3%):</span>
+                          <span className="font-semibold text-amber-600">+ {formatCurrency(selectedCharge.fee_amount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-base pt-2 border-t border-primary/10">
+                          <span className="font-semibold">Valor Total:</span>
+                          <span className="font-bold text-primary">{formatCurrency(selectedCharge.amount)}</span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-muted-foreground mb-1">Valor Total</p>
+                      <p className="text-3xl font-bold text-primary">{formatCurrency(selectedCharge.amount)}</p>
+                    </>
+                  )}
                   
                   {selectedCharge.description && (
                     <div className="mt-4 pt-4 border-t border-primary/10">

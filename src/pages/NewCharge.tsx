@@ -263,7 +263,17 @@ export default function NewCharge() {
     setError("");
 
     try {
-      const amountInCents = formatAmount(data.amount);
+      let amountInCents = formatAmount(data.amount);
+      let feeAmount = 0;
+      let feePercentage = 0;
+      
+      // Aplicar taxa de 3% para cobranças PIX
+      if (data.payment_method === 'pix') {
+        feeAmount = Math.round(amountInCents * 0.03); // 3% de taxa
+        feePercentage = 3.00;
+        amountInCents = amountInCents + feeAmount; // Total com taxa incluída
+      }
+      
       const interval = parseInt(data.recurrence_interval) || 1;
       const nextChargeDate = calculateNextChargeDate(data.recurrence_type, interval);
 
@@ -328,9 +338,13 @@ export default function NewCharge() {
           recurrence_interval: interval,
           recurrence_end_date: data.recurrence_end_date ? new Date(data.recurrence_end_date).toISOString() : null,
           next_charge_date: nextChargeDate?.toISOString() || null,
+          // Fee fields (PIX only)
+          fee_amount: feeAmount,
+          fee_percentage: feePercentage,
           metadata: {
             created_via: 'web_interface',
-            user_agent: navigator.userAgent
+            user_agent: navigator.userAgent,
+            original_amount: data.payment_method === 'pix' ? formatAmount(data.amount) : undefined
           }
         })
         .select()
