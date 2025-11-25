@@ -189,7 +189,7 @@ export default function CheckoutPix() {
       } catch (err) {
         console.error('[CheckoutPix] ❌ Erro no polling:', err);
       }
-    }, 5000); // Verificar a cada 5 segundos
+    }, 3000); // Verificar a cada 3 segundos
 
     setPollInterval(interval);
 
