@@ -13,6 +13,7 @@ import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, M
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { Layout } from '@/components/Layout';
 import { ptBR } from 'date-fns/locale';
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';

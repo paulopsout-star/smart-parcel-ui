@@ -11,8 +11,8 @@ import { Loader2, Play, Calendar, Clock, BarChart3, AlertTriangle } from 'lucide
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Layout } from '@/components/Layout';
 
 interface PlannerStats {
   charges_analyzed: number;

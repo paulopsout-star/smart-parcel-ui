@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
 import { SimulatorModal } from '@/components/SimulatorModal';
+import { Layout } from '@/components/Layout';
 
 interface DashboardStats {
   totalCharges: number;
@@ -104,7 +105,8 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6">
+    <Layout>
+      <div className="w-full max-w-screen-2xl mx-auto p-4 sm:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
@@ -255,6 +257,7 @@ export default function Dashboard() {
           open={showSimulatorModal}
           onOpenChange={setShowSimulatorModal}
         />
-    </div>
+      </div>
+    </Layout>
   );
 }
