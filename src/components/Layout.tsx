@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { useSessionTimeout } from '@/hooks/useSessionTimeout';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -33,6 +34,8 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
+  useSessionTimeout(); // Ativar timeout de inatividade
+  
   const { user, profile, signOut, isAdmin } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();

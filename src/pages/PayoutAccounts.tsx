@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
+import { Layout } from "@/components/Layout";
 
 const accountSchema = z.object({
   pix_key: z.string().min(1, "Chave PIX é obrigatória"),

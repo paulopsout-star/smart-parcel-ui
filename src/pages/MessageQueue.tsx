@@ -11,6 +11,7 @@ import { Loader2, MessageSquare, Send, RefreshCw, Eye, Clock } from "lucide-reac
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Layout } from "@/components/Layout";
 
 interface ChargeMessage {
   id: string;
