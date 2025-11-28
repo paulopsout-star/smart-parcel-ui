@@ -1028,23 +1028,59 @@ export default function ConnectivityTest() {
                 )}
               </div>
               
-              {prepaymentResult.error && (
-                <Alert variant="destructive">
-                  <AlertDescription className="font-mono text-xs whitespace-pre-wrap">
-                    {prepaymentResult.error}
-                  </AlertDescription>
-                </Alert>
-              )}
-              
-              {/* Mensagem da API */}
-              {prepaymentResult.response?.message && (
-                <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-3">
-                  <p className="text-sm font-semibold text-primary mb-1">
-                    📨 Mensagem da API:
-                  </p>
-                  <p className="text-sm">
-                    {prepaymentResult.response.message}
-                  </p>
+              {/* Resposta Estruturada da API */}
+              {prepaymentResult.response && (
+                <div className="space-y-3 mt-4">
+                  <div className="text-sm font-semibold border-b pb-2">📊 Resposta da API</div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    {prepaymentResult.response?.success !== undefined && (
+                      <div className="p-3 rounded-lg border bg-card">
+                        <div className="text-xs text-muted-foreground mb-1">Success</div>
+                        <Badge variant={prepaymentResult.response.success ? 'default' : 'destructive'}>
+                          {prepaymentResult.response.success ? 'true' : 'false'}
+                        </Badge>
+                      </div>
+                    )}
+                    
+                    {prepaymentResult.response?.code && (
+                      <div className="p-3 rounded-lg border bg-card">
+                        <div className="text-xs text-muted-foreground mb-1">Code</div>
+                        <Badge variant="outline" className="text-base">{prepaymentResult.response.code}</Badge>
+                      </div>
+                    )}
+                    
+                    {prepaymentResult.response?.isWafBlock !== undefined && (
+                      <div className="p-3 rounded-lg border bg-card col-span-2">
+                        <div className="text-xs text-muted-foreground mb-1">WAF Block</div>
+                        <Badge variant={prepaymentResult.response.isWafBlock ? 'destructive' : 'default'}>
+                          {prepaymentResult.response.isWafBlock ? '🛡️ Bloqueado' : '✅ Não Bloqueado'}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {prepaymentResult.response?.message && (
+                    <div className="p-3 rounded-lg border-2 border-primary/20 bg-primary/5">
+                      <div className="text-xs text-muted-foreground mb-1">Mensagem</div>
+                      <p className="text-sm font-medium text-primary">
+                        {prepaymentResult.response.message}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {prepaymentResult.response?.error && (
+                    <div className="p-3 rounded-lg border-2 border-destructive/30 bg-destructive/5">
+                      <div className="text-xs text-muted-foreground mb-2">Detalhes do Erro</div>
+                      <ScrollArea className="max-h-32">
+                        <p className="text-xs font-mono whitespace-pre-wrap break-words text-destructive">
+                          {typeof prepaymentResult.response.error === 'string' 
+                            ? prepaymentResult.response.error 
+                            : JSON.stringify(prepaymentResult.response.error, null, 2)}
+                        </p>
+                      </ScrollArea>
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -1144,23 +1180,59 @@ export default function ConnectivityTest() {
                 </div>
               </div>
               
-              {linkBoletoResult.error && (
-                <Alert variant="destructive">
-                  <AlertDescription className="font-mono text-xs whitespace-pre-wrap">
-                    {linkBoletoResult.error}
-                  </AlertDescription>
-                </Alert>
-              )}
-              
-              {/* Mensagem da API */}
-              {linkBoletoResult.response?.message && (
-                <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-3">
-                  <p className="text-sm font-semibold text-primary mb-1">
-                    📨 Mensagem da API:
-                  </p>
-                  <p className="text-sm">
-                    {linkBoletoResult.response.message}
-                  </p>
+              {/* Resposta Estruturada da API */}
+              {linkBoletoResult.response && (
+                <div className="space-y-3 mt-4">
+                  <div className="text-sm font-semibold border-b pb-2">📊 Resposta da API</div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    {linkBoletoResult.response?.success !== undefined && (
+                      <div className="p-3 rounded-lg border bg-card">
+                        <div className="text-xs text-muted-foreground mb-1">Success</div>
+                        <Badge variant={linkBoletoResult.response.success ? 'default' : 'destructive'}>
+                          {linkBoletoResult.response.success ? 'true' : 'false'}
+                        </Badge>
+                      </div>
+                    )}
+                    
+                    {linkBoletoResult.response?.code && (
+                      <div className="p-3 rounded-lg border bg-card">
+                        <div className="text-xs text-muted-foreground mb-1">Code</div>
+                        <Badge variant="outline" className="text-base">{linkBoletoResult.response.code}</Badge>
+                      </div>
+                    )}
+                    
+                    {linkBoletoResult.response?.isWafBlock !== undefined && (
+                      <div className="p-3 rounded-lg border bg-card col-span-2">
+                        <div className="text-xs text-muted-foreground mb-1">WAF Block</div>
+                        <Badge variant={linkBoletoResult.response.isWafBlock ? 'destructive' : 'default'}>
+                          {linkBoletoResult.response.isWafBlock ? '🛡️ Bloqueado' : '✅ Não Bloqueado'}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {linkBoletoResult.response?.message && (
+                    <div className="p-3 rounded-lg border-2 border-primary/20 bg-primary/5">
+                      <div className="text-xs text-muted-foreground mb-1">Mensagem</div>
+                      <p className="text-sm font-medium text-primary">
+                        {linkBoletoResult.response.message}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {linkBoletoResult.response?.error && (
+                    <div className="p-3 rounded-lg border-2 border-destructive/30 bg-destructive/5">
+                      <div className="text-xs text-muted-foreground mb-2">Detalhes do Erro</div>
+                      <ScrollArea className="max-h-32">
+                        <p className="text-xs font-mono whitespace-pre-wrap break-words text-destructive">
+                          {typeof linkBoletoResult.response.error === 'string' 
+                            ? linkBoletoResult.response.error 
+                            : JSON.stringify(linkBoletoResult.response.error, null, 2)}
+                        </p>
+                      </ScrollArea>
+                    </div>
+                  )}
                 </div>
               )}
               
