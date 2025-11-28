@@ -79,7 +79,10 @@ serve(async (req) => {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'User-Agent': 'AutonegocieHub/quitaplus-simulation',
+            'Origin': 'https://autonegocie.com.br',
+            'Referer': 'https://autonegocie.com.br/'
           },
           body: JSON.stringify({
             amountInCents,
