@@ -178,12 +178,21 @@ ${JSON.stringify(orderPayload, null, 2)}`;
         console.log(`[quitaplus-prepayment] Tentativa ${attempts}/3 - Chamando: ${fullUrl}`);
         
         // Enviar rawBody diretamente (NÃO usar JSON.stringify)
+        // Headers melhorados para passar pelo WAF Akamai
         const quitaResponse = await fetch(fullUrl, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Origin': baseUrl.replace(/\/+$/, ''),
+            'Referer': `${baseUrl}/`,
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Connection': 'keep-alive',
           },
           body: rawBody, // String RAW com dois JSONs concatenados
         });
@@ -202,18 +211,42 @@ ${JSON.stringify(orderPayload, null, 2)}`;
           // Erros 4xx não devem ser retried
           if (quitaResponse.status >= 400 && quitaResponse.status < 500) {
             let errorMessage = 'Erro ao processar pagamento';
-            try {
-              const errorData = JSON.parse(responseText);
-              errorMessage = errorData.message || errorMessage;
-            } catch {
-              errorMessage = responseText || errorMessage;
+            let detailedError = responseText;
+            
+            // Detectar bloqueio do WAF
+            const isWafBlock = responseText.includes('Access Denied') || 
+                              responseText.includes('errors.edgesuite.net') ||
+                              quitaResponse.status === 403;
+            
+            if (isWafBlock) {
+              errorMessage = '🛡️ WAF/CDN Akamai bloqueando requisição';
+              detailedError = `ERRO 403 - WAF Akamai bloqueou a requisição vindas do IP do Supabase Edge Functions.
+
+SOLUÇÕES POSSÍVEIS:
+1. Whitelist dos IPs do Supabase no painel do WAF da Cappta
+2. Implementar proxy próprio com IP fixo
+3. Contatar suporte da Cappta para liberação
+
+DETALHES TÉCNICOS:
+- Status: ${quitaResponse.status}
+- Referência: ${responseText.match(/Reference[^<]+/)?.[0] || 'N/A'}
+- URL Bloqueada: ${fullUrl}`;
+            } else {
+              try {
+                const errorData = JSON.parse(responseText);
+                errorMessage = errorData.message || errorMessage;
+              } catch {
+                errorMessage = responseText || errorMessage;
+              }
             }
 
             return new Response(
               JSON.stringify({
                 success: false,
-                error: errorMessage,
+                error: detailedError,
+                message: errorMessage,
                 code: quitaResponse.status,
+                isWafBlock,
               }),
               {
                 status: quitaResponse.status,
