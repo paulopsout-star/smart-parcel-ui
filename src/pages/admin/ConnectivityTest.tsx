@@ -278,6 +278,13 @@ export default function ConnectivityTest() {
       
       addLog(`📥 Resposta recebida: ${status} (${duration}ms)`, success ? 'success' : 'error');
       
+      // Detectar bloqueio WAF
+      if (data?.isWafBlock || (data?.error && typeof data.error === 'string' && data.error.includes('WAF'))) {
+        addLog('🛡️ BLOQUEIO WAF DETECTADO - Akamai bloqueando requisições', 'error');
+        addLog('💡 Solução: Whitelist de IPs do Supabase no WAF da Cappta', 'info');
+        addLog('💡 Alternativa: Implementar proxy com IP fixo', 'info');
+      }
+      
       if (success && data?.prePaymentKey) {
         addLog(`✅ PrePaymentKey obtida: ${maskCredential(data.prePaymentKey)}`, 'success');
         // Auto-preencher no formulário de boleto
@@ -953,6 +960,25 @@ export default function ConnectivityTest() {
                       <span className="font-medium">Code:</span>
                       <Badge variant="outline">{prepaymentResult.response.code}</Badge>
                     </div>
+                  )}
+                  {prepaymentResult.response?.isWafBlock && (
+                    <Alert variant="destructive" className="border-2">
+                      <AlertDescription className="text-sm space-y-2">
+                        <div className="font-semibold text-base">🛡️ Bloqueio WAF/CDN Akamai Detectado</div>
+                        <p className="text-xs">
+                          A API Cappta está protegida por um WAF (Web Application Firewall) que está 
+                          bloqueando requisições vindas do IP dinâmico do Supabase Edge Functions.
+                        </p>
+                        <div className="mt-3 space-y-1 text-xs">
+                          <p className="font-medium">✅ Soluções Possíveis:</p>
+                          <ul className="list-disc list-inside space-y-1 ml-2">
+                            <li>Whitelist dos IPs do Supabase no painel do WAF</li>
+                            <li>Implementar proxy próprio com IP fixo</li>
+                            <li>Contatar suporte da Cappta para liberação</li>
+                          </ul>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
                   )}
                   {prepaymentResult.response?.error && (
                     <div className="space-y-2">
