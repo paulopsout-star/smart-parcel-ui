@@ -769,16 +769,49 @@ export default function ConnectivityTest() {
                 </Alert>
               )}
               
-              {tokenResult.response && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium mb-2">Resposta:</p>
-                  <ScrollArea className="h-32 w-full rounded border p-2">
-                    <pre className="text-xs">
+              <Tabs defaultValue="response" className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="response">Resposta Completa</TabsTrigger>
+                  <TabsTrigger value="details">Detalhes</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="response" className="mt-2">
+                  <ScrollArea className="h-64 w-full rounded border p-3 bg-muted/30">
+                    <pre className="text-xs font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(tokenResult.response, null, 2)}
                     </pre>
                   </ScrollArea>
-                </div>
-              )}
+                </TabsContent>
+                
+                <TabsContent value="details" className="mt-2 space-y-3">
+                  {tokenResult.response?.accessToken && (
+                    <div className="space-y-1">
+                      <span className="text-sm font-medium">Access Token:</span>
+                      <code className="text-xs bg-muted px-2 py-1 rounded block overflow-x-auto">
+                        {maskCredential(tokenResult.response.accessToken)}
+                      </code>
+                    </div>
+                  )}
+                  {tokenResult.response?.expiresIn && (
+                    <div className="flex justify-between text-sm border-b pb-2">
+                      <span className="font-medium">Expira em:</span>
+                      <span>{tokenResult.response.expiresIn}s</span>
+                    </div>
+                  )}
+                  {tokenResult.response?.error && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">Erro Retornado:</span>
+                      <ScrollArea className="h-32 w-full rounded border p-2 bg-destructive/5">
+                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive">
+                          {typeof tokenResult.response.error === 'string' 
+                            ? tokenResult.response.error 
+                            : JSON.stringify(tokenResult.response.error, null, 2)}
+                        </pre>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         )}
@@ -809,16 +842,51 @@ export default function ConnectivityTest() {
                 </Alert>
               )}
               
-              {simulationResult.response && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium mb-2">Resposta:</p>
-                  <ScrollArea className="h-32 w-full rounded border p-2">
-                    <pre className="text-xs">
+              <Tabs defaultValue="response" className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="response">Resposta Completa</TabsTrigger>
+                  <TabsTrigger value="details">Detalhes</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="response" className="mt-2">
+                  <ScrollArea className="h-64 w-full rounded border p-3 bg-muted/30">
+                    <pre className="text-xs font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(simulationResult.response, null, 2)}
                     </pre>
                   </ScrollArea>
-                </div>
-              )}
+                </TabsContent>
+                
+                <TabsContent value="details" className="mt-2 space-y-3">
+                  {simulationResult.response?.success !== undefined && (
+                    <div className="flex justify-between text-sm border-b pb-2">
+                      <span className="font-medium">Success:</span>
+                      <Badge variant={simulationResult.response.success ? 'default' : 'destructive'}>
+                        {simulationResult.response.success ? 'true' : 'false'}
+                      </Badge>
+                    </div>
+                  )}
+                  {simulationResult.response?.error && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">Erro Retornado:</span>
+                      <ScrollArea className="h-32 w-full rounded border p-2 bg-destructive/5">
+                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive">
+                          {typeof simulationResult.response.error === 'string' 
+                            ? simulationResult.response.error 
+                            : JSON.stringify(simulationResult.response.error, null, 2)}
+                        </pre>
+                      </ScrollArea>
+                    </div>
+                  )}
+                  {simulationResult.response?.message && (
+                    <div className="space-y-1">
+                      <span className="text-sm font-medium">Mensagem:</span>
+                      <p className="text-sm text-muted-foreground p-2 bg-muted rounded">
+                        {simulationResult.response.message}
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         )}
@@ -857,16 +925,57 @@ export default function ConnectivityTest() {
                 </Alert>
               )}
               
-              {prepaymentResult.response && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium mb-2">Resposta:</p>
-                  <ScrollArea className="h-32 w-full rounded border p-2">
-                    <pre className="text-xs">
+              <Tabs defaultValue="response" className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="response">Resposta Completa</TabsTrigger>
+                  <TabsTrigger value="details">Detalhes</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="response" className="mt-2">
+                  <ScrollArea className="h-64 w-full rounded border p-3 bg-muted/30">
+                    <pre className="text-xs font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(prepaymentResult.response, null, 2)}
                     </pre>
                   </ScrollArea>
-                </div>
-              )}
+                </TabsContent>
+                
+                <TabsContent value="details" className="mt-2 space-y-3">
+                  {prepaymentResult.response?.success !== undefined && (
+                    <div className="flex justify-between text-sm border-b pb-2">
+                      <span className="font-medium">Success:</span>
+                      <Badge variant={prepaymentResult.response.success ? 'default' : 'destructive'}>
+                        {prepaymentResult.response.success ? 'true' : 'false'}
+                      </Badge>
+                    </div>
+                  )}
+                  {prepaymentResult.response?.code && (
+                    <div className="flex justify-between text-sm border-b pb-2">
+                      <span className="font-medium">Code:</span>
+                      <Badge variant="outline">{prepaymentResult.response.code}</Badge>
+                    </div>
+                  )}
+                  {prepaymentResult.response?.error && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">Erro Retornado:</span>
+                      <ScrollArea className="h-32 w-full rounded border p-2 bg-destructive/5">
+                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive">
+                          {typeof prepaymentResult.response.error === 'string' 
+                            ? prepaymentResult.response.error 
+                            : JSON.stringify(prepaymentResult.response.error, null, 2)}
+                        </pre>
+                      </ScrollArea>
+                    </div>
+                  )}
+                  {prepaymentResult.response?.message && (
+                    <div className="space-y-1">
+                      <span className="text-sm font-medium">Mensagem:</span>
+                      <p className="text-sm text-muted-foreground p-2 bg-muted rounded">
+                        {prepaymentResult.response.message}
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         )}
@@ -897,16 +1006,57 @@ export default function ConnectivityTest() {
                 </Alert>
               )}
               
-              {linkBoletoResult.response && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium mb-2">Resposta:</p>
-                  <ScrollArea className="h-32 w-full rounded border p-2">
-                    <pre className="text-xs">
+              <Tabs defaultValue="response" className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="response">Resposta Completa</TabsTrigger>
+                  <TabsTrigger value="details">Detalhes</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="response" className="mt-2">
+                  <ScrollArea className="h-64 w-full rounded border p-3 bg-muted/30">
+                    <pre className="text-xs font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(linkBoletoResult.response, null, 2)}
                     </pre>
                   </ScrollArea>
-                </div>
-              )}
+                </TabsContent>
+                
+                <TabsContent value="details" className="mt-2 space-y-3">
+                  {linkBoletoResult.response?.success !== undefined && (
+                    <div className="flex justify-between text-sm border-b pb-2">
+                      <span className="font-medium">Success:</span>
+                      <Badge variant={linkBoletoResult.response.success ? 'default' : 'destructive'}>
+                        {linkBoletoResult.response.success ? 'true' : 'false'}
+                      </Badge>
+                    </div>
+                  )}
+                  {linkBoletoResult.response?.code && (
+                    <div className="flex justify-between text-sm border-b pb-2">
+                      <span className="font-medium">Code:</span>
+                      <Badge variant="outline">{linkBoletoResult.response.code}</Badge>
+                    </div>
+                  )}
+                  {linkBoletoResult.response?.error && (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">Erro Retornado:</span>
+                      <ScrollArea className="h-32 w-full rounded border p-2 bg-destructive/5">
+                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive">
+                          {typeof linkBoletoResult.response.error === 'string' 
+                            ? linkBoletoResult.response.error 
+                            : JSON.stringify(linkBoletoResult.response.error, null, 2)}
+                        </pre>
+                      </ScrollArea>
+                    </div>
+                  )}
+                  {linkBoletoResult.response?.message && (
+                    <div className="space-y-1">
+                      <span className="text-sm font-medium">Mensagem:</span>
+                      <p className="text-sm text-muted-foreground p-2 bg-muted rounded">
+                        {linkBoletoResult.response.message}
+                      </p>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         )}
