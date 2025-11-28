@@ -30,13 +30,16 @@ serve(async (req) => {
     if (sanitizedNumber.length !== 47 && sanitizedNumber.length !== 48) {
       return new Response(
         JSON.stringify({
-          success: false,
-          error: 'Linha digitável do boleto inválida',
-          code: 400,
-          message: 'A linha digitável deve ter 47 ou 48 dígitos',
+          apiRawResponse: JSON.stringify({ error: 'Linha digitável do boleto inválida', message: 'A linha digitável deve ter 47 ou 48 dígitos' }),
+          apiMetadata: {
+            httpStatus: 400,
+            httpStatusText: 'Bad Request',
+            httpHeaders: {},
+            requestUrl: 'validation'
+          }
         }),
         {
-          status: 200, // Sempre retorna 200 para o front-end conseguir ler o JSON
+          status: 200,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
@@ -101,25 +104,18 @@ serve(async (req) => {
         if (!quitaResponse.ok) {
           // Erros 4xx não devem ser retried
           if (quitaResponse.status >= 400 && quitaResponse.status < 500) {
-            let errorMessage = 'Erro ao vincular boleto';
-            try {
-              const errorData = JSON.parse(responseText);
-              errorMessage = errorData.message || errorMessage;
-            } catch {
-              errorMessage = responseText || errorMessage;
-            }
-
             return new Response(
               JSON.stringify({
-                success: false,
-                error: errorMessage,
-                code: quitaResponse.status,
-                statusText: quitaResponse.statusText,
-                headers: Object.fromEntries(quitaResponse.headers.entries()),
-                body: responseText,
+                apiRawResponse: responseText,
+                apiMetadata: {
+                  httpStatus: quitaResponse.status,
+                  httpStatusText: quitaResponse.statusText,
+                  httpHeaders: Object.fromEntries(quitaResponse.headers.entries()),
+                  requestUrl: `${baseUrl}/prepayment/AttachBankslip/${requestData.prePaymentKey}`
+                }
               }),
               {
-                status: 200, // Sempre retorna 200 para o front-end conseguir ler o JSON
+                status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               }
             );
@@ -165,10 +161,13 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({
-            success: true,
-            linkId: quitaData.linkId || quitaData.link_id,
-            prePaymentKey: requestData.prePaymentKey,
-            status: quitaData.status || 'LINKED',
+            apiRawResponse: responseText,
+            apiMetadata: {
+              httpStatus: quitaResponse.status,
+              httpStatusText: quitaResponse.statusText,
+              httpHeaders: Object.fromEntries(quitaResponse.headers.entries()),
+              requestUrl: `${baseUrl}/prepayment/AttachBankslip/${requestData.prePaymentKey}`
+            }
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
