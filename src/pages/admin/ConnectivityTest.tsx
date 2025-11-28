@@ -257,17 +257,54 @@ export default function ConnectivityTest() {
       
       if (error) {
         addLog(`❌ Erro na requisição: ${error.message}`, 'error');
+        
+        // Tentar extrair JSON da resposta de erro
+        let errorData = null;
+        let errorStatus = 500;
+        
+        // Primeiro, tentar parsear error.message como JSON
+        if (error.message) {
+          try {
+            // Se a mensagem começa com "Error, " seguido de JSON
+            const jsonMatch = error.message.match(/^Error,\s*(\{.*\})\s*$/s);
+            if (jsonMatch) {
+              errorData = JSON.parse(jsonMatch[1]);
+              errorStatus = errorData?.code || errorData?.status || 500;
+              addLog(`📦 JSON extraído do erro: ${JSON.stringify(errorData, null, 2)}`, 'info');
+            } else if (error.message.startsWith('{')) {
+              // Se a mensagem é diretamente um JSON
+              errorData = JSON.parse(error.message);
+              errorStatus = errorData?.code || errorData?.status || 500;
+              addLog(`📦 JSON extraído do erro: ${JSON.stringify(errorData, null, 2)}`, 'info');
+            }
+          } catch (parseError) {
+            addLog(`⚠️ Não foi possível parsear erro como JSON`, 'info');
+          }
+        }
+        
+        // Se não conseguiu extrair JSON, usar o erro completo
+        if (!errorData) {
+          errorData = {
+            raw_error: error.message,
+            full_error_object: error
+          };
+          addLog(`📋 Usando objeto de erro completo`, 'info');
+        }
+        
+        console.log('🔍 DEBUG - Erro completo:', error);
+        console.log('🔍 DEBUG - Dados extraídos:', errorData);
+        
         setPrepaymentResult({
-          status: 500,
+          status: errorStatus,
           statusText: 'Error',
           duration,
           error: error.message,
-          response: error
+          response: errorData
         });
         setPrepaymentStatus('error');
         toast({
           title: 'Erro no teste',
-          description: error.message,
+          description: errorData?.message || errorData?.error || error.message,
           variant: 'destructive'
         });
         return;
@@ -357,17 +394,54 @@ export default function ConnectivityTest() {
       
       if (error) {
         addLog(`❌ Erro na requisição: ${error.message}`, 'error');
+        
+        // Tentar extrair JSON da resposta de erro
+        let errorData = null;
+        let errorStatus = 500;
+        
+        // Primeiro, tentar parsear error.message como JSON
+        if (error.message) {
+          try {
+            // Se a mensagem começa com "Error, " seguido de JSON
+            const jsonMatch = error.message.match(/^Error,\s*(\{.*\})\s*$/s);
+            if (jsonMatch) {
+              errorData = JSON.parse(jsonMatch[1]);
+              errorStatus = errorData?.code || errorData?.status || 500;
+              addLog(`📦 JSON extraído do erro: ${JSON.stringify(errorData, null, 2)}`, 'info');
+            } else if (error.message.startsWith('{')) {
+              // Se a mensagem é diretamente um JSON
+              errorData = JSON.parse(error.message);
+              errorStatus = errorData?.code || errorData?.status || 500;
+              addLog(`📦 JSON extraído do erro: ${JSON.stringify(errorData, null, 2)}`, 'info');
+            }
+          } catch (parseError) {
+            addLog(`⚠️ Não foi possível parsear erro como JSON`, 'info');
+          }
+        }
+        
+        // Se não conseguiu extrair JSON, usar o erro completo
+        if (!errorData) {
+          errorData = {
+            raw_error: error.message,
+            full_error_object: error
+          };
+          addLog(`📋 Usando objeto de erro completo`, 'info');
+        }
+        
+        console.log('🔍 DEBUG - Erro completo:', error);
+        console.log('🔍 DEBUG - Dados extraídos:', errorData);
+        
         setLinkBoletoResult({
-          status: 500,
+          status: errorStatus,
           statusText: 'Error',
           duration,
           error: error.message,
-          response: error
+          response: errorData
         });
         setLinkBoletoStatus('error');
         toast({
           title: 'Erro no teste',
-          description: error.message,
+          description: errorData?.message || errorData?.error || error.message,
           variant: 'destructive'
         });
         return;
