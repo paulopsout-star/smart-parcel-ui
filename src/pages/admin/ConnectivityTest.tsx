@@ -258,62 +258,28 @@ export default function ConnectivityTest() {
       if (error) {
         addLog(`❌ Erro na requisição: ${error.message}`, 'error');
         
-        // Tentar extrair JSON da resposta de erro
-        let errorData = null;
-        let errorStatus = 500;
-        
-        // Primeiro, tentar parsear error.message como JSON
-        if (error.message) {
-          try {
-            // Se a mensagem começa com "Error, " seguido de JSON
-            const jsonMatch = error.message.match(/^Error,\s*(\{.*\})\s*$/s);
-            if (jsonMatch) {
-              errorData = JSON.parse(jsonMatch[1]);
-              errorStatus = errorData?.code || errorData?.status || 500;
-              addLog(`📦 JSON extraído do erro: ${JSON.stringify(errorData, null, 2)}`, 'info');
-            } else if (error.message.startsWith('{')) {
-              // Se a mensagem é diretamente um JSON
-              errorData = JSON.parse(error.message);
-              errorStatus = errorData?.code || errorData?.status || 500;
-              addLog(`📦 JSON extraído do erro: ${JSON.stringify(errorData, null, 2)}`, 'info');
-            }
-          } catch (parseError) {
-            addLog(`⚠️ Não foi possível parsear erro como JSON`, 'info');
-          }
-        }
-        
-        // Se não conseguiu extrair JSON, usar o erro completo
-        if (!errorData) {
-          errorData = {
-            raw_error: error.message,
-            full_error_object: error
-          };
-          addLog(`📋 Usando objeto de erro completo`, 'info');
-        }
-        
-        console.log('🔍 DEBUG - Erro completo:', error);
-        console.log('🔍 DEBUG - Dados extraídos:', errorData);
-        
         setPrepaymentResult({
-          status: errorStatus,
+          status: 500,
           statusText: 'Error',
           duration,
           error: error.message,
-          response: errorData
+          response: { error: error.message }
         });
         setPrepaymentStatus('error');
         toast({
           title: 'Erro no teste',
-          description: errorData?.message || errorData?.error || error.message,
+          description: error.message,
           variant: 'destructive'
         });
         return;
       }
 
+      // A edge function sempre retorna 200, mas o status real está em data.code
       const success = data?.success || false;
-      const status = success ? 200 : 403;
+      const status = data?.code || (success ? 200 : 500);
       
-      addLog(`📥 Resposta recebida: ${status} (${duration}ms)`, success ? 'success' : 'error');
+      addLog(`📥 Resposta da API: ${JSON.stringify(data, null, 2)}`, success ? 'success' : 'error');
+      addLog(`📊 Status: ${status} | Sucesso: ${success} | Tempo: ${duration}ms`, success ? 'success' : 'error');
       
       // Detectar bloqueio WAF
       if (data?.isWafBlock || (data?.error && typeof data.error === 'string' && data.error.includes('WAF'))) {
@@ -395,62 +361,28 @@ export default function ConnectivityTest() {
       if (error) {
         addLog(`❌ Erro na requisição: ${error.message}`, 'error');
         
-        // Tentar extrair JSON da resposta de erro
-        let errorData = null;
-        let errorStatus = 500;
-        
-        // Primeiro, tentar parsear error.message como JSON
-        if (error.message) {
-          try {
-            // Se a mensagem começa com "Error, " seguido de JSON
-            const jsonMatch = error.message.match(/^Error,\s*(\{.*\})\s*$/s);
-            if (jsonMatch) {
-              errorData = JSON.parse(jsonMatch[1]);
-              errorStatus = errorData?.code || errorData?.status || 500;
-              addLog(`📦 JSON extraído do erro: ${JSON.stringify(errorData, null, 2)}`, 'info');
-            } else if (error.message.startsWith('{')) {
-              // Se a mensagem é diretamente um JSON
-              errorData = JSON.parse(error.message);
-              errorStatus = errorData?.code || errorData?.status || 500;
-              addLog(`📦 JSON extraído do erro: ${JSON.stringify(errorData, null, 2)}`, 'info');
-            }
-          } catch (parseError) {
-            addLog(`⚠️ Não foi possível parsear erro como JSON`, 'info');
-          }
-        }
-        
-        // Se não conseguiu extrair JSON, usar o erro completo
-        if (!errorData) {
-          errorData = {
-            raw_error: error.message,
-            full_error_object: error
-          };
-          addLog(`📋 Usando objeto de erro completo`, 'info');
-        }
-        
-        console.log('🔍 DEBUG - Erro completo:', error);
-        console.log('🔍 DEBUG - Dados extraídos:', errorData);
-        
         setLinkBoletoResult({
-          status: errorStatus,
+          status: 500,
           statusText: 'Error',
           duration,
           error: error.message,
-          response: errorData
+          response: { error: error.message }
         });
         setLinkBoletoStatus('error');
         toast({
           title: 'Erro no teste',
-          description: errorData?.message || errorData?.error || error.message,
+          description: error.message,
           variant: 'destructive'
         });
         return;
       }
 
+      // A edge function sempre retorna 200, mas o status real está em data.code
       const success = data?.success || false;
-      const status = success ? 200 : 403;
+      const status = data?.code || (success ? 200 : 500);
       
-      addLog(`📥 Resposta recebida: ${status} (${duration}ms)`, success ? 'success' : 'error');
+      addLog(`📥 Resposta da API: ${JSON.stringify(data, null, 2)}`, success ? 'success' : 'error');
+      addLog(`📊 Status: ${status} | Sucesso: ${success} | Tempo: ${duration}ms`, success ? 'success' : 'error');
       
       if (success) {
         addLog('✅ Boleto vinculado com sucesso!', 'success');

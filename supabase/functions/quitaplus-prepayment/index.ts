@@ -246,10 +246,13 @@ DETALHES TÉCNICOS:
                 error: detailedError,
                 message: errorMessage,
                 code: quitaResponse.status,
+                statusText: quitaResponse.statusText,
                 isWafBlock,
+                headers: Object.fromEntries(quitaResponse.headers.entries()),
+                body: responseText,
               }),
               {
-                status: quitaResponse.status,
+                status: 200, // Sempre retorna 200 para o front-end conseguir ler o JSON
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               }
             );
@@ -314,9 +317,11 @@ DETALHES TÉCNICOS:
       JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : 'Erro desconhecido',
+        code: 500,
+        message: 'Erro interno do servidor',
       }),
       {
-        status: 500,
+        status: 200, // Sempre retorna 200 para o front-end conseguir ler o JSON
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
