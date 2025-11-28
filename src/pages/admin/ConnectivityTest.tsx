@@ -512,6 +512,34 @@ export default function ConnectivityTest() {
         </CardContent>
       </Card>
 
+      {/* Alert de Bloqueio WAF */}
+      {(prepaymentResult?.response?.isWafBlock || linkBoletoResult?.response?.isWafBlock) && (
+        <Alert variant="destructive" className="border-2 border-destructive">
+          <AlertDescription className="space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl">🛡️</div>
+              <div className="flex-1 space-y-2">
+                <h3 className="font-bold text-base">WAF/CDN Akamai Bloqueando Requisições</h3>
+                <p className="text-sm">
+                  {prepaymentResult?.response?.message || linkBoletoResult?.response?.message}
+                </p>
+                <div className="bg-destructive/10 p-3 rounded text-xs space-y-2 mt-3">
+                  <p className="font-semibold">💡 Soluções Recomendadas:</p>
+                  <ol className="list-decimal list-inside space-y-1 ml-2">
+                    <li>Solicitar whitelist dos IPs do Supabase no WAF da Cappta</li>
+                    <li>Implementar proxy com IP fixo</li>
+                    <li>Contatar suporte da Cappta para liberação</li>
+                  </ol>
+                  <p className="mt-2 text-muted-foreground">
+                    📄 Consulte <code className="bg-muted px-1 py-0.5 rounded">README-WAF-BLOCK.md</code> para detalhes completos
+                  </p>
+                </div>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Testes de Pré-Pagamento e Vínculo de Boleto */}
       <Card>
         <CardHeader>
@@ -928,8 +956,22 @@ export default function ConnectivityTest() {
               
               {prepaymentResult.error && (
                 <Alert variant="destructive">
-                  <AlertDescription>{prepaymentResult.error}</AlertDescription>
+                  <AlertDescription className="font-mono text-xs whitespace-pre-wrap">
+                    {prepaymentResult.error}
+                  </AlertDescription>
                 </Alert>
+              )}
+              
+              {/* Mensagem da API */}
+              {prepaymentResult.response?.message && (
+                <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-3">
+                  <p className="text-sm font-semibold text-primary mb-1">
+                    📨 Mensagem da API:
+                  </p>
+                  <p className="text-sm">
+                    {prepaymentResult.response.message}
+                  </p>
+                </div>
               )}
               
               <Tabs defaultValue="response" className="w-full mt-4">
@@ -980,24 +1022,26 @@ export default function ConnectivityTest() {
                       </AlertDescription>
                     </Alert>
                   )}
+                  {prepaymentResult.response?.message && (
+                    <div className="space-y-1 bg-primary/10 p-3 rounded-lg border border-primary/20">
+                      <span className="text-sm font-medium flex items-center gap-2">
+                        📨 Mensagem da API:
+                      </span>
+                      <p className="text-sm font-semibold text-primary">
+                        {prepaymentResult.response.message}
+                      </p>
+                    </div>
+                  )}
                   {prepaymentResult.response?.error && (
                     <div className="space-y-2">
-                      <span className="text-sm font-medium">Erro Retornado:</span>
-                      <ScrollArea className="h-32 w-full rounded border p-2 bg-destructive/5">
-                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive">
+                      <span className="text-sm font-medium">Detalhes do Erro:</span>
+                      <ScrollArea className="max-h-48 w-full rounded border-2 border-destructive/30 p-3 bg-destructive/5">
+                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive font-mono leading-relaxed">
                           {typeof prepaymentResult.response.error === 'string' 
                             ? prepaymentResult.response.error 
                             : JSON.stringify(prepaymentResult.response.error, null, 2)}
                         </pre>
                       </ScrollArea>
-                    </div>
-                  )}
-                  {prepaymentResult.response?.message && (
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium">Mensagem:</span>
-                      <p className="text-sm text-muted-foreground p-2 bg-muted rounded">
-                        {prepaymentResult.response.message}
-                      </p>
                     </div>
                   )}
                 </TabsContent>
@@ -1028,8 +1072,22 @@ export default function ConnectivityTest() {
               
               {linkBoletoResult.error && (
                 <Alert variant="destructive">
-                  <AlertDescription>{linkBoletoResult.error}</AlertDescription>
+                  <AlertDescription className="font-mono text-xs whitespace-pre-wrap">
+                    {linkBoletoResult.error}
+                  </AlertDescription>
                 </Alert>
+              )}
+              
+              {/* Mensagem da API */}
+              {linkBoletoResult.response?.message && (
+                <div className="rounded-lg border-2 border-primary/20 bg-primary/5 p-3">
+                  <p className="text-sm font-semibold text-primary mb-1">
+                    📨 Mensagem da API:
+                  </p>
+                  <p className="text-sm">
+                    {linkBoletoResult.response.message}
+                  </p>
+                </div>
               )}
               
               <Tabs defaultValue="response" className="w-full mt-4">
@@ -1061,24 +1119,26 @@ export default function ConnectivityTest() {
                       <Badge variant="outline">{linkBoletoResult.response.code}</Badge>
                     </div>
                   )}
+                  {linkBoletoResult.response?.message && (
+                    <div className="space-y-1 bg-primary/10 p-3 rounded-lg border border-primary/20">
+                      <span className="text-sm font-medium flex items-center gap-2">
+                        📨 Mensagem da API:
+                      </span>
+                      <p className="text-sm font-semibold text-primary">
+                        {linkBoletoResult.response.message}
+                      </p>
+                    </div>
+                  )}
                   {linkBoletoResult.response?.error && (
                     <div className="space-y-2">
-                      <span className="text-sm font-medium">Erro Retornado:</span>
-                      <ScrollArea className="h-32 w-full rounded border p-2 bg-destructive/5">
-                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive">
+                      <span className="text-sm font-medium">Detalhes do Erro:</span>
+                      <ScrollArea className="max-h-48 w-full rounded border-2 border-destructive/30 p-3 bg-destructive/5">
+                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive font-mono leading-relaxed">
                           {typeof linkBoletoResult.response.error === 'string' 
                             ? linkBoletoResult.response.error 
                             : JSON.stringify(linkBoletoResult.response.error, null, 2)}
                         </pre>
                       </ScrollArea>
-                    </div>
-                  )}
-                  {linkBoletoResult.response?.message && (
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium">Mensagem:</span>
-                      <p className="text-sm text-muted-foreground p-2 bg-muted rounded">
-                        {linkBoletoResult.response.message}
-                      </p>
                     </div>
                   )}
                 </TabsContent>
