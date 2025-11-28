@@ -242,17 +242,16 @@ DETALHES TÉCNICOS:
 
             return new Response(
               JSON.stringify({
-                success: false,
-                error: detailedError,
-                message: errorMessage,
-                code: quitaResponse.status,
-                statusText: quitaResponse.statusText,
-                isWafBlock,
-                headers: Object.fromEntries(quitaResponse.headers.entries()),
-                body: responseText,
+                apiRawResponse: responseText,
+                apiMetadata: {
+                  httpStatus: quitaResponse.status,
+                  httpStatusText: quitaResponse.statusText,
+                  httpHeaders: Object.fromEntries(quitaResponse.headers.entries()),
+                  requestUrl: fullUrl
+                }
               }),
               {
-                status: 200, // Sempre retorna 200 para o front-end conseguir ler o JSON
+                status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
               }
             );
@@ -288,11 +287,13 @@ DETALHES TÉCNICOS:
 
         return new Response(
           JSON.stringify({
-            success: true,
-            prePaymentKey: quitaData.prePaymentKey || quitaData.pre_payment_key,
-            authorizationCode: quitaData.authorizationCode || quitaData.authorization_code,
-            status: quitaData.status || 'AUTHORIZED',
-            amount: quitaData.amount || requestData.amount,
+            apiRawResponse: responseText,
+            apiMetadata: {
+              httpStatus: quitaResponse.status,
+              httpStatusText: quitaResponse.statusText,
+              httpHeaders: Object.fromEntries(quitaResponse.headers.entries()),
+              requestUrl: fullUrl
+            }
           }),
           {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },

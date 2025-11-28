@@ -39,6 +39,18 @@ export default function ConnectivityTest() {
   const [simulationResult, setSimulationResult] = useState<TestResult | null>(null);
   const [prepaymentResult, setPrepaymentResult] = useState<TestResult | null>(null);
   const [linkBoletoResult, setLinkBoletoResult] = useState<TestResult | null>(null);
+
+  // Helper para formatar resposta da API (JSON ou texto puro)
+  const formatApiResponse = (raw: string | undefined) => {
+    if (!raw) return 'Sem resposta';
+    try {
+      const parsed = JSON.parse(raw);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      // Não é JSON válido (ex: HTML do WAF), mostra como texto puro
+      return raw;
+    }
+  };
   const { toast } = useToast();
 
   // Estado do formulário de pré-pagamento
@@ -274,42 +286,59 @@ export default function ConnectivityTest() {
         return;
       }
 
-      // A edge function sempre retorna 200, mas o status real está em data.code
-      const success = data?.success || false;
-      const status = data?.code || (success ? 200 : 500);
+      addLog(`✅ Resposta recebida em ${duration}ms`, 'success');
       
-      addLog(`📥 Resposta da API: ${JSON.stringify(data, null, 2)}`, success ? 'success' : 'error');
-      addLog(`📊 Status: ${status} | Sucesso: ${success} | Tempo: ${duration}ms`, success ? 'success' : 'error');
-      
-      // Detectar bloqueio WAF
-      if (data?.isWafBlock || (data?.error && typeof data.error === 'string' && data.error.includes('WAF'))) {
-        addLog('🛡️ BLOQUEIO WAF DETECTADO - Akamai bloqueando requisições', 'error');
-        addLog('💡 Solução: Whitelist de IPs do Supabase no WAF da Cappta', 'info');
-        addLog('💡 Alternativa: Implementar proxy com IP fixo', 'info');
-      }
-      
-      if (success && data?.prePaymentKey) {
-        addLog(`✅ PrePaymentKey obtida: ${maskCredential(data.prePaymentKey)}`, 'success');
-        // Auto-preencher no formulário de boleto
-        setLinkBoletoForm(prev => ({
-          ...prev,
-          prePaymentKey: data.prePaymentKey
-        }));
-      }
+      const result = data as any;
+      const httpStatus = result.apiMetadata?.httpStatus || 200;
       
       setPrepaymentResult({
-        status,
-        statusText: success ? 'OK' : 'Error',
+        status: httpStatus >= 200 && httpStatus < 300 ? 200 : 500,
+        statusText: httpStatus >= 200 && httpStatus < 300 ? 'OK' : 'Error',
         duration,
-        response: data
+        response: result,
+        error: httpStatus >= 400 ? result.apiRawResponse : undefined
       });
+
+      if (httpStatus >= 200 && httpStatus < 300) {
+        setPrepaymentStatus('success');
+        addLog('✅ Pré-pagamento autorizado com sucesso', 'success');
+        addLog(`Resposta: ${result.apiRawResponse?.substring(0, 200)}...`, 'info');
+        
+        // Tentar extrair prePaymentKey do JSON para auto-preencher
+        try {
+          const parsed = JSON.parse(result.apiRawResponse);
+          if (parsed.prePaymentKey || parsed.pre_payment_key) {
+            const key = parsed.prePaymentKey || parsed.pre_payment_key;
+            addLog(`✅ PrePaymentKey obtida: ${maskCredential(key)}`, 'success');
+            setLinkBoletoForm(prev => ({ ...prev, prePaymentKey: key }));
+          }
+        } catch (e) {
+          // Não é JSON válido
+        }
+      } else {
+        setPrepaymentStatus('error');
+        addLog(`❌ HTTP ${httpStatus}: ${result.apiMetadata?.httpStatusText}`, 'error');
+        
+        const isWafBlock = result.apiRawResponse?.includes('Access Denied') || 
+                          result.apiRawResponse?.includes('Akamai') ||
+                          httpStatus === 403;
+        
+        if (isWafBlock) {
+          addLog('🛡️ BLOQUEIO DETECTADO: WAF/Firewall da Cappta', 'error');
+        }
+      }
       
-      setPrepaymentStatus(success ? 'success' : 'error');
-      
-      if (success) {
+      if (httpStatus >= 200 && httpStatus < 300) {
+        // Tentar extrair prePaymentKey para o toast
+        let prePaymentKey = 'N/A';
+        try {
+          const parsed = JSON.parse(result.apiRawResponse);
+          prePaymentKey = parsed.prePaymentKey || parsed.pre_payment_key || 'N/A';
+        } catch (e) {}
+        
         toast({
           title: 'Pré-pagamento executado com sucesso!',
-          description: `PrePaymentKey: ${maskCredential(data?.prePaymentKey)}`
+          description: `PrePaymentKey: ${maskCredential(prePaymentKey)}`
         });
       }
     } catch (err: any) {
@@ -377,27 +406,29 @@ export default function ConnectivityTest() {
         return;
       }
 
-      // A edge function sempre retorna 200, mas o status real está em data.code
-      const success = data?.success || false;
-      const status = data?.code || (success ? 200 : 500);
+      addLog(`✅ Resposta recebida em ${duration}ms`, 'success');
       
-      addLog(`📥 Resposta da API: ${JSON.stringify(data, null, 2)}`, success ? 'success' : 'error');
-      addLog(`📊 Status: ${status} | Sucesso: ${success} | Tempo: ${duration}ms`, success ? 'success' : 'error');
-      
-      if (success) {
-        addLog('✅ Boleto vinculado com sucesso!', 'success');
-      }
+      const result = data as any;
+      const httpStatus = result.apiMetadata?.httpStatus || 200;
       
       setLinkBoletoResult({
-        status,
-        statusText: success ? 'OK' : 'Error',
+        status: httpStatus >= 200 && httpStatus < 300 ? 200 : 500,
+        statusText: httpStatus >= 200 && httpStatus < 300 ? 'OK' : 'Error',
         duration,
-        response: data
+        response: result,
+        error: httpStatus >= 400 ? result.apiRawResponse : undefined
       });
+
+      if (httpStatus >= 200 && httpStatus < 300) {
+        setLinkBoletoStatus('success');
+        addLog('✅ Boleto vinculado com sucesso', 'success');
+        addLog(`Resposta: ${result.apiRawResponse?.substring(0, 200)}...`, 'info');
+      } else {
+        setLinkBoletoStatus('error');
+        addLog(`❌ HTTP ${httpStatus}: ${result.apiMetadata?.httpStatusText}`, 'error');
+      }
       
-      setLinkBoletoStatus(success ? 'success' : 'error');
-      
-      if (success) {
+      if (httpStatus >= 200 && httpStatus < 300) {
         toast({
           title: 'Boleto vinculado com sucesso!',
           description: `Tempo de resposta: ${duration}ms`
@@ -1039,53 +1070,24 @@ export default function ConnectivityTest() {
                       </Badge>
                     </div>
                   )}
-                  {prepaymentResult.response?.code && (
-                    <div className="flex justify-between text-sm border-b pb-2">
-                      <span className="font-medium">Code:</span>
-                      <Badge variant="outline">{prepaymentResult.response.code}</Badge>
+                  
+                  <div className="space-y-4 mt-4">
+                    <div className="flex gap-2 items-center text-sm border-b pb-2">
+                      <Badge variant={prepaymentResult.response?.apiMetadata?.httpStatus >= 200 && prepaymentResult.response?.apiMetadata?.httpStatus < 300 ? "default" : "destructive"}>
+                        HTTP {prepaymentResult.response?.apiMetadata?.httpStatus || 'N/A'}
+                      </Badge>
+                      <span className="text-muted-foreground">{prepaymentResult.response?.apiMetadata?.httpStatusText || 'N/A'}</span>
                     </div>
-                  )}
-                  {prepaymentResult.response?.isWafBlock && (
-                    <Alert variant="destructive" className="border-2">
-                      <AlertDescription className="text-sm space-y-2">
-                        <div className="font-semibold text-base">🛡️ Bloqueio WAF/CDN Akamai Detectado</div>
-                        <p className="text-xs">
-                          A API Cappta está protegida por um WAF (Web Application Firewall) que está 
-                          bloqueando requisições vindas do IP dinâmico do Supabase Edge Functions.
-                        </p>
-                        <div className="mt-3 space-y-1 text-xs">
-                          <p className="font-medium">✅ Soluções Possíveis:</p>
-                          <ul className="list-disc list-inside space-y-1 ml-2">
-                            <li>Whitelist dos IPs do Supabase no painel do WAF</li>
-                            <li>Implementar proxy próprio com IP fixo</li>
-                            <li>Contatar suporte da Cappta para liberação</li>
-                          </ul>
-                        </div>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  {prepaymentResult.response?.message && (
-                    <div className="space-y-1 bg-primary/10 p-3 rounded-lg border border-primary/20">
-                      <span className="text-sm font-medium flex items-center gap-2">
-                        📨 Mensagem da API:
-                      </span>
-                      <p className="text-sm font-semibold text-primary">
-                        {prepaymentResult.response.message}
-                      </p>
-                    </div>
-                  )}
-                  {prepaymentResult.response?.error && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium">Detalhes do Erro:</span>
-                      <ScrollArea className="max-h-48 w-full rounded border-2 border-destructive/30 p-3 bg-destructive/5">
-                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive font-mono leading-relaxed">
-                          {typeof prepaymentResult.response.error === 'string' 
-                            ? prepaymentResult.response.error 
-                            : JSON.stringify(prepaymentResult.response.error, null, 2)}
+
+                    <div>
+                      <div className="font-semibold mb-2 text-sm">Resposta Original da API</div>
+                      <ScrollArea className="h-96 w-full rounded border bg-muted/30">
+                        <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words">
+                          {formatApiResponse(prepaymentResult.response?.apiRawResponse)}
                         </pre>
                       </ScrollArea>
                     </div>
-                  )}
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -1114,113 +1116,24 @@ export default function ConnectivityTest() {
               
               {/* Resposta Estruturada da API */}
               {linkBoletoResult.response && (
-                <div className="space-y-3 mt-4">
-                  <div className="text-sm font-semibold border-b pb-2">📊 Resposta da API</div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    {linkBoletoResult.response?.success !== undefined && (
-                      <div className="p-3 rounded-lg border bg-card">
-                        <div className="text-xs text-muted-foreground mb-1">Success</div>
-                        <Badge variant={linkBoletoResult.response.success ? 'default' : 'destructive'}>
-                          {linkBoletoResult.response.success ? 'true' : 'false'}
-                        </Badge>
-                      </div>
-                    )}
-                    
-                    {linkBoletoResult.response?.code && (
-                      <div className="p-3 rounded-lg border bg-card">
-                        <div className="text-xs text-muted-foreground mb-1">Code</div>
-                        <Badge variant="outline" className="text-base">{linkBoletoResult.response.code}</Badge>
-                      </div>
-                    )}
-                    
-                    {linkBoletoResult.response?.isWafBlock !== undefined && (
-                      <div className="p-3 rounded-lg border bg-card col-span-2">
-                        <div className="text-xs text-muted-foreground mb-1">WAF Block</div>
-                        <Badge variant={linkBoletoResult.response.isWafBlock ? 'destructive' : 'default'}>
-                          {linkBoletoResult.response.isWafBlock ? '🛡️ Bloqueado' : '✅ Não Bloqueado'}
-                        </Badge>
-                      </div>
-                    )}
+                <div className="space-y-4 mt-4">
+                  <div className="flex gap-2 items-center text-sm border-b pb-2">
+                    <Badge variant={linkBoletoResult.response?.apiMetadata?.httpStatus >= 200 && linkBoletoResult.response?.apiMetadata?.httpStatus < 300 ? "default" : "destructive"}>
+                      HTTP {linkBoletoResult.response?.apiMetadata?.httpStatus || 'N/A'}
+                    </Badge>
+                    <span className="text-muted-foreground">{linkBoletoResult.response?.apiMetadata?.httpStatusText || 'N/A'}</span>
                   </div>
-                  
-                  {linkBoletoResult.response?.message && (
-                    <div className="p-3 rounded-lg border-2 border-primary/20 bg-primary/5">
-                      <div className="text-xs text-muted-foreground mb-1">Mensagem</div>
-                      <p className="text-sm font-medium text-primary">
-                        {linkBoletoResult.response.message}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {linkBoletoResult.response?.error && (
-                    <div className="p-3 rounded-lg border-2 border-destructive/30 bg-destructive/5">
-                      <div className="text-xs text-muted-foreground mb-2">Detalhes do Erro</div>
-                      <ScrollArea className="max-h-32">
-                        <p className="text-xs font-mono whitespace-pre-wrap break-words text-destructive">
-                          {typeof linkBoletoResult.response.error === 'string' 
-                            ? linkBoletoResult.response.error 
-                            : JSON.stringify(linkBoletoResult.response.error, null, 2)}
-                        </p>
-                      </ScrollArea>
-                    </div>
-                  )}
+
+                  <div>
+                    <div className="font-semibold mb-2 text-sm">Resposta Original da API</div>
+                    <ScrollArea className="h-96 w-full rounded border bg-muted/30">
+                      <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words">
+                        {formatApiResponse(linkBoletoResult.response?.apiRawResponse)}
+                      </pre>
+                    </ScrollArea>
+                  </div>
                 </div>
               )}
-              
-              <Tabs defaultValue="response" className="w-full mt-4">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="response">Resposta Completa</TabsTrigger>
-                  <TabsTrigger value="details">Detalhes</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="response" className="mt-2">
-                  <ScrollArea className="h-64 w-full rounded border p-3 bg-muted/30">
-                    <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-                      {JSON.stringify(linkBoletoResult.response, null, 2)}
-                    </pre>
-                  </ScrollArea>
-                </TabsContent>
-                
-                <TabsContent value="details" className="mt-2 space-y-3">
-                  {linkBoletoResult.response?.success !== undefined && (
-                    <div className="flex justify-between text-sm border-b pb-2">
-                      <span className="font-medium">Success:</span>
-                      <Badge variant={linkBoletoResult.response.success ? 'default' : 'destructive'}>
-                        {linkBoletoResult.response.success ? 'true' : 'false'}
-                      </Badge>
-                    </div>
-                  )}
-                  {linkBoletoResult.response?.code && (
-                    <div className="flex justify-between text-sm border-b pb-2">
-                      <span className="font-medium">Code:</span>
-                      <Badge variant="outline">{linkBoletoResult.response.code}</Badge>
-                    </div>
-                  )}
-                  {linkBoletoResult.response?.message && (
-                    <div className="space-y-1 bg-primary/10 p-3 rounded-lg border border-primary/20">
-                      <span className="text-sm font-medium flex items-center gap-2">
-                        📨 Mensagem da API:
-                      </span>
-                      <p className="text-sm font-semibold text-primary">
-                        {linkBoletoResult.response.message}
-                      </p>
-                    </div>
-                  )}
-                  {linkBoletoResult.response?.error && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium">Detalhes do Erro:</span>
-                      <ScrollArea className="max-h-48 w-full rounded border-2 border-destructive/30 p-3 bg-destructive/5">
-                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive font-mono leading-relaxed">
-                          {typeof linkBoletoResult.response.error === 'string' 
-                            ? linkBoletoResult.response.error 
-                            : JSON.stringify(linkBoletoResult.response.error, null, 2)}
-                        </pre>
-                      </ScrollArea>
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
             </CardContent>
           </Card>
         )}
