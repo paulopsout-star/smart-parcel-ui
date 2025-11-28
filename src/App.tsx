@@ -31,7 +31,6 @@ import Simulator from "./pages/Simulator";
 
 // Admin pages
 import UserManagement from "./pages/admin/UserManagement";
-
 import RefundManagement from "./pages/admin/RefundManagement";
 import RecurrenceManagement from "./pages/admin/RecurrenceManagement";
 import CheckoutNew from "./pages/admin/CheckoutNew";
@@ -39,6 +38,7 @@ import CheckoutHistory from "./pages/admin/CheckoutHistory";
 import Reports from "./pages/admin/Reports";
 import CompanySettings from "./pages/admin/CompanySettings";
 import CompanyManagement from "./pages/admin/CompanyManagement";
+import ConnectivityTest from "./pages/admin/ConnectivityTest";
 import { useState } from "react";
 
 const App = () => {
@@ -83,6 +83,7 @@ const App = () => {
                 <Route path="/admin/checkout/history" element={<ProtectedRoute requiredRole="admin"><CheckoutHistory /></ProtectedRoute>} />
                 <Route path="/admin/reports" element={<ProtectedRoute requiredRole="admin"><Reports /></ProtectedRoute>} />
                 <Route path="/admin/settings" element={<ProtectedRoute requiredRole="admin"><CompanySettings /></ProtectedRoute>} />
+                <Route path="/admin/connectivity-test" element={<ProtectedRoute requiredRole="admin"><ConnectivityTest /></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
