@@ -43,14 +43,34 @@ serve(async (req) => {
     console.log('[abacatepay-webhook] 🔍 Buscando cobrança com pix_id:', pixId);
 
     // Buscar cobrança pelo pix_id do Abacate Pay (salvo no checkout_link_id)
-    const { data: charge, error: chargeError } = await supabase
+    let { data: charge, error: chargeError } = await supabase
       .from('charges')
       .select('*')
       .eq('checkout_link_id', pixId)
-      .single();
+      .maybeSingle();
 
-    if (chargeError || !charge) {
-      console.error('[abacatepay-webhook] ❌ Cobrança não encontrada para pix_id:', pixId, chargeError);
+    // Se não encontrou pelo checkout_link_id, buscar no histórico (all_pix_ids)
+    if (!charge) {
+      console.log('[abacatepay-webhook] 🔍 Não encontrado por checkout_link_id, buscando em all_pix_ids...');
+      
+      const { data: charges } = await supabase
+        .from('charges')
+        .select('*')
+        .not('metadata->all_pix_ids', 'is', null);
+      
+      // Buscar manualmente no array de PIX IDs
+      charge = charges?.find(c => {
+        const allPixIds = c.metadata?.all_pix_ids || [];
+        return allPixIds.includes(pixId);
+      }) || null;
+      
+      if (charge) {
+        console.log('[abacatepay-webhook] ✅ Cobrança encontrada no histórico:', charge.id);
+      }
+    }
+
+    if (!charge) {
+      console.error('[abacatepay-webhook] ❌ Cobrança não encontrada para pix_id:', pixId);
       return new Response(
         JSON.stringify({ error: 'Cobrança não encontrada' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

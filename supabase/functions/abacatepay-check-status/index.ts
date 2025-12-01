@@ -33,49 +33,71 @@ serve(async (req) => {
     });
 
     // Validar campos obrigatórios
-    if (!pixId) {
+    if (!pixId && !chargeId) {
       return new Response(
-        JSON.stringify({ error: 'pixId é obrigatório' }),
+        JSON.stringify({ error: 'pixId ou chargeId é obrigatório' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Chamar endpoint de verificação do Abacate Pay
-    // Endpoint correto: /v1/pixQrCode/check com query parameter ?id={pixId}
-    const abacateResponse = await fetch(`https://api.abacatepay.com/v1/pixQrCode/check?id=${pixId}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${abacateApiKey}`,
-        'Content-Type': 'application/json'
+    // Se temos chargeId, buscar TODOS os PIX IDs da cobrança
+    let pixIdsToCheck = pixId ? [pixId] : [];
+    
+    if (chargeId) {
+      const { data: charge } = await supabase
+        .from('charges')
+        .select('metadata, checkout_link_id')
+        .eq('id', chargeId)
+        .single();
+      
+      if (charge) {
+        const allPixIds = charge.metadata?.all_pix_ids || [];
+        pixIdsToCheck = allPixIds.length > 0 ? allPixIds : [charge.checkout_link_id].filter(Boolean);
+        console.log('[abacatepay-check-status] 📋 Verificando múltiplos PIX IDs:', pixIdsToCheck);
       }
-    });
-
-    if (!abacateResponse.ok) {
-      const errorText = await abacateResponse.text();
-      console.error('[abacatepay-check-status] ❌ Erro na API Abacate Pay:', {
-        status: abacateResponse.status,
-        error: errorText
-      });
-      return new Response(
-        JSON.stringify({ 
-          error: 'Erro ao verificar status do PIX',
-          details: errorText 
-        }),
-        { status: abacateResponse.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
 
-    const abacateData = await abacateResponse.json();
+    // Verificar cada PIX ID até encontrar um PAID
+    let foundPaidPix = null;
     
-    console.log('[abacatepay-check-status] ✅ Status verificado:', {
-      pixId,
-      status: abacateData.data?.status,
-      expiresAt: abacateData.data?.expiresAt
-    });
+    for (const checkPixId of pixIdsToCheck) {
+      console.log('[abacatepay-check-status] 🔍 Verificando PIX ID:', checkPixId);
+      
+      const abacateResponse = await fetch(`https://api.abacatepay.com/v1/pixQrCode/check?id=${checkPixId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${abacateApiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
 
-    // Se o pagamento foi confirmado, atualizar a cobrança no banco
-    if (abacateData.data?.status === 'PAID' && chargeId) {
-      console.log('[abacatepay-check-status] 💰 Pagamento confirmado, atualizando cobrança:', chargeId);
+      if (!abacateResponse.ok) {
+        console.warn('[abacatepay-check-status] ⚠️ Erro ao verificar PIX:', checkPixId);
+        continue;
+      }
+
+      const abacateData = await abacateResponse.json();
+      
+      console.log('[abacatepay-check-status] ✅ Status verificado:', {
+        pixId: checkPixId,
+        status: abacateData.data?.status,
+        expiresAt: abacateData.data?.expiresAt
+      });
+
+      // Se encontrou um pagamento confirmado, parar a busca
+      if (abacateData.data?.status === 'PAID') {
+        foundPaidPix = {
+          pixId: checkPixId,
+          data: abacateData.data
+        };
+        console.log('[abacatepay-check-status] 💰 Pagamento PAID encontrado:', checkPixId);
+        break;
+      }
+    }
+
+    // Se encontrou pagamento confirmado, atualizar a cobrança
+    if (foundPaidPix && chargeId) {
+      console.log('[abacatepay-check-status] 💰 Atualizando cobrança para completed:', chargeId);
       
       const { error: updateError } = await supabase
         .from('charges')
@@ -84,6 +106,7 @@ serve(async (req) => {
           metadata: {
             pix_paid_at: new Date().toISOString(),
             pix_status: 'PAID',
+            paid_pix_id: foundPaidPix.pixId,
             auto_confirmed: true
           }
         })
@@ -96,13 +119,20 @@ serve(async (req) => {
       }
     }
 
-    // Retornar status
+    // Retornar status (do PIX pago ou do último verificado)
+    const resultData = foundPaidPix || { 
+      pixId: pixIdsToCheck[pixIdsToCheck.length - 1],
+      data: { status: 'PENDING' }
+    };
+    
     return new Response(
       JSON.stringify({
         success: true,
-        status: abacateData.data?.status || 'UNKNOWN',
-        expiresAt: abacateData.data?.expiresAt,
-        data: abacateData.data
+        status: resultData.data?.status || 'UNKNOWN',
+        expiresAt: resultData.data?.expiresAt,
+        pixId: resultData.pixId,
+        checkedCount: pixIdsToCheck.length,
+        data: resultData.data
       }),
       { 
         status: 200, 

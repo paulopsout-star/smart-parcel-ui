@@ -143,13 +143,24 @@ serve(async (req) => {
     }
 
     // Atualizar cobrança no DB com dados do Abacate Pay
+    // Manter histórico de todos os PIX IDs gerados
+    const existingPixIds = charge.metadata?.all_pix_ids || [];
+    const allPixIds = [...existingPixIds, abacateData.data.id];
+    
+    console.log('[abacatepay-pix-create] 📝 Atualizando histórico de PIX IDs:', {
+      previous: existingPixIds,
+      new: abacateData.data.id,
+      total: allPixIds.length
+    });
+    
     const { error: updateError } = await supabase
       .from('charges')
       .update({
-        checkout_link_id: abacateData.data.id,
+        checkout_link_id: abacateData.data.id, // Mantém o último como principal
         metadata: {
           ...charge.metadata,
           pix_id: abacateData.data.id,
+          all_pix_ids: allPixIds, // ARRAY com TODOS os PIX IDs gerados
           abacate_pay_data: {
             created_at: new Date().toISOString(),
             pix_id: abacateData.data.id,
