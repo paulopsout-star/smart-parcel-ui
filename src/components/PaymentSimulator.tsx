@@ -107,11 +107,6 @@ export function PaymentSimulator({
                   <p className="text-sm text-muted-foreground">
                     Total: {formatCents(condition.totalAmount)}
                   </p>
-                  {condition.totalAmount > amountCents && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      + {formatCents(condition.totalAmount - amountCents)} em juros
-                    </p>
-                  )}
                 </div>
                 {isSelected && (
                   <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
