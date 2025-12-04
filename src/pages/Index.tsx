@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { HeroHighlight, Highlight } from "@/components/ui/hero-highlight";
 import { StatsCounter } from "@/components/StatsCounter";
 import { 
   CreditCard, 
@@ -69,11 +71,10 @@ export default function Index() {
       </header>
 
       <main className="pt-20">
-        {/* Hero Section - Tech Style */}
-        <section className="relative min-h-[90vh] flex items-center py-20 md:py-32 overflow-hidden">
+        {/* Hero Section - HeroHighlight */}
+        <HeroHighlight containerClassName="py-20 md:py-32 overflow-hidden">
           {/* Background Effects */}
           <div className="absolute inset-0 mesh-gradient" />
-          <div className="absolute inset-0 grid-pattern opacity-50" />
           
           {/* Floating Orbs */}
           <div className="absolute top-20 left-10 w-72 h-72 bg-brand/20 rounded-full blur-3xl animate-float" />
@@ -86,29 +87,31 @@ export default function Index() {
           <div className="absolute top-1/2 right-40 w-12 h-12 bg-brand/10 rounded-lg rotate-45 animate-float hidden lg:block" />
           
           <div className="container mx-auto px-4 relative z-10">
-            <div className="text-center max-w-5xl mx-auto">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: [20, -5, 0] }}
+              transition={{ duration: 0.5, ease: [0.4, 0.0, 0.2, 1] }}
+              className="text-center max-w-5xl mx-auto"
+            >
               {/* Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand/10 border border-brand/20 mb-8 animate-fade-in">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand/10 border border-brand/20 mb-8">
                 <Sparkles className="h-4 w-4 text-brand" />
                 <span className="text-sm font-medium text-brand">Nova plataforma de cobranças</span>
               </div>
               
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-8 animate-fade-in" style={{ animationDelay: '100ms' }}>
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-8">
                 Potencialize a{' '}
-                <span className="relative inline-block">
-                  <span className="bg-gradient-to-r from-brand via-accent to-brand bg-clip-text text-transparent animate-gradient">
-                    negociação
-                  </span>
-                  <span className="absolute -bottom-2 left-0 right-0 h-1 bg-gradient-to-r from-brand to-accent rounded-full opacity-50" />
-                </span>
+                <Highlight className="text-foreground">
+                  negociação
+                </Highlight>
                 {' '}de cobranças
               </h1>
               
-              <p className="text-xl md:text-2xl text-muted-foreground mb-10 leading-relaxed max-w-3xl mx-auto animate-fade-in" style={{ animationDelay: '200ms' }}>
+              <p className="text-xl md:text-2xl text-muted-foreground mb-10 leading-relaxed max-w-3xl mx-auto">
                 Ofereça parcelamentos flexíveis em até <span className="text-brand font-semibold">21x no cartão</span> com recebimento garantido em <span className="text-brand font-semibold">1 dia útil</span>. Transforme inadimplência em oportunidade.
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16 animate-fade-in" style={{ animationDelay: '300ms' }}>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
                 <Link to="/register">
                   <Button size="lg" className="bg-gradient-to-r from-brand to-accent hover:from-brand-dark hover:to-brand text-white px-10 py-7 text-lg shadow-xl shadow-brand/25 btn-3d shine-effect group">
                     Começar Agora
@@ -124,7 +127,7 @@ export default function Index() {
               </div>
               
               {/* Trust indicators - Glass Cards */}
-              <div className="flex flex-wrap justify-center items-center gap-4 md:gap-6 animate-fade-in" style={{ animationDelay: '400ms' }}>
+              <div className="flex flex-wrap justify-center items-center gap-4 md:gap-6">
                 <div className="flex items-center gap-3 px-5 py-3 rounded-xl glass-card">
                   <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-brand to-accent flex items-center justify-center">
                     <Shield className="h-5 w-5 text-white" />
@@ -144,9 +147,9 @@ export default function Index() {
                   <span className="font-medium">Zero taxas</span>
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
-        </section>
+        </HeroHighlight>
 
         {/* Stats Section */}
         <StatsCounter />
