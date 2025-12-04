@@ -623,6 +623,7 @@ export default function ChargeHistory() {
   };
 
   return (
+    <Layout>
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
@@ -1226,5 +1227,6 @@ export default function ChargeHistory() {
         />
       )}
     </div>
+    </Layout>
   );
 }
