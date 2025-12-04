@@ -88,29 +88,29 @@ const getModernStatusBadge = (status: string) => {
   const configs = {
     pending: { 
       label: 'Pendente', 
-      className: 'bg-amber-500/10 text-amber-700 border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400'
+      className: 'bg-transparent text-green-600 border-green-500 border'
     },
     processing: { 
       label: 'Processando', 
-      className: 'bg-blue-500/10 text-blue-700 border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400'
+      className: 'bg-blue-500/10 text-blue-600 border-blue-500 border'
     },
     completed: { 
       label: 'Concluída', 
-      className: 'bg-primary/10 text-primary border-primary/20 dark:bg-primary/10 dark:text-primary'
+      className: 'bg-green-500/10 text-green-600 border-green-500/20'
     },
     failed: { 
       label: 'Falhou', 
-      className: 'bg-gray-500/10 text-gray-700 border-gray-500/20 dark:bg-gray-500/10 dark:text-gray-400'
+      className: 'bg-red-500/10 text-red-600 border-red-500/20'
     },
     cancelled: { 
       label: 'Cancelada', 
-      className: 'bg-gray-400/10 text-gray-600 border-gray-400/20 dark:bg-gray-400/10 dark:text-gray-300'
+      className: 'bg-gray-100 text-gray-600 border-gray-200'
     },
   };
   
   const config = configs[status as keyof typeof configs] || configs.cancelled;
   return (
-    <Badge className={cn("gap-1.5 font-medium", config.className)}>
+    <Badge variant="outline" className={cn("gap-1.5 font-medium text-xs", config.className)}>
       {config.label}
     </Badge>
   );
@@ -118,9 +118,9 @@ const getModernStatusBadge = (status: string) => {
 
 const getPaymentMethodBadgeStyle = (method: string) => {
   const styles = {
-    cartao: 'bg-blue-500/10 text-blue-700 border-blue-500/20',
-    pix: 'bg-green-500/10 text-green-700 border-green-500/20',
-    boleto: 'bg-amber-500/10 text-amber-700 border-amber-500/20',
+    cartao: 'bg-transparent text-blue-600 border-blue-500 border',
+    pix: 'bg-transparent text-green-600 border-green-500 border',
+    boleto: 'bg-transparent text-amber-600 border-amber-500 border',
   };
   return styles[method as keyof typeof styles] || styles.cartao;
 };
@@ -625,41 +625,34 @@ export default function ChargeHistory() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
-        <div className="space-y-2">
+      <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+        <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              asChild
-              className="h-9 w-9"
-            >
-              <Link to="/">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <h1 className="text-3xl font-bold tracking-tight">Histórico de Cobranças</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Histórico de Cobranças</h1>
+            <Badge className="bg-green-500 hover:bg-green-500 text-white text-xs px-2 py-0.5">
+              {charges.length} cobranças
+            </Badge>
           </div>
-          <p className="text-base text-muted-foreground pl-12">
-            Exibindo <span className="font-semibold text-foreground">{filteredCharges.length}</span> de <span className="font-semibold">{charges.length}</span> cobranças
-            {hasActiveFilters() && <Badge variant="secondary" className="ml-2">Filtrado</Badge>}
+          <p className="text-sm text-muted-foreground">
+            Gerencie as cobranças criadas e acompanhe seus status, links de pagamento e ações.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2">
           <Button 
             onClick={() => setShowFilters(!showFilters)} 
-            variant={hasActiveFilters() ? "default" : "outline"}
-            className="gap-2"
+            variant="outline"
+            size="sm"
+            className="gap-2 h-9"
           >
             <Filter className="h-4 w-4" />
             <span>Filtros</span>
             {hasActiveFilters() && (
-              <Badge variant="secondary" className="ml-1 h-5 min-w-[20px] rounded-full bg-primary-foreground text-primary">
+              <Badge className="ml-1 h-5 min-w-[20px] rounded-full bg-green-500 text-white text-xs">
                 {Object.values(filters).filter(v => v && v !== 'all' && v !== '').length}
               </Badge>
             )}
           </Button>
-          <Button onClick={fetchCharges} variant="outline" className="gap-2">
+          <Button onClick={fetchCharges} variant="outline" size="sm" className="gap-2 h-9">
             <RefreshCw className="h-4 w-4" />
             Atualizar
           </Button>
@@ -886,35 +879,31 @@ export default function ChargeHistory() {
       ) : (
         <div className="grid gap-6">
           {filteredCharges.map((charge) => (
-            <Card key={charge.id} className="group overflow-hidden rounded-2xl border shadow-sm transition-all duration-200 hover:shadow-md">
+            <Card key={charge.id} className="overflow-hidden rounded-xl border shadow-sm transition-all duration-200 hover:shadow-md bg-card">
               {/* Card Header */}
-              <CardHeader className="pb-4 bg-gradient-to-br from-muted/30 to-muted/10">
-                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+              <CardHeader className="pb-3 pt-4 px-5">
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
                   {/* Avatar + Cliente */}
-                  <div className="flex items-start gap-4 flex-1 min-w-0">
-                    <Avatar className="h-14 w-14 border-2 border-primary/20">
-                      <AvatarFallback className="bg-gradient-to-br from-primary/10 to-primary/5 text-primary text-lg font-semibold">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <Avatar className="h-11 w-11 border border-teal-200">
+                      <AvatarFallback className="bg-teal-500/10 text-teal-600 text-sm font-semibold">
                         {getInitials(charge.payer_name)}
                       </AvatarFallback>
                     </Avatar>
                     
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <h3 className="text-xl font-semibold tracking-tight truncate">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-semibold text-foreground truncate">
                         {charge.payer_name}
                       </h3>
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
-                          <Mail className="h-3.5 w-3.5 flex-shrink-0" />
-                          <span className="truncate">{charge.payer_email}</span>
-                        </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm mt-1">
+                        <a href={`mailto:${charge.payer_email}`} className="text-blue-600 hover:underline truncate">
+                          {charge.payer_email}
+                        </a>
                         {charge.payer_phone && (
-                          <>
-                            <span className="hidden sm:inline text-muted-foreground/50">•</span>
-                            <div className="flex items-center gap-1.5">
-                              <Phone className="h-3.5 w-3.5 flex-shrink-0" />
-                              <span>{formatPhone(charge.payer_phone)}</span>
-                            </div>
-                          </>
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <Phone className="h-3.5 w-3.5" />
+                            <span>{formatPhone(charge.payer_phone)}</span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -923,13 +912,11 @@ export default function ChargeHistory() {
                   {/* Badges */}
                   <div className="flex flex-wrap gap-2 lg:flex-shrink-0">
                     {getModernStatusBadge(charge.status)}
-                    <Badge variant="outline" className="gap-1.5 border-primary/20">
-                      <RefreshCw className="h-3 w-3" />
+                    <Badge variant="outline" className="text-xs bg-gray-100 text-gray-600 border-gray-200">
                       {getRecurrenceLabel(charge.recurrence_type)}
                     </Badge>
                     {charge.payment_method && (
-                      <Badge className={cn("gap-1.5", getPaymentMethodBadgeStyle(charge.payment_method))}>
-                        {getPaymentMethodIcon(charge.payment_method)}
+                      <Badge variant="outline" className={cn("text-xs", getPaymentMethodBadgeStyle(charge.payment_method))}>
                         {getPaymentMethodLabel(charge.payment_method)}
                       </Badge>
                     )}
@@ -938,90 +925,66 @@ export default function ChargeHistory() {
               </CardHeader>
 
               {/* Card Content */}
-              <CardContent className="pt-6 space-y-6">
-                {/* Resumo Financeiro - Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <InfoCard
-                    icon={CreditCard}
-                    label="Valor Total"
-                    value={formatCurrency(charge.amount)}
-                    variant="primary"
-                  />
-                  
-                  <InfoCard
-                    icon={CalendarIcon}
-                    label="Criado em"
-                    value={format(new Date(charge.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-                    subvalue={`às ${format(new Date(charge.created_at), 'HH:mm', { locale: ptBR })}`}
-                  />
-                  
-                  {charge.next_charge_date && (
-                    <InfoCard
-                      icon={CalendarIcon}
-                      label="Próxima Cobrança"
-                      value={format(new Date(charge.next_charge_date), 'dd/MM/yyyy', { locale: ptBR })}
-                      variant="info"
-                    />
-                  )}
-                </div>
-
-                {/* Descrição */}
-                {charge.description && (
-                  <div className="p-4 rounded-xl bg-muted/20 border border-border/30">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Descrição
-                      </span>
-                    </div>
-                    <p className="text-sm leading-relaxed">{charge.description}</p>
+              <CardContent className="px-5 pb-4 space-y-4">
+                {/* Info Horizontal - 3 Columns */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-3 border-y border-border/50">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">VALOR TOTAL</p>
+                    <p className="text-xl font-bold text-green-600">{formatCurrency(charge.amount)}</p>
                   </div>
-                )}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">CRIADO EM</p>
+                    <p className="text-sm font-medium text-foreground">
+                      {format(new Date(charge.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">DESCRIÇÃO</p>
+                    <p className="text-sm text-foreground truncate">{charge.description || '—'}</p>
+                  </div>
+                </div>
 
                 {/* Área de Link de Pagamento */}
-                <div className="p-5 rounded-xl bg-primary/[0.03] border-2 border-primary/10 transition-colors hover:border-primary/20">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="p-1.5 rounded-md bg-primary/10">
-                      <Link2 className="h-4 w-4 text-primary" />
-                    </div>
-                    <span className="text-sm font-semibold text-primary">Link de Pagamento</span>
+                <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <span className="text-sm font-semibold text-foreground">Link de Pagamento</span>
+                    <CheckoutButtons charge={charge} />
                   </div>
-                  <CheckoutButtons charge={charge} />
                 </div>
 
-                {/* Ações do Card */}
-                <div className="flex flex-wrap gap-2 pt-2 border-t border-border/50">
-                  {charge.status === 'pending' && (
-                    <Button 
-                      size="sm" 
-                      onClick={() => processCharge(charge.id)}
-                      variant="outline"
-                      className="gap-2"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                      Processar Agora
-                    </Button>
-                  )}
-                  {charge.recurrence_type !== 'pontual' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewExecutions(charge.id, charge.payer_name)}
-                      className="gap-2"
-                    >
-                      <List className="h-4 w-4" />
-                      Ver Execuções
-                    </Button>
-                  )}
-                  <Button
-                    variant="default"
-                    size="sm"
+                {/* Card Footer - Actions */}
+                <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                  <button
                     onClick={() => setSelectedCharge(charge)}
-                    className="gap-2 ml-auto"
+                    className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <Eye className="h-4 w-4" />
-                    Ver Detalhes
-                  </Button>
+                    Ver detalhes
+                  </button>
+                  
+                  <div className="flex items-center gap-2">
+                    {charge.recurrence_type !== 'pontual' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewExecutions(charge.id, charge.payer_name)}
+                        className="gap-1.5 h-8 text-xs"
+                      >
+                        <List className="h-3.5 w-3.5" />
+                        Execuções
+                      </Button>
+                    )}
+                    {charge.status === 'pending' && (
+                      <Button 
+                        size="sm" 
+                        onClick={() => processCharge(charge.id)}
+                        className="gap-1.5 h-8 text-xs bg-gradient-to-r from-green-500 to-yellow-400 hover:from-green-600 hover:to-yellow-500 text-white border-0"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Processar agora
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
