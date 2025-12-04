@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,10 +18,14 @@ import {
   HeadphonesIcon,
   Star,
   Play,
-  Sparkles
+  Sparkles,
+  Menu,
+  X
 } from "lucide-react";
 
 export default function Index() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       {/* SEO Meta Tags */}
@@ -52,7 +57,7 @@ export default function Index() {
               <a href="#casos-de-uso" className="link-underline text-muted-foreground hover:text-brand transition-colors">Casos de uso</a>
               <a href="#faq" className="link-underline text-muted-foreground hover:text-brand transition-colors">FAQ</a>
             </nav>
-            <div className="flex items-center space-x-3">
+            <div className="hidden md:flex items-center space-x-3">
               <Link to="/login">
                 <Button variant="ghost" className="text-muted-foreground hover:text-brand hover:bg-brand/5">
                   Login
@@ -64,8 +69,80 @@ export default function Index() {
                 </Button>
               </Link>
             </div>
+            
+            {/* Mobile Hamburger Button */}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="md:hidden text-foreground"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+            </Button>
           </div>
         </div>
+        
+        {/* Mobile Menu Drawer */}
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-40 md:hidden">
+            {/* Overlay */}
+            <div 
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm animate-fade-in"
+              onClick={() => setMobileMenuOpen(false)} 
+            />
+            
+            {/* Drawer */}
+            <nav className="fixed top-16 right-4 left-4 bg-background border border-border rounded-2xl shadow-2xl p-6 z-50 animate-scale-in">
+              <div className="flex flex-col space-y-4">
+                <a 
+                  href="#recursos" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-brand/10 text-foreground hover:text-brand transition-colors"
+                >
+                  <Zap className="h-5 w-5" />
+                  Recursos
+                </a>
+                <a 
+                  href="#como-funciona" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-brand/10 text-foreground hover:text-brand transition-colors"
+                >
+                  <BarChart3 className="h-5 w-5" />
+                  Como funciona
+                </a>
+                <a 
+                  href="#casos-de-uso" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-brand/10 text-foreground hover:text-brand transition-colors"
+                >
+                  <Users className="h-5 w-5" />
+                  Casos de uso
+                </a>
+                <a 
+                  href="#faq" 
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-brand/10 text-foreground hover:text-brand transition-colors"
+                >
+                  <FileText className="h-5 w-5" />
+                  FAQ
+                </a>
+                
+                <div className="border-t border-border pt-4 mt-2 space-y-3">
+                  <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
+                    <Button variant="outline" className="w-full justify-center">
+                      Login
+                    </Button>
+                  </Link>
+                  <Link to="/register" onClick={() => setMobileMenuOpen(false)}>
+                    <Button className="w-full justify-center bg-gradient-to-r from-brand to-accent hover:from-brand-dark hover:to-brand text-white">
+                      Começar Agora
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       <main className="pt-20">
