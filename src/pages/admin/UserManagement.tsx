@@ -11,10 +11,11 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Loader2, RefreshCw, UserPlus, Building2, Trash2, KeyRound } from 'lucide-react';
+import { Loader2, RefreshCw, UserPlus, Building2, Trash2, KeyRound, Users } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { DashboardShell } from '@/components/dashboard/DashboardShell';
 
 interface Profile {
   id: string;
@@ -155,43 +156,38 @@ export default function UserManagement() {
   }, [searchName, filterCompany, filterRole, filterStatus, profiles]);
 
   const createUser = async () => {
-    // Validações preventivas com mensagens específicas
     if (!newUserData.email || !newUserData.email.includes('@')) {
       toast({
-        title: "❌ Email inválido",
-        description: "Por favor, insira um email válido no formato: usuario@empresa.com",
+        title: "Email inválido",
+        description: "Por favor, insira um email válido",
         variant: "destructive",
-        duration: 6000,
       });
       return;
     }
 
     if (!newUserData.password || newUserData.password.length < 6) {
       toast({
-        title: "❌ Senha muito curta",
-        description: "A senha deve ter no mínimo 6 caracteres para garantir segurança",
+        title: "Senha muito curta",
+        description: "A senha deve ter no mínimo 6 caracteres",
         variant: "destructive",
-        duration: 6000,
       });
       return;
     }
 
     if (!newUserData.full_name || newUserData.full_name.trim().length < 3) {
       toast({
-        title: "❌ Nome incompleto",
-        description: "Por favor, insira o nome completo do usuário (mínimo 3 caracteres)",
+        title: "Nome incompleto",
+        description: "Por favor, insira o nome completo do usuário",
         variant: "destructive",
-        duration: 6000,
       });
       return;
     }
 
     if (!newUserData.company_id) {
       toast({
-        title: "❌ Empresa não selecionada",
-        description: "Por favor, selecione uma empresa para vincular o usuário",
+        title: "Empresa não selecionada",
+        description: "Por favor, selecione uma empresa",
         variant: "destructive",
-        duration: 6000,
       });
       return;
     }
@@ -203,19 +199,12 @@ export default function UserManagement() {
         body: newUserData
       });
 
-      if (error) {
-        throw new Error(error.message || 'Erro de conexão com o servidor');
-      }
+      if (error) throw new Error(error.message || 'Erro de conexão');
+      if (!data.success) throw new Error(data.error || 'Erro ao criar usuário');
 
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao criar usuário');
-      }
-
-      // Sucesso com mensagem detalhada
       toast({
-        title: "✅ Usuário criado com sucesso!",
-        description: `${newUserData.full_name} (${newUserData.email}) foi cadastrado como ${newUserData.role === 'admin' ? 'Administrador' : 'Operador'}. Um email de confirmação foi enviado.`,
-        duration: 6000,
+        title: "Usuário criado com sucesso!",
+        description: `${newUserData.full_name} foi cadastrado.`,
       });
 
       setIsCreateDialogOpen(false);
@@ -228,16 +217,10 @@ export default function UserManagement() {
       });
       fetchProfiles();
     } catch (error: any) {
-      console.error('Erro ao criar usuário:', error);
-      
-      // Extrair mensagem de erro do backend ou usar mensagem genérica
-      const errorMessage = error.message || "Ocorreu um erro inesperado ao criar o usuário";
-      
       toast({
-        title: "❌ Erro ao criar usuário",
-        description: errorMessage,
+        title: "Erro ao criar usuário",
+        description: error.message,
         variant: "destructive",
-        duration: 8000,
       });
     } finally {
       setIsCreating(false);
@@ -254,18 +237,9 @@ export default function UserManagement() {
           .maybeSingle();
 
         if (existingRole) {
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .update({ role: updates.role })
-            .eq('user_id', id);
-
-          if (roleError) throw roleError;
+          await supabase.from('user_roles').update({ role: updates.role }).eq('user_id', id);
         } else {
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .insert({ user_id: id, role: updates.role });
-
-          if (roleError) throw roleError;
+          await supabase.from('user_roles').insert({ user_id: id, role: updates.role });
         }
         
         const { role, ...profileUpdates } = updates;
@@ -273,354 +247,313 @@ export default function UserManagement() {
       }
 
       if (Object.keys(updates).length > 0) {
-        const { error } = await supabase
-          .from('profiles')
-          .update(updates)
-          .eq('id', id);
-
-        if (error) throw error;
+        await supabase.from('profiles').update(updates).eq('id', id);
       }
 
-      toast({
-        title: "Usuário atualizado",
-        description: "As alterações foram salvas com sucesso",
-      });
-
+      toast({ title: "Usuário atualizado" });
       fetchProfiles();
     } catch (error: any) {
-      toast({
-        title: "Erro ao atualizar usuário",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
     }
   };
 
   const resetPassword = async (email: string) => {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
-
-      if (error) throw error;
-
-      toast({
-        title: "Email enviado",
-        description: "Um link para redefinir a senha foi enviado para o email do usuário",
-      });
+      toast({ title: "Email enviado", description: "Link de reset enviado para o usuário" });
     } catch (error: any) {
-      toast({
-        title: "Erro ao resetar senha",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
   };
 
   const deleteUser = async (userId: string, userName: string) => {
     try {
       await supabase.from('user_roles').delete().eq('user_id', userId);
-      const { error } = await supabase.from('profiles').delete().eq('id', userId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Usuário removido",
-        description: `${userName} foi removido do sistema`,
-      });
-
+      await supabase.from('profiles').delete().eq('id', userId);
+      toast({ title: "Usuário removido", description: `${userName} foi removido` });
       fetchProfiles();
     } catch (error: any) {
-      toast({
-        title: "Erro ao deletar usuário",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     }
   };
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h2>
-          <p className="text-muted-foreground">Você não tem permissão para acessar esta área.</p>
+      <DashboardShell>
+        <div className="flex items-center justify-center h-[60vh]">
+          <Card className="max-w-md text-center">
+            <CardContent className="pt-8">
+              <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-destructive" />
+              </div>
+              <h2 className="text-xl font-semibold text-ds-text-strong mb-2">Acesso Negado</h2>
+              <p className="text-ds-text-muted">Você não tem permissão para acessar esta área.</p>
+            </CardContent>
+          </Card>
         </div>
-      </div>
+      </DashboardShell>
     );
   }
 
   return (
-    <div className="container mx-auto py-8 space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
-          <p className="text-muted-foreground">Gerencie os usuários do sistema</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link to="/admin/companies">
-              <Building2 className="w-4 h-4 mr-2" />
-              Gerenciar Empresas
-            </Link>
-          </Button>
-          <Button onClick={fetchProfiles} variant="outline" disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
-          </Button>
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <UserPlus className="w-4 h-4 mr-2" />
-                Adicionar Usuário
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Criar Novo Usuário</DialogTitle>
-                <DialogDescription>
-                  Preencha os dados para criar um novo usuário no sistema
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="email">Email *</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="usuario@empresa.com"
-                    value={newUserData.email}
-                    onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="password">Senha *</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Mínimo 6 caracteres"
-                    value={newUserData.password}
-                    onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="full_name">Nome Completo *</Label>
-                  <Input
-                    id="full_name"
-                    placeholder="Nome do usuário"
-                    value={newUserData.full_name}
-                    onChange={(e) => setNewUserData({ ...newUserData, full_name: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="company">Empresa *</Label>
-                  <Select value={newUserData.company_id} onValueChange={(value) => setNewUserData({ ...newUserData, company_id: value })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a empresa" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companies.map((company) => (
-                        <SelectItem key={company.id} value={company.id}>
-                          {company.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="role">Função *</Label>
-                  <Select value={newUserData.role} onValueChange={(value: 'admin' | 'operador') => setNewUserData({ ...newUserData, role: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="operador">Operador</SelectItem>
-                      <SelectItem value="admin">Administrador</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreating}>
-                  Cancelar
-                </Button>
-                <Button onClick={createUser} disabled={isCreating}>
-                  {isCreating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Criando usuário...
-                    </>
-                  ) : (
-                    'Criar Usuário'
-                  )}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="search">Buscar por nome</Label>
-              <Input
-                id="search"
-                placeholder="Digite o nome..."
-                value={searchName}
-                onChange={(e) => setSearchName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="filter-company">Empresa</Label>
-              <Select value={filterCompany} onValueChange={setFilterCompany}>
-                <SelectTrigger id="filter-company">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {companies.map((company) => (
-                    <SelectItem key={company.id} value={company.id}>
-                      {company.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="filter-role">Função</Label>
-              <Select value={filterRole} onValueChange={setFilterRole}>
-                <SelectTrigger id="filter-role">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                  <SelectItem value="operador">Operador</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="filter-status">Status</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger id="filter-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="active">Ativo</SelectItem>
-                  <SelectItem value="inactive">Inativo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+    <DashboardShell>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-ds-text-strong">Gerenciamento de Usuários</h1>
+            <p className="text-ds-text-muted">Gerencie os usuários do sistema</p>
           </div>
-        </CardContent>
-      </Card>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin" />
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/admin/companies">
+                <Building2 className="w-4 h-4 mr-2" />
+                Empresas
+              </Link>
+            </Button>
+            <Button onClick={fetchProfiles} variant="outline" disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Atualizar
+            </Button>
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Novo Usuário
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Criar Novo Usuário</DialogTitle>
+                  <DialogDescription>
+                    Preencha os dados para criar um novo usuário
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="email">Email *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="usuario@empresa.com"
+                      value={newUserData.email}
+                      onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="password">Senha *</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Mínimo 6 caracteres"
+                      value={newUserData.password}
+                      onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="full_name">Nome Completo *</Label>
+                    <Input
+                      id="full_name"
+                      placeholder="Nome do usuário"
+                      value={newUserData.full_name}
+                      onChange={(e) => setNewUserData({ ...newUserData, full_name: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="company">Empresa *</Label>
+                    <Select value={newUserData.company_id} onValueChange={(value) => setNewUserData({ ...newUserData, company_id: value })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a empresa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companies.map((company) => (
+                          <SelectItem key={company.id} value={company.id}>
+                            {company.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="role">Função *</Label>
+                    <Select value={newUserData.role} onValueChange={(value: 'admin' | 'operador') => setNewUserData({ ...newUserData, role: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="operador">Operador</SelectItem>
+                        <SelectItem value="admin">Administrador</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreating}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={createUser} disabled={isCreating}>
+                    {isCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    Criar Usuário
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
-      ) : filteredProfiles.length === 0 ? (
+
+        {/* Filters */}
         <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">Nenhum usuário encontrado</p>
+          <CardHeader>
+            <CardTitle>Filtros</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label>Buscar por nome</Label>
+                <Input
+                  placeholder="Digite o nome..."
+                  value={searchName}
+                  onChange={(e) => setSearchName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Empresa</Label>
+                <Select value={filterCompany} onValueChange={setFilterCompany}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {companies.map((company) => (
+                      <SelectItem key={company.id} value={company.id}>
+                        {company.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Função</Label>
+                <Select value={filterRole} onValueChange={setFilterRole}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                    <SelectItem value="operador">Operador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="active">Ativo</SelectItem>
+                    <SelectItem value="inactive">Inativo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-4">
-          {filteredProfiles.map((profile) => (
-            <Card key={profile.id}>
-              <CardContent className="pt-6">
-                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
-                  <div className="space-y-2 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-semibold">{profile.full_name}</h3>
-                      <Badge variant={profile.is_active ? "default" : "secondary"}>
-                        {profile.is_active ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                      <Badge variant={profile.role === 'admin' ? "destructive" : "outline"}>
-                        {profile.role === 'admin' ? 'Administrador' : 'Operador'}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      <strong>Empresa:</strong> {profile.company_name}
-                    </p>
-                    <div className="flex gap-4 text-sm text-muted-foreground">
-                      <span>Criado: {format(new Date(profile.created_at), 'dd/MM/yyyy', { locale: ptBR })}</span>
-                      <span>Atualizado: {format(new Date(profile.updated_at), 'dd/MM/yyyy', { locale: ptBR })}</span>
-                    </div>
-                  </div>
 
-                  <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor={`active-${profile.id}`} className="text-sm">Ativo</Label>
-                      <Switch
-                        id={`active-${profile.id}`}
-                        checked={profile.is_active}
-                        onCheckedChange={(checked) => updateProfile(profile.id, { is_active: checked })}
-                      />
+        {/* Users List */}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Usuários ({filteredProfiles.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {filteredProfiles.map((profile) => (
+                  <div
+                    key={profile.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-ds-border-subtle rounded-card bg-ds-bg-surface hover:bg-ds-bg-surface-alt transition-colors gap-4"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-ds-text-strong">{profile.full_name}</span>
+                        <Badge variant={profile.role === 'admin' ? 'default' : 'secondary'}>
+                          {profile.role === 'admin' ? 'Admin' : 'Operador'}
+                        </Badge>
+                        <Badge variant={profile.is_active ? 'success' : 'destructive'}>
+                          {profile.is_active ? 'Ativo' : 'Inativo'}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-ds-text-muted">{profile.company_name}</p>
+                      <p className="text-xs text-ds-text-muted">
+                        Criado em {format(new Date(profile.created_at), 'dd/MM/yyyy', { locale: ptBR })}
+                      </p>
                     </div>
-
                     <div className="flex items-center gap-2">
-                      <Label htmlFor={`role-${profile.id}`} className="text-sm">Função</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor={`active-${profile.id}`} className="text-sm">Ativo</Label>
+                        <Switch
+                          id={`active-${profile.id}`}
+                          checked={profile.is_active}
+                          onCheckedChange={(checked) => updateProfile(profile.id, { is_active: checked })}
+                        />
+                      </div>
                       <Select
                         value={profile.role}
                         onValueChange={(value: 'admin' | 'operador') => updateProfile(profile.id, { role: value })}
                       >
-                        <SelectTrigger id={`role-${profile.id}`} className="w-[140px]">
+                        <SelectTrigger className="w-32">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="operador">Operador</SelectItem>
-                          <SelectItem value="admin">Administrador</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
                         </SelectContent>
                       </Select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => resetPassword(profile.full_name)}
+                        title="Resetar senha"
+                      >
+                        <KeyRound className="w-4 h-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja excluir {profile.full_name}? Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteUser(profile.id, profile.full_name)}>
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
-
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => resetPassword(profile.id)}
-                    >
-                      <KeyRound className="w-4 h-4 mr-2" />
-                      Resetar Senha
-                    </Button>
-
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm">
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Deletar
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Tem certeza que deseja deletar o usuário <strong>{profile.full_name}</strong>?
-                            Esta ação não pode ser desfeita.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => deleteUser(profile.id, profile.full_name)}>
-                            Deletar
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </DashboardShell>
   );
 }

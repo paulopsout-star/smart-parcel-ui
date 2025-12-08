@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, UserPlus } from 'lucide-react';
+import { Loader2, UserPlus, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -24,8 +24,8 @@ export default function Register() {
   // Redirect if already logged in
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-ds-bg-body">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -77,13 +77,13 @@ export default function Register() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="min-h-screen flex items-center justify-center bg-ds-bg-body px-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="w-12 h-12 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <UserPlus className="w-6 h-6 text-success" />
+            <div className="w-14 h-14 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-7 h-7 text-green-600" />
             </div>
-            <CardTitle className="text-2xl text-success">Conta Criada!</CardTitle>
+            <CardTitle className="text-2xl text-green-600">Conta Criada!</CardTitle>
             <CardDescription>
               Verifique seu email para confirmar a conta antes de fazer login.
             </CardDescription>
@@ -99,11 +99,11 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="min-h-screen flex items-center justify-center bg-ds-bg-body px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <UserPlus className="w-6 h-6 text-primary" />
+          <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <UserPlus className="w-7 h-7 text-primary" />
           </div>
           <CardTitle className="text-2xl">Criar Conta</CardTitle>
           <CardDescription>
@@ -187,9 +187,9 @@ export default function Register() {
           </form>
           
           <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ds-text-muted">
               Já tem uma conta?{' '}
-              <Link to="/login" className="text-primary hover:underline">
+              <Link to="/login" className="text-primary hover:underline font-medium">
                 Faça login aqui
               </Link>
             </p>

@@ -56,11 +56,11 @@ export default function ForgotPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+      <div className="min-h-screen flex items-center justify-center bg-ds-bg-body p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <CheckCircle2 className="h-6 w-6 text-primary" />
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-500/10">
+              <CheckCircle2 className="h-7 w-7 text-green-600" />
             </div>
             <CardTitle>Email Enviado!</CardTitle>
             <CardDescription>
@@ -87,7 +87,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+    <div className="min-h-screen flex items-center justify-center bg-ds-bg-body p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Recuperar Senha</CardTitle>
@@ -104,7 +104,7 @@ export default function ForgotPassword() {
             )}
 
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">
+              <label htmlFor="email" className="text-sm font-medium text-ds-text-default">
                 Email
               </label>
               <Input

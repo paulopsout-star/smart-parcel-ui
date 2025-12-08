@@ -21,8 +21,8 @@ export default function Login() {
   // Redirect if already logged in
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-ds-bg-body">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -62,11 +62,11 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="min-h-screen flex items-center justify-center bg-ds-bg-body px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Shield className="w-6 h-6 text-primary" />
+          <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Shield className="w-7 h-7 text-primary" />
           </div>
           <CardTitle className="text-2xl">Login do Sistema</CardTitle>
           <CardDescription>
@@ -132,9 +132,9 @@ export default function Login() {
           </form>
           
           <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-ds-text-muted">
               Não tem uma conta?{' '}
-              <Link to="/register" className="text-primary hover:underline">
+              <Link to="/register" className="text-primary hover:underline font-medium">
                 Cadastre-se aqui
               </Link>
             </p>
