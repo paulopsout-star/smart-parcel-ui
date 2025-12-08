@@ -99,6 +99,19 @@ All colors MUST be HSL.
     --gradient-brand: linear-gradient(135deg, hsl(152 100% 42%), hsl(150 100% 48%));
     --gradient-hero: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(0 0% 98%) 100%);
     --gradient-surface: linear-gradient(180deg, hsl(0 0% 98%) 0%, hsl(0 0% 96%) 100%);
+    
+    /* Autopay Design System */
+    --autopay-primary: 152 100% 42%;           /* #00D678 */
+    --autopay-primary-soft: 152 74% 62%;       /* #4EE89A */
+    --autopay-primary-strong: 152 100% 33%;    /* #00A95B */
+    --autopay-yellow: 60 100% 73%;             /* #FEFF7A */
+    --autopay-red: 0 100% 67%;                 /* #FF5A5A */
+    --autopay-bg: 0 0% 96%;                    /* #F5F5F5 */
+    --autopay-surface: 0 0% 100%;              /* #FFFFFF */
+    --autopay-surface-dark: 0 0% 6%;           /* #101010 */
+    --autopay-text: 0 0% 2%;                   /* #050505 */
+    --autopay-text-secondary: 0 0% 29%;        /* #4B4B4B */
+    --autopay-border: 0 0% 89%;                /* #E2E2E2 */
   }
 
   .dark {
