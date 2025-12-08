@@ -112,6 +112,30 @@ All colors MUST be HSL.
     --autopay-text: 0 0% 2%;                   /* #050505 */
     --autopay-text-secondary: 0 0% 29%;        /* #4B4B4B */
     --autopay-border: 0 0% 89%;                /* #E2E2E2 */
+    
+    /* Dashboard Design System - Neutrals */
+    --ds-bg-body: 225 15% 97.5%;               /* #F5F7FB */
+    --ds-bg-surface: 0 0% 100%;                /* #FFFFFF */
+    --ds-bg-surface-alt: 228 25% 98%;          /* #F3F5FC */
+    --ds-border-subtle: 226 26% 93%;           /* #E4E7F2 */
+    --ds-border-strong: 225 24% 85%;           /* #CCD2E6 */
+    --ds-text-strong: 240 40% 14%;             /* #141433 */
+    --ds-text-default: 237 27% 28%;            /* #34365A */
+    --ds-text-muted: 236 13% 63%;              /* #8F93B2 */
+    
+    /* Dashboard Elevations */
+    --shadow-card-soft: 0 18px 45px rgba(15, 23, 42, 0.06);
+    --shadow-card-flat: 0 0 0 1px rgba(15, 23, 42, 0.05);
+    --shadow-floating: 0 24px 60px rgba(15, 23, 42, 0.12);
+    --shadow-btn-brand: 0 14px 30px hsl(152 100% 42% / 0.35);
+    --shadow-focus-brand: 0 0 0 2px hsl(152 100% 42% / 0.25);
+    
+    /* Dashboard Radii */
+    --radius-xs: 6px;
+    --radius-sm: 10px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
   }
 
   .dark {
