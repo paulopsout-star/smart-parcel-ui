@@ -28,6 +28,7 @@ import MessageQueue from "./pages/MessageQueue";
 import CreateAdmin from "./pages/CreateAdmin";
 import NotFound from "./pages/NotFound";
 import Simulator from "./pages/Simulator";
+import Autopay from "./pages/Autopay";
 
 // Admin pages
 import UserManagement from "./pages/admin/UserManagement";
@@ -65,6 +66,7 @@ const App = () => {
                 <Route path="/checkout-pix/:id" element={<CheckoutPix />} />
                 <Route path="/thank-you" element={<ThankYou />} />
                 <Route path="/simulador" element={<Simulator />} />
+                <Route path="/autopay" element={<Autopay />} />
                 
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/new-charge" element={<ProtectedRoute><NewCharge /></ProtectedRoute>} />

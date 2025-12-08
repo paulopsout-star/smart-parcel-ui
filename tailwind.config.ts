@@ -98,6 +98,28 @@ export default {
           info: "hsl(var(--feedback-info))",
           "info-bg": "hsl(var(--feedback-info-bg))",
         },
+        autopay: {
+          primary: "hsl(var(--autopay-primary))",
+          "primary-soft": "hsl(var(--autopay-primary-soft))",
+          "primary-strong": "hsl(var(--autopay-primary-strong))",
+          yellow: "hsl(var(--autopay-yellow))",
+          red: "hsl(var(--autopay-red))",
+          bg: "hsl(var(--autopay-bg))",
+          surface: "hsl(var(--autopay-surface))",
+          "surface-dark": "hsl(var(--autopay-surface-dark))",
+          text: "hsl(var(--autopay-text))",
+          "text-secondary": "hsl(var(--autopay-text-secondary))",
+          border: "hsl(var(--autopay-border))",
+        },
+      },
+      boxShadow: {
+        "autopay-card": "0 18px 40px rgba(0,0,0,0.12)",
+        "autopay-card-soft": "0 10px 24px rgba(0,0,0,0.08)",
+        "autopay-floating": "0 24px 60px rgba(0,0,0,0.18)",
+      },
+      backgroundImage: {
+        "gradient-autopay-safety": "linear-gradient(135deg, hsl(152 74% 62%) 0%, hsl(152 100% 42%) 50%, hsl(170 100% 35%) 100%)",
+        "noise": "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E\")",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -130,6 +152,18 @@ export default {
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "float-mockup": "float-mockup 6s ease-in-out infinite",
+        "slide-up-stagger": "slide-up-stagger 0.5s ease-out forwards",
+      },
+      keyframes: {
+        "float-mockup": {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-12px)" },
+        },
+        "slide-up-stagger": {
+          "0%": { opacity: "0", transform: "translateY(20px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
     },
   },
