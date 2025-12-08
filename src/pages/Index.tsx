@@ -4,6 +4,7 @@ import { Menu, X, Landmark, Shield, BarChart3, Bot, CheckCircle, FileText, Users
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import AutopayLogo from "@/components/autopay/AutopayLogo";
+import { LeadCaptureModal } from "@/components/LeadCaptureModal";
 import DeviceMockup from "@/components/autopay/DeviceMockup";
 import FeatureCard from "@/components/autopay/FeatureCard";
 import FeaturesMockup from "@/components/autopay/FeaturesMockup";
@@ -135,6 +136,8 @@ const Navbar = ({
 
 // ==================== HERO SECTION ====================
 const HeroSection = () => {
+  const [leadModalOpen, setLeadModalOpen] = useState(false);
+
   return (
     <section className="py-8 px-6">
       <div className="max-w-[1120px] mx-auto">
@@ -150,11 +153,13 @@ const HeroSection = () => {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 items-start">
-                <Link to="/register">
-                  <Button size="lg" className="rounded-full text-white px-8 py-6 text-base font-semibold shadow-autopay-card hover:-translate-y-0.5 transition-all bg-[#00d678]">
-                    Comece Agora
-                  </Button>
-                </Link>
+                <Button 
+                  size="lg" 
+                  onClick={() => setLeadModalOpen(true)}
+                  className="rounded-full text-white px-8 py-6 text-base font-semibold shadow-autopay-card hover:-translate-y-0.5 transition-all bg-[#00d678]"
+                >
+                  Comece Agora
+                </Button>
                 <a href="#funcionalidades" className="text-autopay-text font-medium flex items-center gap-2 hover:gap-3 transition-all py-3">
                   Ver como funciona
                   <span className="text-xl">↓</span>
@@ -179,6 +184,9 @@ const HeroSection = () => {
           </div>
         </div>
       </div>
+
+      {/* Lead Capture Modal */}
+      <LeadCaptureModal open={leadModalOpen} onOpenChange={setLeadModalOpen} />
     </section>
   );
 };
