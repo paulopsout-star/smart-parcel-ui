@@ -121,7 +121,7 @@ serve(async (req) => {
 
   try {
     // Get environment variables and build the complete token URL
-    const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://pay-gt.autonegocie.com'
     // Check if URL already contains the token endpoint
     const tokenUrl = baseUrl.includes('/connect/token') || baseUrl.includes('/oauth/token')
       ? baseUrl

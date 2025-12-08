@@ -29,7 +29,7 @@ serve(async (req) => {
     }
 
     // Get environment variables
-    const baseUrl = Deno.env.get('BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    const baseUrl = Deno.env.get('BASE_URL') || 'https://pay-gt.autonegocie.com'
 
     console.log('Searching payment link:', linkId)
 

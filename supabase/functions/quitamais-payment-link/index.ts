@@ -33,7 +33,7 @@ serve(async (req) => {
     console.log('Getting QuitaMais access token...')
     const clientId = Deno.env.get('QUITA_MAIS_CLIENT_ID')
     const clientSecret = Deno.env.get('QUITA_MAIS_CLIENT_SECRET')
-    const baseUrl = Deno.env.get('BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    const baseUrl = Deno.env.get('BASE_URL') || 'https://pay-gt.autonegocie.com'
 
     if (!clientId || !clientSecret) {
       return new Response(
