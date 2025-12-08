@@ -20,11 +20,22 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
-  PieChart,
-  Pie,
-  Cell
 } from "recharts";
-import { Download, RefreshCw, FileText, Calendar } from "lucide-react";
+import { 
+  Download, 
+  RefreshCw, 
+  Filter,
+  BarChart3,
+  DollarSign,
+  ArrowDownLeft,
+  Receipt,
+  Wallet,
+  TrendingUp,
+  AlertTriangle,
+  FileSpreadsheet
+} from "lucide-react";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { StatCard } from "@/components/dashboard/StatCard";
 
 interface KPIs {
   totalBruto: number;
@@ -53,8 +64,6 @@ interface ExportJob {
   finished_at?: string;
   download_url?: string;
 }
-
-const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))'];
 
 export default function Reports() {
   const { toast } = useToast();
@@ -237,410 +246,457 @@ export default function Reports() {
     }).format(value);
   };
 
-  return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Relatórios Admin</h1>
-        <Button onClick={runExportWorker} variant="outline">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Processar Exportações
-        </Button>
-      </div>
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'done':
+      case 'concluded':
+      case 'paid':
+      case 'success':
+        return 'success';
+      case 'failed':
+      case 'error':
+        return 'destructive';
+      case 'pending':
+      case 'processing':
+        return 'warning';
+      default:
+        return 'secondary';
+    }
+  };
 
-      {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div>
-              <label className="text-sm font-medium">De</label>
-              <Input
-                type="date"
-                value={filters.from}
-                onChange={(e) => setFilters(prev => ({ ...prev, from: e.target.value }))}
-              />
+  return (
+    <DashboardShell>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+              <BarChart3 className="w-6 h-6 text-primary" />
             </div>
             <div>
-              <label className="text-sm font-medium">Até</label>
-              <Input
-                type="date"
-                value={filters.to}
-                onChange={(e) => setFilters(prev => ({ ...prev, to: e.target.value }))}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Tipo</label>
-              <Select value={filters.tipo || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, tipo: value === 'all' ? undefined : value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="pontual">Pontual</SelectItem>
-                  <SelectItem value="recorrente">Recorrente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Método</label>
-              <Select value={filters.metodo || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, metodo: value === 'all' ? undefined : value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="PIX">PIX</SelectItem>
-                  <SelectItem value="CARD">Cartão</SelectItem>
-                  <SelectItem value="QUITA">Quita+</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium">Status</label>
-              <Select value={filters.status || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? undefined : value }))}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="paid">Pago</SelectItem>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="failed">Falhou</SelectItem>
-                </SelectContent>
-              </Select>
+              <h1 className="text-2xl font-bold text-ds-text-strong">Relatórios</h1>
+              <p className="text-sm text-ds-text-muted">Análise completa de receitas e transações</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <Button onClick={runExportWorker} variant="outline" className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Processar Exportações
+          </Button>
+        </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {/* Filtros */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Recebido Bruto</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(kpis.totalBruto)}
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-2">
+              <Filter className="w-5 h-5 text-primary" />
+              <CardTitle className="text-lg">Filtros</CardTitle>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Estornos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(kpis.totalEstornos)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Taxas de Estorno</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">
-              {formatCurrency(kpis.totalTaxas)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Recebido Líquido</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {formatCurrency(kpis.totalLiquido)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Conversão</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {kpis.conversao.toFixed(1)}%
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Inadimplência Rec.</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {kpis.inadimplencia.toFixed(1)}%
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Receita Diária</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData.daily}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip formatter={(value: any) => formatCurrency(value)} />
-                <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Receita por Método</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData.methods}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="method" />
-                <YAxis />
-                <Tooltip formatter={(value: any) => formatCurrency(value)} />
-                <Bar dataKey="value" fill="hsl(var(--primary))" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tabelas */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Dados Detalhados</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={currentTable} onValueChange={setCurrentTable}>
-            <div className="flex justify-between items-center mb-4">
-              <TabsList>
-                <TabsTrigger value="transactions">Transações</TabsTrigger>
-                <TabsTrigger value="charges">Cobranças</TabsTrigger>
-                <TabsTrigger value="executions">Execuções</TabsTrigger>
-                <TabsTrigger value="splits">Splits</TabsTrigger>
-              </TabsList>
-              
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => exportData(currentTable, 'CSV')}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  CSV
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => exportData(currentTable, 'XLSX')}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  XLSX
-                </Button>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-ds-text-muted">De</label>
+                <Input
+                  type="date"
+                  value={filters.from}
+                  onChange={(e) => setFilters(prev => ({ ...prev, from: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-ds-text-muted">Até</label>
+                <Input
+                  type="date"
+                  value={filters.to}
+                  onChange={(e) => setFilters(prev => ({ ...prev, to: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-ds-text-muted">Tipo</label>
+                <Select value={filters.tipo || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, tipo: value === 'all' ? undefined : value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="pontual">Pontual</SelectItem>
+                    <SelectItem value="recorrente">Recorrente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-ds-text-muted">Método</label>
+                <Select value={filters.metodo || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, metodo: value === 'all' ? undefined : value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="PIX">PIX</SelectItem>
+                    <SelectItem value="CARD">Cartão</SelectItem>
+                    <SelectItem value="QUITA">Quita+</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-ds-text-muted">Status</label>
+                <Select value={filters.status || 'all'} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? undefined : value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="paid">Pago</SelectItem>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="failed">Falhou</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+          </CardContent>
+        </Card>
 
-            <TabsContent value="transactions">
+        {/* KPIs with StatCard */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <StatCard
+            icon={DollarSign}
+            label="Recebido Bruto"
+            value={formatCurrency(kpis.totalBruto)}
+            variant="highlight"
+          />
+          <StatCard
+            icon={ArrowDownLeft}
+            label="Estornos"
+            value={formatCurrency(kpis.totalEstornos)}
+          />
+          <StatCard
+            icon={Receipt}
+            label="Taxas de Estorno"
+            value={formatCurrency(kpis.totalTaxas)}
+          />
+          <StatCard
+            icon={Wallet}
+            label="Recebido Líquido"
+            value={formatCurrency(kpis.totalLiquido)}
+          />
+          <StatCard
+            icon={TrendingUp}
+            label="Conversão"
+            value={`${kpis.conversao.toFixed(1)}%`}
+          />
+          <StatCard
+            icon={AlertTriangle}
+            label="Inadimplência Rec."
+            value={`${kpis.inadimplencia.toFixed(1)}%`}
+          />
+        </div>
+
+        {/* Gráficos */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                <CardTitle className="text-lg">Receita Diária</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={chartData.daily}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                  <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <Tooltip 
+                    formatter={(value: any) => formatCurrency(value)}
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--background))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="value" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={2}
+                    dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-primary" />
+                <CardTitle className="text-lg">Receita por Método</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData.methods}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
+                  <XAxis dataKey="method" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <Tooltip 
+                    formatter={(value: any) => formatCurrency(value)}
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--background))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                    }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    fill="hsl(var(--primary))" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Tabelas */}
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-primary" />
+              <CardTitle className="text-lg">Dados Detalhados</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={currentTable} onValueChange={setCurrentTable}>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                <TabsList className="bg-ds-bg-surface-alt">
+                  <TabsTrigger value="transactions">Transações</TabsTrigger>
+                  <TabsTrigger value="charges">Cobranças</TabsTrigger>
+                  <TabsTrigger value="executions">Execuções</TabsTrigger>
+                  <TabsTrigger value="splits">Splits</TabsTrigger>
+                </TabsList>
+                
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportData(currentTable, 'CSV')}
+                    className="gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportData(currentTable, 'XLSX')}
+                    className="gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    XLSX
+                  </Button>
+                </div>
+              </div>
+
+              <TabsContent value="transactions">
+                <div className="rounded-lg border border-ds-border-subtle overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
+                        <TableHead className="text-ds-text-muted font-medium">ID</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Pagador</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Valor</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Status</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tableData.map((item) => (
+                        <TableRow key={item.id} className="hover:bg-ds-bg-surface-alt/50">
+                          <TableCell className="font-mono text-xs text-ds-text-muted">{item.id.slice(0, 8)}...</TableCell>
+                          <TableCell className="text-ds-text-default">{item.payer_name}</TableCell>
+                          <TableCell className="font-semibold text-ds-text-strong">{formatCurrency((item.amount_in_cents || 0) / 100)}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadgeVariant(item.status)}>
+                              {item.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-ds-text-muted">{format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="charges">
+                <div className="rounded-lg border border-ds-border-subtle overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
+                        <TableHead className="text-ds-text-muted font-medium">ID</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Pagador</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Valor</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Tipo</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Status</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tableData.map((item) => (
+                        <TableRow key={item.id} className="hover:bg-ds-bg-surface-alt/50">
+                          <TableCell className="font-mono text-xs text-ds-text-muted">{item.id.slice(0, 8)}...</TableCell>
+                          <TableCell className="text-ds-text-default">{item.payer_name}</TableCell>
+                          <TableCell className="font-semibold text-ds-text-strong">{formatCurrency((item.amount || 0) / 100)}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{item.recurrence_type}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadgeVariant(item.status)}>
+                              {item.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-ds-text-muted">{format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="executions">
+                <div className="rounded-lg border border-ds-border-subtle overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
+                        <TableHead className="text-ds-text-muted font-medium">ID</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Cobrança</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Status</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Agendado Para</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Tentativas</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tableData.map((item) => (
+                        <TableRow key={item.id} className="hover:bg-ds-bg-surface-alt/50">
+                          <TableCell className="font-mono text-xs text-ds-text-muted">{item.id.slice(0, 8)}...</TableCell>
+                          <TableCell className="font-mono text-xs text-ds-text-muted">{item.charge_id?.slice(0, 8)}...</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadgeVariant(item.status)}>
+                              {item.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-ds-text-muted">
+                            {item.scheduled_for ? format(new Date(item.scheduled_for), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
+                          </TableCell>
+                          <TableCell className="text-ds-text-default">{item.attempts || 0}</TableCell>
+                          <TableCell className="text-ds-text-muted">{format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="splits">
+                <div className="rounded-lg border border-ds-border-subtle overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
+                        <TableHead className="text-ds-text-muted font-medium">ID</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Método</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Valor</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Status</TableHead>
+                        <TableHead className="text-ds-text-muted font-medium">Data</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {tableData.map((item) => (
+                        <TableRow key={item.id} className="hover:bg-ds-bg-surface-alt/50">
+                          <TableCell className="font-mono text-xs text-ds-text-muted">{item.id.slice(0, 8)}...</TableCell>
+                          <TableCell>
+                            <Badge variant="info">{item.method}</Badge>
+                          </TableCell>
+                          <TableCell className="font-semibold text-ds-text-strong">{formatCurrency((item.amount_cents || 0) / 100)}</TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusBadgeVariant(item.status)}>
+                              {item.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-ds-text-muted">{format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {/* Exportações */}
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-2">
+              <Download className="w-5 h-5 text-primary" />
+              <div>
+                <CardTitle className="text-lg">Histórico de Exportações</CardTitle>
+                <CardDescription>Últimas 20 exportações criadas</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border border-ds-border-subtle overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Pagador</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Data</TableHead>
+                  <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
+                    <TableHead className="text-ds-text-muted font-medium">Escopo</TableHead>
+                    <TableHead className="text-ds-text-muted font-medium">Formato</TableHead>
+                    <TableHead className="text-ds-text-muted font-medium">Status</TableHead>
+                    <TableHead className="text-ds-text-muted font-medium">Registros</TableHead>
+                    <TableHead className="text-ds-text-muted font-medium">Criado em</TableHead>
+                    <TableHead className="text-ds-text-muted font-medium">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tableData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-mono text-xs">{item.id.slice(0, 8)}...</TableCell>
-                      <TableCell>{item.payer_name}</TableCell>
-                      <TableCell>{formatCurrency((item.amount_in_cents || 0) / 100)}</TableCell>
+                  {exportJobs.map((job) => (
+                    <TableRow key={job.id} className="hover:bg-ds-bg-surface-alt/50">
                       <TableCell>
-                        <Badge variant={item.status === 'concluded' ? 'default' : 'secondary'}>
-                          {item.status}
+                        <Badge variant="outline">{job.scope}</Badge>
+                      </TableCell>
+                      <TableCell className="text-ds-text-default font-medium">{job.format}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(job.status)}>
+                          {job.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>{format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
+                      <TableCell className="text-ds-text-muted">{job.rows_count || '-'}</TableCell>
+                      <TableCell className="text-ds-text-muted">
+                        {format(new Date(job.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                      </TableCell>
+                      <TableCell>
+                        {job.status === 'DONE' && job.download_url && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(job.download_url, '_blank')}
+                            className="gap-2"
+                          >
+                            <Download className="h-4 w-4" />
+                            Baixar
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </TabsContent>
-
-            <TabsContent value="charges">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Pagador</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Data</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tableData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-mono text-xs">{item.id.slice(0, 8)}...</TableCell>
-                      <TableCell>{item.payer_name}</TableCell>
-                      <TableCell>{formatCurrency((item.amount || 0) / 100)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{item.recurrence_type}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === 'paid' ? 'default' : 'secondary'}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TabsContent>
-
-            <TabsContent value="executions">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Cobrança</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Agendado Para</TableHead>
-                    <TableHead>Tentativas</TableHead>
-                    <TableHead>Data</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tableData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-mono text-xs">{item.id.slice(0, 8)}...</TableCell>
-                      <TableCell className="font-mono text-xs">{item.charge_id?.slice(0, 8)}...</TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === 'SUCCESS' ? 'default' : 'secondary'}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {item.scheduled_for ? format(new Date(item.scheduled_for), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
-                      </TableCell>
-                      <TableCell>{item.attempts || 0}</TableCell>
-                      <TableCell>{format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TabsContent>
-
-            <TabsContent value="splits">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Método</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Data</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tableData.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-mono text-xs">{item.id.slice(0, 8)}...</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{item.method}</Badge>
-                      </TableCell>
-                      <TableCell>{formatCurrency((item.amount_cents || 0) / 100)}</TableCell>
-                      <TableCell>
-                        <Badge variant={item.status === 'concluded' ? 'default' : 'secondary'}>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{format(new Date(item.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
-
-      {/* Exportações */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Histórico de Exportações</CardTitle>
-          <CardDescription>Últimas 20 exportações criadas</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Escopo</TableHead>
-                <TableHead>Formato</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Registros</TableHead>
-                <TableHead>Criado em</TableHead>
-                <TableHead>Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {exportJobs.map((job) => (
-                <TableRow key={job.id}>
-                  <TableCell>
-                    <Badge variant="outline">{job.scope}</Badge>
-                  </TableCell>
-                  <TableCell>{job.format}</TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={
-                        job.status === 'DONE' ? 'default' : 
-                        job.status === 'FAILED' ? 'destructive' : 
-                        'secondary'
-                      }
-                    >
-                      {job.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{job.rows_count || '-'}</TableCell>
-                  <TableCell>
-                    {format(new Date(job.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                  </TableCell>
-                  <TableCell>
-                    {job.status === 'DONE' && job.download_url && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(job.download_url, '_blank')}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Baixar
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardShell>
   );
 }
