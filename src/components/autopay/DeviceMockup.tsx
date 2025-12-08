@@ -1,36 +1,23 @@
 import { cn } from "@/lib/utils";
 import { CreditCard, Smartphone, TrendingUp, Wallet } from "lucide-react";
-
 interface DeviceMockupProps {
   variant: "light" | "dark";
   className?: string;
   animationDelay?: number;
 }
-
-const DeviceMockup = ({ variant, className, animationDelay = 0 }: DeviceMockupProps) => {
+const DeviceMockup = ({
+  variant,
+  className,
+  animationDelay = 0
+}: DeviceMockupProps) => {
   const baseClasses = "rounded-[32px] p-4 w-[220px] h-[420px] shadow-autopay-floating";
-  
-  return (
-    <div 
-      className={cn(
-        baseClasses,
-        variant === "light" ? "bg-white" : "bg-autopay-surface-dark",
-        "animate-float-mockup",
-        className
-      )}
-      style={{ animationDelay: `${animationDelay}ms` }}
-    >
-      {variant === "light" ? (
-        <LightScreenContent />
-      ) : (
-        <DarkScreenContent />
-      )}
-    </div>
-  );
+  return <div className={cn(baseClasses, variant === "light" ? "bg-white" : "bg-autopay-surface-dark", "animate-float-mockup", className)} style={{
+    animationDelay: `${animationDelay}ms`
+  }}>
+      {variant === "light" ? <LightScreenContent /> : <DarkScreenContent />}
+    </div>;
 };
-
-const LightScreenContent = () => (
-  <div className="h-full flex flex-col">
+const LightScreenContent = () => <div className="h-full flex flex-col">
     {/* Status bar mockup */}
     <div className="flex justify-between items-center mb-4 text-xs text-autopay-text-secondary">
       <span>9:41</span>
@@ -86,14 +73,11 @@ const LightScreenContent = () => (
     </div>
     
     {/* CTA */}
-    <button className="w-full bg-autopay-text text-white py-3 rounded-full font-semibold text-sm mt-4">
+    <button className="w-full text-white py-3 rounded-full font-semibold text-sm mt-4 bg-primary">
       Pagar Agora
     </button>
-  </div>
-);
-
-const DarkScreenContent = () => (
-  <div className="h-full flex flex-col text-white">
+  </div>;
+const DarkScreenContent = () => <div className="h-full flex flex-col text-white">
     {/* Status bar mockup */}
     <div className="flex justify-between items-center mb-4 text-xs text-white/60">
       <span>9:41</span>
@@ -114,18 +98,13 @@ const DarkScreenContent = () => (
     
     {/* Chart mockup */}
     <div className="flex-1 flex items-end gap-2 pb-4">
-      {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 100].map((height, i) => (
-        <div 
-          key={i}
-          className="flex-1 bg-autopay-primary/30 rounded-t-sm relative overflow-hidden"
-          style={{ height: `${height}%` }}
-        >
-          <div 
-            className="absolute bottom-0 left-0 right-0 bg-autopay-primary rounded-t-sm"
-            style={{ height: `${height * 0.7}%` }}
-          />
-        </div>
-      ))}
+      {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 100].map((height, i) => <div key={i} className="flex-1 bg-autopay-primary/30 rounded-t-sm relative overflow-hidden" style={{
+      height: `${height}%`
+    }}>
+          <div className="absolute bottom-0 left-0 right-0 bg-autopay-primary rounded-t-sm" style={{
+        height: `${height * 0.7}%`
+      }} />
+        </div>)}
     </div>
     
     {/* Stats */}
@@ -139,7 +118,5 @@ const DarkScreenContent = () => (
         <p className="text-lg font-bold">R$ 193</p>
       </div>
     </div>
-  </div>
-);
-
+  </div>;
 export default DeviceMockup;
