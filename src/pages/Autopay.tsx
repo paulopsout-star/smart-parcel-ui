@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import AutopayLogo from "@/components/autopay/AutopayLogo";
 import DeviceMockup from "@/components/autopay/DeviceMockup";
 import FeatureCard from "@/components/autopay/FeatureCard";
+import FeaturesMockup from "@/components/autopay/FeaturesMockup";
 import ChatPromptItem from "@/components/autopay/ChatPromptItem";
 import SecurityBadge from "@/components/autopay/SecurityBadge";
 import HandDrawnArrow from "@/components/autopay/HandDrawnArrow";
@@ -144,21 +145,39 @@ const FeaturesSection = () => {
     title: "Gestão Inteligente",
     description: "Dashboard completo com relatórios e analytics em tempo real."
   }];
-  return <section id="funcionalidades" className="px-6 pb-8">
+  
+  return (
+    <section id="funcionalidades" className="py-16 px-6 bg-white">
       <div className="max-w-[1120px] mx-auto">
-        <div className="bg-autopay-primary rounded-[32px] p-8 md:p-12 lg:p-16">
-          <h2 className="text-2xl md:text-3xl font-bold text-autopay-text text-center mb-12 max-w-2xl mx-auto leading-tight">
-            Ferramentas poderosas para simplificar cobranças e ampliar as possibilidades de pagamento
-          </h2>
+        {/* Título em largura total */}
+        <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-autopay-text text-center mb-16 tracking-tight leading-[1.1]">
+          Ferramentas poderosas para simplificar cobranças e ampliar as possibilidades de pagamento
+        </h2>
+        
+        {/* Grid 2 colunas */}
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
+          {/* Coluna Esquerda - Cards empilhados */}
+          <div className="space-y-5">
+            {features.map((feature, index) => (
+              <FeatureCard 
+                key={feature.title} 
+                icon={feature.icon} 
+                title={feature.title} 
+                description={feature.description} 
+                className="opacity-0 animate-slide-up-stagger" 
+                style={{ animationDelay: `${index * 100}ms` } as React.CSSProperties} 
+              />
+            ))}
+          </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, index) => <FeatureCard key={feature.title} icon={feature.icon} title={feature.title} description={feature.description} className="opacity-0 animate-slide-up-stagger" style={{
-            animationDelay: `${index * 100}ms`
-          } as React.CSSProperties} />)}
+          {/* Coluna Direita - Mockups sobrepostos */}
+          <div className="relative flex justify-center lg:justify-end">
+            <FeaturesMockup />
           </div>
         </div>
       </div>
-    </section>;
+    </section>
+  );
 };
 
 // ==================== ANSWERS SECTION ====================
