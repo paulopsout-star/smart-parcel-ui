@@ -10,12 +10,10 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 
-// Hook para atualizar meta tags
 const useDocumentTitle = (title: string) => {
   useEffect(() => {
     document.title = title;
     
-    // Adicionar meta tags de SEO
     const metaRobots = document.querySelector('meta[name="robots"]') as HTMLMetaElement;
     if (metaRobots) {
       metaRobots.content = 'noindex,nofollow';
@@ -26,7 +24,6 @@ const useDocumentTitle = (title: string) => {
       document.head.appendChild(meta);
     }
     
-    // Definir idioma
     document.documentElement.lang = 'pt-BR';
   }, [title]);
 };
@@ -67,11 +64,9 @@ interface ThankYouData {
   };
 }
 
-// Telemetria local simples
 const analyticsLocal = {
   track: (event: string, data: any) => {
     console.log(`Analytics: ${event}`, data);
-    // Em produção, poderia enviar para um endpoint analytics local
   }
 };
 
@@ -89,13 +84,10 @@ export default function ThankYou() {
 
   const token = searchParams.get('pl');
 
-  // Configurar meta tags da página
   useDocumentTitle('Pagamento Confirmado - Sistema de Cobrança');
 
   const loadData = async () => {
     if (!token) {
-      // Se não há token, é um redirecionamento direto (ex: PIX confirmado)
-      // Mostrar página de agradecimento simples
       setData({
         paid: true,
         message: 'Pagamento confirmado com sucesso!'
@@ -107,7 +99,6 @@ export default function ThankYou() {
     try {
       setLoading(true);
       
-      // Construir URL com parâmetro correto  
       const functionUrl = `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/thank-you-summary?pl=${token}`;
       const response = await fetch(functionUrl, {
         method: 'GET',
@@ -129,7 +120,6 @@ export default function ThankYou() {
 
       setData(data);
       
-      // Telemetria: registrar visualização
       if (data.paid && data.charge) {
         analyticsLocal.track('thank_you.view', {
           charge_id: data.charge.id,
@@ -148,14 +138,12 @@ export default function ThankYou() {
   useEffect(() => {
     loadData();
     
-    // Cleanup timers on unmount
     return () => {
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       if (timeoutTimerRef.current) clearTimeout(timeoutTimerRef.current);
     };
   }, [token]);
 
-  // Retry automático para estado de processamento
   useEffect(() => {
     if (data?.processing && !data?.paid && retryCount < 3) {
       console.log(`[ThankYou] Auto-retry ${retryCount + 1}/3 in 3s...`);
@@ -166,7 +154,6 @@ export default function ThankYou() {
       }, 3000);
     }
     
-    // Timeout de 30s
     if (data?.processing && !data?.paid && retryCount === 0) {
       timeoutTimerRef.current = setTimeout(() => {
         console.log('[ThankYou] Timeout reached (30s)');
@@ -192,8 +179,8 @@ export default function ThankYou() {
 
   const getMethodBadgeVariant = (method: string) => {
     switch (method.toUpperCase()) {
-      case 'PIX': return 'default';
-      case 'CARD': return 'secondary';
+      case 'PIX': return 'success';
+      case 'CARD': return 'info';
       case 'QUITA': return 'outline';
       default: return 'outline';
     }
@@ -225,7 +212,6 @@ export default function ThankYou() {
         total: data?.charge?.total_amount_cents
       });
 
-      // Importar html2pdf dinamicamente
       const html2pdf = (await import('html2pdf.js')).default;
       
       const element = document.getElementById('comprovante-container');
@@ -261,10 +247,10 @@ export default function ThankYou() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-ds-bg-body flex items-center justify-center">
         <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p>Carregando dados do pagamento...</p>
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-ds-text-muted">Carregando dados do pagamento...</p>
         </div>
       </div>
     );
@@ -272,7 +258,7 @@ export default function ThankYou() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
             <p className="text-destructive mb-4">{error}</p>
@@ -288,12 +274,12 @@ export default function ThankYou() {
 
   if (!data?.paid && data?.processing) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">Pagamento em processamento</h2>
-            <p className="text-muted-foreground mb-4">
+            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+            <h2 className="text-xl font-semibold mb-2 text-ds-text-strong">Pagamento em processamento</h2>
+            <p className="text-ds-text-muted mb-4">
               Estamos confirmando seu pagamento. Isso pode levar alguns segundos.
             </p>
             <Button onClick={loadData}>
@@ -307,52 +293,54 @@ export default function ThankYou() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-ds-bg-body">
       <div id="comprovante-container" className="container mx-auto py-8 px-4 max-w-4xl">
         {/* Header */}
         <div className="text-center mb-8 print:mb-4">
-          <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4 print:h-8 print:w-8" />
-          <h1 className="text-3xl font-bold text-green-600 mb-2 print:text-xl">
-            Pagamento Confirmado! 🎉
+          <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="h-10 w-10 text-primary print:h-8 print:w-8" />
+          </div>
+          <h1 className="text-3xl font-bold text-primary mb-2 print:text-xl">
+            Pagamento Confirmado!
           </h1>
-          <p className="text-muted-foreground print:text-xs">
+          <p className="text-ds-text-muted print:text-xs">
             {data?.message || 'Obrigado! Seu pagamento foi processado com sucesso.'}
           </p>
         </div>
 
-        {/* Resumo Principal - apenas se houver dados completos */}
+        {/* Resumo Principal */}
         {data?.charge && (
-          <Card className="mb-6 print:shadow-none print:border-gray-300">
+          <Card className="mb-6 print:shadow-none">
             <CardHeader className="print:pb-2">
               <CardTitle className="print:text-lg">Resumo da Transação</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 print:space-y-2">
               <div className="flex justify-between items-center">
-                <span className="font-medium print:text-sm">Valor Total:</span>
-                <span className="text-2xl font-bold text-green-600 print:text-lg">
+                <span className="font-medium text-ds-text-muted print:text-sm">Valor Total:</span>
+                <span className="text-2xl font-bold text-primary print:text-lg">
                   {formatCurrency(data?.charge?.total_amount_cents || 0)}
                 </span>
               </div>
 
               <div className="flex justify-between items-center print:text-sm">
-                <span>Data/Hora:</span>
-                <span>{data?.charge?.paid_at ? formatDate(data.charge.paid_at) : '-'}</span>
+                <span className="text-ds-text-muted">Data/Hora:</span>
+                <span className="text-ds-text-default">{data?.charge?.paid_at ? formatDate(data.charge.paid_at) : '-'}</span>
               </div>
 
               <div className="flex justify-between items-center print:text-sm">
-                <span>ID da Cobrança:</span>
-                <span className="font-mono text-xs">
+                <span className="text-ds-text-muted">ID da Cobrança:</span>
+                <span className="font-mono text-xs bg-ds-bg-surface-alt px-2 py-1 rounded">
                   {data?.charge?.id.slice(0, 8)}...
                 </span>
               </div>
 
               <div className="flex justify-between items-start print:text-sm">
-                <span>Meios Utilizados:</span>
+                <span className="text-ds-text-muted">Meios Utilizados:</span>
                 <div className="flex flex-wrap gap-1">
                   {data?.splits?.map((split) => (
                     <Badge 
                       key={split.id} 
-                      variant={getMethodBadgeVariant(split.method)}
+                      variant={getMethodBadgeVariant(split.method) as any}
                       className="print:text-xs print:px-1 print:py-0"
                     >
                       {getMethodLabel(split.method)}
@@ -362,8 +350,8 @@ export default function ThankYou() {
               </div>
 
               {data?.charge?.has_boleto_link && (
-                <div className="bg-muted p-3 rounded-lg print:p-2 print:text-xs">
-                  <p className="text-sm text-muted-foreground">
+                <div className="bg-ds-bg-surface-alt p-3 rounded-lg print:p-2 print:text-xs">
+                  <p className="text-sm text-ds-text-muted">
                     ℹ️ Pagamento vinculado a boleto (simulado)
                   </p>
                 </div>
@@ -374,7 +362,7 @@ export default function ThankYou() {
 
         {/* Detalhes dos Splits */}
         {data?.splits && data.splits.length > 0 && (
-          <Card className="mb-6 print:shadow-none print:border-gray-300">
+          <Card className="mb-6 print:shadow-none">
             <CardHeader className="print:pb-2">
               <CardTitle className="print:text-lg">Detalhamento do Pagamento</CardTitle>
             </CardHeader>
@@ -384,15 +372,15 @@ export default function ThankYou() {
                   <div key={split.id}>
                     <div className="flex justify-between items-center print:text-sm">
                       <div className="flex items-center gap-2">
-                        <Badge variant={getMethodBadgeVariant(split.method)} className="print:text-xs">
+                        <Badge variant={getMethodBadgeVariant(split.method) as any} className="print:text-xs">
                           {getMethodLabel(split.method)}
                         </Badge>
-                        <span className="text-sm text-muted-foreground print:text-xs">
+                        <span className="text-sm text-ds-text-muted print:text-xs">
                           {split.processed_at ? formatDate(split.processed_at) : '-'}
                         </span>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold">
+                        <div className="font-semibold text-ds-text-strong">
                           {formatCurrency(split.amount_cents)}
                         </div>
                         <Badge variant="outline" className="text-xs print:text-xs">
@@ -412,10 +400,10 @@ export default function ThankYou() {
 
         {/* Próximas Cobranças (Recorrente) */}
         {data?.recurrence?.next_dates && data.recurrence.next_dates.length > 0 && (
-          <Card className="mb-6 print:break-inside-avoid print:shadow-none print:border-gray-300">
+          <Card className="mb-6 print:break-inside-avoid print:shadow-none">
             <CardHeader className="print:pb-2">
               <CardTitle className="flex items-center gap-2 print:text-lg">
-                <Calendar className="h-5 w-5 print:h-4 print:w-4" />
+                <Calendar className="h-5 w-5 text-primary print:h-4 print:w-4" />
                 Próximas Cobranças
               </CardTitle>
             </CardHeader>
@@ -423,8 +411,8 @@ export default function ThankYou() {
               <div className="space-y-2 print:space-y-1">
                 {data.recurrence.next_dates.slice(0, 3).map((date, index) => (
                   <div key={index} className="flex justify-between items-center print:text-sm">
-                    <span>#{index + 1}</span>
-                    <span className="font-medium">
+                    <span className="text-ds-text-muted">#{index + 1}</span>
+                    <span className="font-medium text-ds-text-default">
                       {formatDate(date)}
                     </span>
                   </div>
@@ -470,7 +458,7 @@ export default function ThankYou() {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-sm text-muted-foreground print:mt-4 print:text-xs">
+        <div className="text-center mt-8 text-sm text-ds-text-muted print:mt-4 print:text-xs">
           <p>{data?.ui?.support_hint}</p>
           <p className="mt-2">
             Guarde este comprovante para seus registros.
@@ -499,10 +487,6 @@ export default function ThankYou() {
             font-size: 0.75rem !important;
           }
           
-          .print\\:text-sm {
-            font-size: 0.875rem !important;
-          }
-          
           .print\\:text-lg {
             font-size: 1.125rem !important;
           }
@@ -511,70 +495,12 @@ export default function ThankYou() {
             font-size: 1.25rem !important;
           }
           
-          .print\\:h-4 {
-            height: 1rem !important;
-          }
-          
-          .print\\:w-4 {
-            width: 1rem !important;
-          }
-          
-          .print\\:h-8 {
-            height: 2rem !important;
-          }
-          
-          .print\\:w-8 {
-            width: 2rem !important;
-          }
-          
-          .print\\:mb-4 {
-            margin-bottom: 1rem !important;
-          }
-          
-          .print\\:mt-4 {
-            margin-top: 1rem !important;
-          }
-          
-          .print\\:pb-2 {
-            padding-bottom: 0.5rem !important;
-          }
-          
-          .print\\:p-2 {
-            padding: 0.5rem !important;
-          }
-          
-          .print\\:px-1 {
-            padding-left: 0.25rem !important;
-            padding-right: 0.25rem !important;
-          }
-          
-          .print\\:py-0 {
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
-          }
-          
-          .print\\:space-y-1 > * + * {
-            margin-top: 0.25rem !important;
-          }
-          
-          .print\\:space-y-2 > * + * {
-            margin-top: 0.5rem !important;
-          }
-          
-          .print\\:mt-1 {
-            margin-top: 0.25rem !important;
-          }
-          
           .print\\:shadow-none {
             box-shadow: none !important;
           }
           
-          .print\\:border-gray-300 {
-            border-color: #d1d5db !important;
-          }
-          
           .print\\:break-inside-avoid {
-            break-inside: avoid !important;
+            break-inside: avoid;
           }
         }
       `}</style>
