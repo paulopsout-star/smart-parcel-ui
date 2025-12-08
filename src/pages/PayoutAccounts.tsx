@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
-import { Layout } from "@/components/Layout";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 
 const accountSchema = z.object({
   pix_key: z.string().min(1, "Chave PIX é obrigatória"),
@@ -137,30 +137,20 @@ export default function PayoutAccounts() {
       };
 
       if (editingAccount) {
-        // Update existing account
         const { error } = await supabase
           .from('payout_accounts')
           .update(accountData)
           .eq('id', editingAccount.id);
 
         if (error) throw error;
-        
-        toast({
-          title: "Conta atualizada!",
-          description: "Conta de recebimento atualizada com sucesso."
-        });
+        toast({ title: "Conta atualizada!" });
       } else {
-        // Create new account
         const { error } = await supabase
           .from('payout_accounts')
           .insert(accountData);
 
         if (error) throw error;
-        
-        toast({
-          title: "Conta criada!",
-          description: "Conta de recebimento criada com sucesso."
-        });
+        toast({ title: "Conta criada!" });
       }
 
       reset();
@@ -168,10 +158,9 @@ export default function PayoutAccounts() {
       setEditingAccount(null);
       loadAccounts();
     } catch (error: any) {
-      console.error('Error saving payout account:', error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar conta de recebimento. Tente novamente.",
+        description: "Erro ao salvar conta de recebimento.",
         variant: "destructive"
       });
     } finally {
@@ -192,26 +181,11 @@ export default function PayoutAccounts() {
 
   const handleToggleActive = async (accountId: string, isActive: boolean) => {
     try {
-      const { error } = await supabase
-        .from('payout_accounts')
-        .update({ is_active: !isActive })
-        .eq('id', accountId);
-
-      if (error) throw error;
-      
-      toast({
-        title: isActive ? "Conta desativada!" : "Conta ativada!",
-        description: `Conta ${isActive ? 'desativada' : 'ativada'} com sucesso.`
-      });
-      
+      await supabase.from('payout_accounts').update({ is_active: !isActive }).eq('id', accountId);
+      toast({ title: isActive ? "Conta desativada!" : "Conta ativada!" });
       loadAccounts();
     } catch (error) {
-      console.error('Error toggling account status:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao alterar status da conta.",
-        variant: "destructive"
-      });
+      toast({ title: "Erro", description: "Erro ao alterar status.", variant: "destructive" });
     }
   };
 
@@ -219,25 +193,10 @@ export default function PayoutAccounts() {
     if (!profile) return;
     
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ default_payout_account_id: accountId })
-        .eq('id', profile.id);
-
-      if (error) throw error;
-      
-      toast({
-        title: "Conta padrão definida!",
-        description: "Conta definida como padrão para recebimentos."
-      });
-      
+      await supabase.from('profiles').update({ default_payout_account_id: accountId }).eq('id', profile.id);
+      toast({ title: "Conta padrão definida!" });
     } catch (error) {
-      console.error('Error setting default account:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao definir conta como padrão.",
-        variant: "destructive"
-      });
+      toast({ title: "Erro", variant: "destructive" });
     }
   };
 
@@ -253,220 +212,193 @@ export default function PayoutAccounts() {
   };
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Contas de Recebimento PIX</h1>
-          <p className="text-muted-foreground">
-            Gerencie suas contas PIX para recebimento de pagamentos
-          </p>
-        </div>
-        
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={handleNewAccount}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Conta PIX
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-xl">
-            <DialogHeader>
-              <DialogTitle>
-                {editingAccount ? "Editar Conta PIX" : "Nova Conta PIX"}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div>
-                <Label htmlFor="pix_key_type">Tipo de Chave PIX *</Label>
-                <Controller
-                  control={control}
-                  name="pix_key_type"
-                  render={({ field }) => (
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="cpf">CPF</SelectItem>
-                        <SelectItem value="cnpj">CNPJ</SelectItem>
-                        <SelectItem value="email">E-mail</SelectItem>
-                        <SelectItem value="phone">Telefone</SelectItem>
-                        <SelectItem value="random">Chave Aleatória</SelectItem>
-                      </SelectContent>
-                    </Select>
+    <DashboardShell>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-ds-text-strong">Contas de Recebimento PIX</h1>
+            <p className="text-ds-text-muted">
+              Gerencie suas contas PIX para recebimento de pagamentos
+            </p>
+          </div>
+          
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={handleNewAccount}>
+                <Plus className="w-4 h-4 mr-2" />
+                Nova Conta PIX
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xl">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingAccount ? "Editar Conta PIX" : "Nova Conta PIX"}
+                </DialogTitle>
+              </DialogHeader>
+              
+              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                <div>
+                  <Label htmlFor="pix_key_type">Tipo de Chave PIX *</Label>
+                  <Controller
+                    control={control}
+                    name="pix_key_type"
+                    render={({ field }) => (
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cpf">CPF</SelectItem>
+                          <SelectItem value="cnpj">CNPJ</SelectItem>
+                          <SelectItem value="email">E-mail</SelectItem>
+                          <SelectItem value="phone">Telefone</SelectItem>
+                          <SelectItem value="random">Chave Aleatória</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="pix_key">Chave PIX *</Label>
+                  <Input
+                    id="pix_key"
+                    placeholder={getPixKeyPlaceholder(watchPixKeyType)}
+                    {...register("pix_key")}
+                    className={errors.pix_key ? "border-destructive" : ""}
+                  />
+                  {errors.pix_key && (
+                    <p className="text-sm text-destructive mt-1">{errors.pix_key.message}</p>
                   )}
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="pix_key">Chave PIX *</Label>
-                <Input
-                  id="pix_key"
-                  placeholder={getPixKeyPlaceholder(watchPixKeyType)}
-                  {...register("pix_key")}
-                  className={errors.pix_key ? "border-destructive" : ""}
-                />
-                {errors.pix_key && (
-                  <p className="text-sm text-destructive mt-1">{errors.pix_key.message}</p>
-                )}
-              </div>
-              
-              <div>
-                <Label htmlFor="account_holder_name">Nome do Titular *</Label>
-                <Input
-                  id="account_holder_name"
-                  placeholder="Nome completo do titular"
-                  {...register("account_holder_name")}
-                  className={errors.account_holder_name ? "border-destructive" : ""}
-                />
-                {errors.account_holder_name && (
-                  <p className="text-sm text-destructive mt-1">{errors.account_holder_name.message}</p>
-                )}
-              </div>
-              
-              <div>
-                <Label htmlFor="account_holder_document">CPF/CNPJ do Titular *</Label>
-                <Input
-                  id="account_holder_document"
-                  placeholder="000.000.000-00"
-                  {...register("account_holder_document")}
-                  className={errors.account_holder_document ? "border-destructive" : ""}
-                />
-                {errors.account_holder_document && (
-                  <p className="text-sm text-destructive mt-1">{errors.account_holder_document.message}</p>
-                )}
-              </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="account_holder_name">Nome do Titular *</Label>
+                  <Input
+                    id="account_holder_name"
+                    placeholder="Nome completo do titular"
+                    {...register("account_holder_name")}
+                    className={errors.account_holder_name ? "border-destructive" : ""}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="account_holder_document">CPF/CNPJ do Titular *</Label>
+                  <Input
+                    id="account_holder_document"
+                    placeholder="000.000.000-00"
+                    {...register("account_holder_document")}
+                    className={errors.account_holder_document ? "border-destructive" : ""}
+                  />
+                </div>
 
-              <Alert>
-                <Wallet className="w-4 h-4" />
-                <AlertDescription>
-                  Esta conta será usada para receber pagamentos PIX. Certifique-se de que os dados estão corretos.
-                </AlertDescription>
-              </Alert>
+                <Alert>
+                  <Wallet className="w-4 h-4" />
+                  <AlertDescription>
+                    Esta conta será usada para receber pagamentos PIX.
+                  </AlertDescription>
+                </Alert>
 
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsDialogOpen(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    <>
-                      <Wallet className="w-4 h-4 mr-2" />
-                      {editingAccount ? "Atualizar" : "Criar"} Conta
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin" />
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                    {editingAccount ? "Atualizar" : "Criar"} Conta
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Contas PIX ({accounts.filter(a => a.is_active).length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {accounts.filter(a => a.is_active).length === 0 ? (
-              <div className="text-center py-8">
-                <Wallet className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">Nenhuma conta PIX encontrada</h3>
-                <p className="text-muted-foreground mb-4">
-                  Adicione uma conta PIX para receber pagamentos
-                </p>
-                <Button onClick={handleNewAccount}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Adicionar Conta PIX
-                </Button>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Chave PIX</TableHead>
-                    <TableHead>Titular</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {accounts.filter(a => a.is_active).map((account) => (
-                    <TableRow key={account.id}>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {getPixKeyTypeLabel(account.pix_key_type)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono">
-                        {account.pix_key}
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{account.account_holder_name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {account.account_holder_document}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={account.is_active ? "default" : "secondary"}>
-                          {account.is_active ? "Ativa" : "Inativa"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleSetAsDefault(account.id)}
-                            title="Definir como padrão"
-                          >
-                            <Check className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(account)}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleToggleActive(account.id, account.is_active)}
-                            className={account.is_active ? "text-destructive hover:text-destructive" : "text-green-600 hover:text-green-600"}
-                          >
-                            {account.is_active ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                          </Button>
-                        </div>
-                      </TableCell>
+
+        {/* Content */}
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Contas PIX ({accounts.filter(a => a.is_active).length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {accounts.filter(a => a.is_active).length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Wallet className="w-8 h-8 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-medium text-ds-text-strong mb-2">Nenhuma conta PIX</h3>
+                  <p className="text-ds-text-muted mb-4">
+                    Adicione uma conta PIX para receber pagamentos
+                  </p>
+                  <Button onClick={handleNewAccount}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Conta PIX
+                  </Button>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Chave PIX</TableHead>
+                      <TableHead>Titular</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      )}
-    </div>
+                  </TableHeader>
+                  <TableBody>
+                    {accounts.filter(a => a.is_active).map((account) => (
+                      <TableRow key={account.id}>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {getPixKeyTypeLabel(account.pix_key_type)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {account.pix_key}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <div className="font-medium text-ds-text-strong">{account.account_holder_name}</div>
+                            <div className="text-sm text-ds-text-muted">{account.account_holder_document}</div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={account.is_active ? "success" : "secondary"}>
+                            {account.is_active ? "Ativa" : "Inativa"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end space-x-2">
+                            <Button variant="ghost" size="icon" onClick={() => handleSetAsDefault(account.id)} title="Definir como padrão">
+                              <Check className="w-4 h-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(account)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleToggleActive(account.id, account.is_active)}
+                              className={account.is_active ? "text-destructive hover:text-destructive" : "text-green-600"}
+                            >
+                              {account.is_active ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </DashboardShell>
   );
 }
