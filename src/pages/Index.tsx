@@ -13,6 +13,9 @@ import HandDrawnArrow from "@/components/autopay/HandDrawnArrow";
 
 export default function Index() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [leadModalOpen, setLeadModalOpen] = useState(false);
+
+  const openLeadModal = () => setLeadModalOpen(true);
 
   return (
     <div className="min-h-screen bg-autopay-bg">
@@ -21,10 +24,10 @@ export default function Index() {
       <meta name="description" content="Hub de Pagamentos Autonegocie - Plataforma completa para gestão de cobranças, parcelamentos flexíveis e recebimento garantido." />
 
       {/* Navbar */}
-      <Navbar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
+      <Navbar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} onOpenLeadModal={openLeadModal} />
 
       {/* Hero Section */}
-      <HeroSection />
+      <HeroSection onOpenLeadModal={openLeadModal} />
 
       {/* Features Section */}
       <FeaturesSection />
@@ -49,6 +52,9 @@ export default function Index() {
 
       {/* Footer */}
       <Footer />
+
+      {/* Lead Capture Modal */}
+      <LeadCaptureModal open={leadModalOpen} onOpenChange={setLeadModalOpen} />
     </div>
   );
 }
@@ -56,10 +62,12 @@ export default function Index() {
 // ==================== NAVBAR ====================
 const Navbar = ({
   mobileMenuOpen,
-  setMobileMenuOpen
+  setMobileMenuOpen,
+  onOpenLeadModal
 }: {
   mobileMenuOpen: boolean;
   setMobileMenuOpen: (open: boolean) => void;
+  onOpenLeadModal: () => void;
 }) => {
   const navLinks = [
     { label: "Funcionalidades", href: "#funcionalidades" },
@@ -94,11 +102,12 @@ const Navbar = ({
               Entrar
             </Button>
           </Link>
-          <Link to="/register">
-            <Button className="rounded-full bg-autopay-text text-white hover:bg-autopay-text/90 shadow-autopay-card-soft">
-              Criar conta
-            </Button>
-          </Link>
+          <Button 
+            onClick={onOpenLeadModal}
+            className="rounded-full bg-autopay-text text-white hover:bg-autopay-text/90 shadow-autopay-card-soft"
+          >
+            Criar conta
+          </Button>
         </div>
 
         {/* Mobile Menu Button */}
@@ -124,9 +133,12 @@ const Navbar = ({
             <Link to="/login" className="flex-1" onClick={() => setMobileMenuOpen(false)}>
               <Button variant="outline" className="w-full rounded-full">Entrar</Button>
             </Link>
-            <Link to="/register" className="flex-1" onClick={() => setMobileMenuOpen(false)}>
-              <Button className="w-full rounded-full bg-autopay-text text-white">Criar conta</Button>
-            </Link>
+            <Button 
+              className="flex-1 w-full rounded-full bg-autopay-text text-white"
+              onClick={() => { setMobileMenuOpen(false); onOpenLeadModal(); }}
+            >
+              Criar conta
+            </Button>
           </div>
         </div>
       )}
@@ -135,9 +147,7 @@ const Navbar = ({
 };
 
 // ==================== HERO SECTION ====================
-const HeroSection = () => {
-  const [leadModalOpen, setLeadModalOpen] = useState(false);
-
+const HeroSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
   return (
     <section className="py-8 px-6">
       <div className="max-w-[1120px] mx-auto">
@@ -155,7 +165,7 @@ const HeroSection = () => {
               <div className="flex flex-col sm:flex-row gap-4 items-start">
                 <Button 
                   size="lg" 
-                  onClick={() => setLeadModalOpen(true)}
+                  onClick={onOpenLeadModal}
                   className="rounded-full text-white px-8 py-6 text-base font-semibold shadow-autopay-card hover:-translate-y-0.5 transition-all bg-[#00d678]"
                 >
                   Comece Agora
@@ -184,9 +194,6 @@ const HeroSection = () => {
           </div>
         </div>
       </div>
-
-      {/* Lead Capture Modal */}
-      <LeadCaptureModal open={leadModalOpen} onOpenChange={setLeadModalOpen} />
     </section>
   );
 };
