@@ -147,7 +147,7 @@ const FeaturesSection = () => {
   }];
   
   return (
-    <section id="funcionalidades" className="py-16 px-6 bg-white">
+    <section id="funcionalidades" className="py-16 px-6">
       <div className="max-w-[1120px] mx-auto">
         {/* Título em largura total */}
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-autopay-text text-center mb-16 tracking-tight leading-[1.1]">
