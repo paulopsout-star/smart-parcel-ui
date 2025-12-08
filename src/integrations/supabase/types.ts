@@ -347,6 +347,42 @@ export type Database = {
         }
         Relationships: []
       }
+      leads: {
+        Row: {
+          company: string | null
+          converted_at: string | null
+          created_at: string | null
+          email: string
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          source: string | null
+        }
+        Insert: {
+          company?: string | null
+          converted_at?: string | null
+          created_at?: string | null
+          email: string
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          source?: string | null
+        }
+        Update: {
+          company?: string | null
+          converted_at?: string | null
+          created_at?: string | null
+          email?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          source?: string | null
+        }
+        Relationships: []
+      }
       message_templates: {
         Row: {
           company_id: string
