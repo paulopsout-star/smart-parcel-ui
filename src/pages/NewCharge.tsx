@@ -9,7 +9,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
-import { User, Receipt, Banknote, Wallet, Calculator } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { User, Receipt, Banknote, Wallet, Calculator, CreditCard, QrCode } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,10 +27,9 @@ import { FieldSkeleton } from '@/components/forms/FieldSkeleton';
 import { formatPhone, formatDocument, unformatPhone, unformatDocument } from '@/lib/input-masks';
 import { cn } from '@/lib/utils';
 import { SimulatorModal } from '@/components/SimulatorModal';
-import { Layout } from '@/components/Layout';
+import { DashboardShell } from '@/components/dashboard/DashboardShell';
 
 const formSchema = z.object({
-  // Dados do pagador
   payer_name: z.string().min(1, "Nome é obrigatório").max(200, "Nome deve ter no máximo 200 caracteres"),
   payer_email: z.string().email("Email inválido"),
   payer_phone: z.string()
@@ -48,11 +48,7 @@ const formSchema = z.object({
     }, {
       message: "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos"
     }),
-  
-  // Método de pagamento
   payment_method: z.enum(["pix", "cartao"]).default("cartao"),
-  
-  // Dados da cobrança
   amount: z.string().min(1, "Valor é obrigatório"),
   description: z.string().optional(),
   installments: z.string(),
@@ -60,12 +56,8 @@ const formSchema = z.object({
   has_boleto: z.boolean(),
   boleto_barcode: z.string().optional(),
   message_template_id: z.string().optional(),
-  
-  // Novos campos para vínculo de boleto (condicional para cartão)
   has_boleto_link: z.boolean().default(true),
   boleto_linha_digitavel: z.string().optional(),
-  
-  // Recorrência
   recurrence_type: z.enum(["pontual", "diaria", "semanal", "quinzenal", "mensal", "semestral", "anual"]),
   recurrence_interval: z.string(),
   recurrence_end_date: z.string().optional(),
@@ -100,7 +92,6 @@ export default function NewCharge() {
   const [enableSplit, setEnableSplit] = useState(false);
   const [showSimulatorModal, setShowSimulatorModal] = useState(false);
   
-  // Use stable hook for company settings
   const { 
     data: creditorSettings, 
     isLoading: settingsLoading, 
@@ -119,7 +110,6 @@ export default function NewCharge() {
   const { toast } = useToast();
   const navigate = useNavigate();
   
-  // Hook to load message templates scoped by company_id
   const { data: messageTemplates = [], isLoading: loadingTemplates, isError: templatesError } = useMessageTemplates(profile?.id);
 
   const {
@@ -150,7 +140,6 @@ export default function NewCharge() {
   const watchPayerName = watch("payer_name");
   const watchPaymentMethod = watch("payment_method");
 
-  // Verificar conta PIX e revalidar assinatura
   useEffect(() => {
     if (!profile) return;
     
@@ -177,11 +166,10 @@ export default function NewCharge() {
   }, [profile]);
 
   const formatAmount = (value: string) => {
-    // Remove separadores de milhar (.) e converte vírgula decimal para ponto
     const numericValue = parseFloat(
       value.replace(/[^\d.,]/g, '')
-        .replace(/\./g, '')  // Remove todos os pontos (separador de milhar)
-        .replace(',', '.')   // Converte vírgula para ponto (decimal)
+        .replace(/\./g, '')
+        .replace(',', '.')
     );
     return Math.round(numericValue * 100);
   };
@@ -223,9 +211,8 @@ export default function NewCharge() {
     }
   };
 
-  // Helper function to normalize linha digitável
   const normalizeBoletoLinhaDigitavel = (linha: string) => {
-    return linha.replace(/\D/g, ''); // Remove all non-digits
+    return linha.replace(/\D/g, '');
   };
 
   const onSubmit = async (data: FormData) => {
@@ -237,29 +224,25 @@ export default function NewCharge() {
     
     if (!profile) return;
     
-    // Guard: Validar configurações do credor antes de criar cobrança
     if (!isSettingsValid) {
       toast({
         title: 'Configurações da empresa ausentes',
         description: 'Atualize a página e tente novamente. Se o problema persistir, entre em contato com o suporte.',
-        className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
+        variant: 'destructive'
       });
       return;
     }
     
-    // Validar conta PIX apenas para cobranças recorrentes sem boleto
-    // Para cobranças pontuais, o checkout de cartão não requer conta PIX
     if (data.recurrence_type !== 'pontual' && !data.has_boleto && !hasPayoutAccount) {
       setError('Para cobranças recorrentes sem boleto, é necessário ter uma conta PIX cadastrada.');
       toast({
         title: "Conta PIX necessária",
         description: "Cadastre uma conta PIX em 'Contas PIX' antes de criar cobranças recorrentes sem boleto.",
-        className: 'bg-feedback-warning-bg border-feedback-warning text-feedback-warning'
+        variant: 'destructive'
       });
       return;
     }
     
-    // Log UI event for telemetry
     if (data.recurrence_type === "pontual") {
       console.log('ui.newcharge.pontual.toggle_boleto_link:', data.has_boleto_link ? 'on' : 'off');
     }
@@ -272,17 +255,15 @@ export default function NewCharge() {
       let feeAmount = 0;
       let feePercentage = 0;
       
-      // Aplicar taxa de 3% para cobranças PIX
       if (data.payment_method === 'pix') {
-        feeAmount = Math.round(amountInCents * 0.03); // 3% de taxa
+        feeAmount = Math.round(amountInCents * 0.03);
         feePercentage = 3.00;
-        amountInCents = amountInCents + feeAmount; // Total com taxa incluída
+        amountInCents = amountInCents + feeAmount;
       }
       
       const interval = parseInt(data.recurrence_interval) || 1;
       const nextChargeDate = calculateNextChargeDate(data.recurrence_type, interval);
 
-      // Buscar snapshot do template de mensagem se selecionado
       let messageTemplateSnapshot = null;
       if (data.message_template_id && data.message_template_id !== "none") {
         const { data: template } = await supabase
@@ -301,24 +282,21 @@ export default function NewCharge() {
         }
       }
 
-      // Normalize linha digitável if provided
       const normalizedLinhaDigitavel = data.boleto_linha_digitavel 
         ? normalizeBoletoLinhaDigitavel(data.boleto_linha_digitavel)
         : null;
 
-      // Backend logging for telemetry
       if (data.has_boleto_link && normalizedLinhaDigitavel) {
         console.log('Backend: boleto_linha_digitavel saved', {
           length: normalizedLinhaDigitavel.length,
-          hash_prefix: normalizedLinhaDigitavel.substring(0, 8) // Log first 8 digits only
+          hash_prefix: normalizedLinhaDigitavel.substring(0, 8)
         });
       }
 
-      // Create charge record
       const { data: charge, error: chargeError } = await supabase
         .from('charges')
         .insert({
-          company_id: profile.company_id, // CRITICAL: isolamento por empresa
+          company_id: profile.company_id,
           created_by: profile.id,
           payer_name: data.payer_name,
           payer_email: data.payer_email,
@@ -331,10 +309,8 @@ export default function NewCharge() {
           mask_fee: data.mask_fee,
           has_boleto: data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
-          // New fields for boleto link
           has_boleto_link: data.recurrence_type === "pontual" ? data.has_boleto_link : false,
           boleto_linha_digitavel: data.recurrence_type === "pontual" && data.has_boleto_link ? normalizedLinhaDigitavel : null,
-          // Creditor settings from company-settings edge function
           creditor_document: creditorSettings?.creditor_document || null,
           creditor_name: creditorSettings?.creditor_name || null,
           message_template_id: data.message_template_id === "none" ? null : data.message_template_id,
@@ -343,7 +319,6 @@ export default function NewCharge() {
           recurrence_interval: interval,
           recurrence_end_date: data.recurrence_end_date ? new Date(data.recurrence_end_date).toISOString() : null,
           next_charge_date: nextChargeDate?.toISOString() || null,
-          // Fee fields (PIX only)
           fee_amount: feeAmount,
           fee_percentage: feePercentage,
           metadata: {
@@ -361,7 +336,6 @@ export default function NewCharge() {
 
       console.log('[NewCharge] Cobrança criada com sucesso no banco:', charge.id);
 
-      // Se o método de pagamento for PIX, abrir modal com link
       if (data.payment_method === 'pix') {
         const checkoutUrl = `${window.location.origin}/checkout-pix/${charge.id}`;
         
@@ -378,7 +352,6 @@ export default function NewCharge() {
         toast({
           title: "Cobrança PIX criada!",
           description: "Link de pagamento gerado com sucesso.",
-          className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
         });
         
         setCheckoutData(fullCheckoutData);
@@ -386,7 +359,6 @@ export default function NewCharge() {
         return;
       }
 
-      // Se houver template de mensagem, enviar mensagem mock
       if (data.message_template_id && data.message_template_id !== "none" && messageTemplateSnapshot) {
         try {
           await supabase.functions.invoke('send-mock-message', {
@@ -400,25 +372,20 @@ export default function NewCharge() {
           });
         } catch (messageError) {
           console.error('Error sending mock message:', messageError);
-          // Não falhar a criação da cobrança por causa da mensagem
         }
       }
 
-      // Para cobranças recorrentes ou com boleto físico, apenas informar sucesso
-      // O processamento via integração externa será implementado posteriormente
       if (data.recurrence_type !== 'pontual' || data.has_boleto) {
         toast({
           title: "Cobrança criada com sucesso!",
           description: data.recurrence_type === 'pontual' 
             ? "Cobrança com boleto criada. O processamento será realizado quando a integração estiver ativa."
             : `Cobrança recorrente configurada (${data.recurrence_type}). O agendamento será processado quando a integração estiver ativa.`,
-          className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
         });
         navigate('/charges');
         return;
       }
 
-      // Log para cobrança pontual com vínculo de boleto
       if (data.recurrence_type === 'pontual' && data.has_boleto_link && normalizedLinhaDigitavel) {
         console.log('[NewCharge] ℹ️ Cobrança pontual com boleto criada:', {
           chargeId: charge.id,
@@ -430,7 +397,6 @@ export default function NewCharge() {
         });
       }
 
-      // Para cobranças pontuais de cartão, gerar link de checkout interno (sem API externa)
       console.log('[NewCharge] Gerando link de checkout para cobrança pontual...');
       if (data.recurrence_type === 'pontual' && !data.has_boleto) {
         try {
@@ -450,411 +416,524 @@ export default function NewCharge() {
             throw new Error('Link não foi gerado');
           }
           
-          console.log('[NewCharge] Link gerado com sucesso:', linkData.link.url);
-          
-          // Adicionar query param ?mode=split ou ?mode=direct baseado no toggle
-          const checkoutMode = enableSplit ? 'split' : 'direct';
-          const checkoutUrlWithMode = `${linkData.link.url}${linkData.link.url.includes('?') ? '&' : '?'}mode=${checkoutMode}`;
-          
-          // Construir checkoutData completo com os dados da cobrança criada
           const fullCheckoutData = {
             chargeId: charge.id,
-            checkoutUrl: checkoutUrlWithMode,
-            linkId: linkData.link.linkId || linkData.link.id, // Suporte para ambos formatos
-            amount: charge.amount, // já está em centavos do banco
+            checkoutUrl: linkData.link.url,
+            linkId: linkData.link.id,
+            amount: charge.amount,
             payerName: charge.payer_name,
             description: charge.description || undefined,
             status: 'PENDENTE' as const
           };
 
-          console.log('[NewCharge] Checkout data completo:', fullCheckoutData);
-
-          // Toast de sucesso
           toast({
-            title: "Link de pagamento gerado!",
-            description: enableSplit 
-              ? "Link com split PIX+Cartão criado com sucesso."
-              : "Link de pagamento direto criado com sucesso.",
-            className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
+            title: "Cobrança criada com sucesso!",
+            description: "Link de checkout gerado.",
           });
           
-          // Setar dados completos
           setCheckoutData(fullCheckoutData);
           setShowCheckoutModal(true);
-          
-          // Não navegar para /charges, ficar para mostrar o modal
           return;
-        } catch (error) {
-          console.error('[NewCharge] Erro ao gerar checkout:', error);
-          toast({
-            title: "Cobrança criada com aviso",
-            description: "A cobrança foi criada, mas o link de pagamento não pôde ser gerado automaticamente. Use 'Gerar Link' no histórico.",
-            className: 'bg-feedback-warning-bg border-feedback-warning text-feedback-warning'
-          });
           
-          // Navegar para o histórico mesmo com erro
-          setTimeout(() => navigate('/charges'), 2000);
+        } catch (linkError: any) {
+          console.error('[NewCharge] Erro ao criar link:', linkError);
+          toast({
+            title: "Cobrança criada",
+            description: "Houve um problema ao gerar o link de checkout. Tente novamente pelo histórico.",
+            variant: 'destructive'
+          });
+          navigate('/charges');
           return;
         }
       }
 
+      toast({
+        title: "Cobrança criada",
+        description: "Cobrança registrada com sucesso!",
+      });
       navigate('/charges');
-
+      
     } catch (error: any) {
       console.error('Error creating charge:', error);
-      setError('Erro ao criar cobrança. Tente novamente.');
+      setError(error.message);
       toast({
         title: "Erro ao criar cobrança",
-        description: error.message || 'Tente novamente.',
-        className: 'bg-feedback-error-bg border-feedback-error text-feedback-error'
+        description: error.message,
+        variant: 'destructive'
       });
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Validação customizada da linha digitável para método cartão
-  const linhaDigitavelError = watchPaymentMethod === 'cartao' && watchBoletoLinhaDigitavel 
-    ? (() => {
-        const digits = watchBoletoLinhaDigitavel.replace(/\D/g, '');
-        if (digits.length !== 47 && digits.length !== 48) {
-          return "Linha digitável deve ter 47 ou 48 dígitos";
-        }
-        return null;
-      })()
-    : null;
-
-  // Calcular erros de validação para o SummaryCard
-  const validationErrors = [
-    !watchAmount && "Valor não informado",
-    watchPaymentMethod === 'cartao' && !watchBoletoLinhaDigitavel && "Linha digitável obrigatória",
-    watchPaymentMethod === 'cartao' && linhaDigitavelError,
-    errors.payer_name?.message,
-    errors.payer_email?.message,
-    errors.payer_phone?.message,
-    errors.payer_document?.message,
-    errors.amount?.message
-  ].filter(Boolean) as string[];
-
-  const isFormValid = Object.keys(errors).length === 0 && !!watchAmount && 
-    (watchPaymentMethod === 'pix' || (!!watchBoletoLinhaDigitavel && !linhaDigitavelError));
+  if (authLoading || checkingPayoutAccount) {
+    return (
+      <DashboardShell>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </DashboardShell>
+    );
+  }
 
   return (
-    <ErrorBoundary>
-      <Layout>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-          <div className="max-w-7xl mx-auto">
-          {/* Header */}
-          <div className="mb-8 space-y-2">
-            <h1 className="text-2xl sm:text-3xl font-bold text-ink">Nova Cobrança</h1>
-            <p className="text-sm text-ink-secondary">
-              Crie uma cobrança pontual com vínculo de boleto
-            </p>
-          </div>
-          
-          {!settingsLoading && !isSettingsValid && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>
-                <strong>Configurações Incompletas:</strong> As configurações da empresa não foram carregadas. Atualize a página ou entre em contato com o suporte.
-              </AlertDescription>
-            </Alert>
-          )}
-          
-          <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
-            {/* Main Form - 2/3 */}
-            <div className="xl:col-span-2 space-y-6">
-              
-                
-                  {/* Método de Pagamento */}
-                  <FormSection
-                    title="Método de Pagamento"
-                    icon={<Wallet className="w-5 h-5 text-brand" />}
-                  >
-                    <div className="flex gap-4">
-                      <label className={cn(
-                        "flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all",
-                        watchPaymentMethod === 'cartao' 
-                          ? "border-brand bg-brand/5" 
-                          : "border-border hover:border-brand/50"
-                      )}>
-                        <input
-                          type="radio"
-                          value="cartao"
-                          {...register("payment_method")}
-                          className="sr-only"
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium text-ink">💳 Cartão de Crédito</div>
-                          <div className="text-sm text-ink-secondary">Com vínculo de boleto</div>
-                        </div>
-                      </label>
-                      
-                      <label className={cn(
-                        "flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all",
-                        watchPaymentMethod === 'pix' 
-                          ? "border-brand bg-brand/5" 
-                          : "border-border hover:border-brand/50"
-                      )}>
-                        <input
-                          type="radio"
-                          value="pix"
-                          {...register("payment_method")}
-                          className="sr-only"
-                        />
-                        <div className="flex-1">
-                          <div className="font-medium text-ink">📱 PIX</div>
-                          <div className="text-sm text-ink-secondary">Pagamento instantâneo</div>
-                        </div>
-                      </label>
-                    </div>
-                  </FormSection>
-                
-                   {/* Dados do Pagador */}
-                  <FormSection
-                    title="Dados do Pagador"
-                    icon={<User className="w-5 h-5 text-brand" />}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        label="Nome Completo"
-                        htmlFor="payer_name"
-                        error={errors.payer_name?.message}
-                        required
-                      >
-                        <Input
-                          id="payer_name"
-                          placeholder="Nome do pagador"
-                          {...register("payer_name")}
-                          className={cn(
-                            "transition-all duration-200",
-                            errors.payer_name && "border-feedback-error focus:ring-feedback-error"
-                          )}
-                        />
-                      </FormField>
-
-                      <FormField
-                        label="Email"
-                        htmlFor="payer_email"
-                        error={errors.payer_email?.message}
-                        helpText="Será usado para envio de confirmações"
-                        required
-                      >
-                        <Input
-                          id="payer_email"
-                          type="email"
-                          placeholder="email@exemplo.com"
-                          {...register("payer_email")}
-                          className={cn(
-                            "transition-all duration-200",
-                            errors.payer_email && "border-feedback-error focus:ring-feedback-error"
-                          )}
-                        />
-                      </FormField>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <FormField
-                        label="Telefone"
-                        htmlFor="payer_phone"
-                        error={errors.payer_phone?.message}
-                        helpText="Formato: (11) 99999-9999"
-                        required
-                      >
-                        <Input
-                          id="payer_phone"
-                          placeholder="(11) 99999-9999"
-                          {...register("payer_phone")}
-                          onChange={(e) => {
-                            const formatted = formatPhone(e.target.value);
-                            setValue("payer_phone", formatted);
-                          }}
-                          className={cn(
-                            "transition-all duration-200",
-                            errors.payer_phone && "border-feedback-error focus:ring-feedback-error"
-                          )}
-                        />
-                      </FormField>
-
-                      <FormField
-                        label="CPF/CNPJ"
-                        htmlFor="payer_document"
-                        error={errors.payer_document?.message}
-                        helpText="Apenas números"
-                        required
-                      >
-                        <Input
-                          id="payer_document"
-                          placeholder="000.000.000-00"
-                          {...register("payer_document")}
-                          onChange={(e) => {
-                            const formatted = formatDocument(e.target.value);
-                            setValue("payer_document", formatted);
-                          }}
-                          className={cn(
-                            "transition-all duration-200",
-                            errors.payer_document && "border-feedback-error focus:ring-feedback-error"
-                          )}
-                        />
-                      </FormField>
-                    </div>
-                  </FormSection>
-
-                  {/* Configurações da Cobrança */}
-                  <FormSection
-                    title="Configurações da Cobrança"
-                    icon={<Receipt className="w-5 h-5 text-brand" />}
-                  >
-                    <div className="space-y-6">
-                      {/* Valor */}
-                      <FormField
-                        label="Valor da Cobrança"
-                        htmlFor="amount"
-                        error={errors.amount?.message}
-                        helpText="Valor total a ser cobrado"
-                        required
-                      >
-                        <div className="space-y-3">
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-secondary font-medium">R$</span>
-                            <Input
-                              id="amount"
-                              placeholder="0,00"
-                              {...register("amount")}
-                              className={cn(
-                                "pl-10 font-medium text-lg transition-all duration-200",
-                                errors.amount && "border-feedback-error focus:ring-feedback-error"
-                              )}
-                            />
-                          </div>
-                          {watchAmount && (
-                            <div className="flex items-center justify-between">
-                              <p className="text-sm text-brand font-medium">
-                                {formatCurrency(formatAmount(watchAmount))}
-                              </p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowSimulatorModal(true)}
-                                className="gap-2"
-                              >
-                                <Calculator className="h-4 w-4" />
-                                Simular Parcelamento
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </FormField>
-
-                      {/* Linha Digitável - Mostrar apenas para Cartão */}
-                      {watchPaymentMethod === 'cartao' && (
-                        <FormField
-                          label="Linha Digitável do Boleto"
-                          htmlFor="boleto_linha_digitavel"
-                          error={linhaDigitavelError || undefined}
-                          helpText="47 ou 48 dígitos (apenas números)"
-                          helpIcon
-                          required
-                        >
-                          <Textarea
-                            id="boleto_linha_digitavel"
-                            placeholder="Digite ou cole a linha digitável do boleto"
-                            {...register("boleto_linha_digitavel")}
-                            className={cn(
-                              "font-mono resize-none transition-all duration-200",
-                              errors.boleto_linha_digitavel && "border-feedback-error focus:ring-feedback-error"
-                            )}
-                            rows={3}
-                          />
-                          
-                          {/* Contador de dígitos */}
-                          {watchBoletoLinhaDigitavel && (
-                            <div className="flex items-center gap-2 mt-2">
-                              <Banknote className="w-4 h-4 text-brand" />
-                              <span className={cn(
-                                "text-sm font-medium",
-                                watchBoletoLinhaDigitavel.replace(/\D/g, '').length === 47 ||
-                                watchBoletoLinhaDigitavel.replace(/\D/g, '').length === 48
-                                  ? "text-feedback-success"
-                                  : "text-ink-muted"
-                              )}>
-                                {watchBoletoLinhaDigitavel.replace(/\D/g, '').length} dígitos
-                              </span>
-                            </div>
-                          )}
-                        </FormField>
-                      )}
-
-                      {/* Descrição */}
-                      <FormField
-                        label="Descrição"
-                        htmlFor="description"
-                        helpText="Informações adicionais sobre a cobrança"
-                      >
-                        <Textarea
-                          id="description"
-                          placeholder="Ex: Referente ao contrato #123..."
-                          {...register("description")}
-                          rows={4}
-                          className="transition-all duration-200"
-                        />
-                      </FormField>
-
-                      {/* Alerta de Conta PIX (se necessário) */}
-                      {!hasPayoutAccount && !checkingPayoutAccount && (
-                        <Alert className="bg-feedback-warning-bg border-feedback-warning">
-                          <Wallet className="w-4 h-4 text-feedback-warning" />
-                          <AlertDescription className="text-feedback-warning">
-                            Você ainda não possui uma conta PIX cadastrada.{" "}
-                            <Link to="/payout-accounts" className="underline font-medium">
-                              Cadastrar agora
-                            </Link>
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  </FormSection>
-                
-            </div>
-
-            {/* Sidebar - 1/3 */}
-            <div className="xl:col-span-1">
-              <SummaryCard
-                totalAmount={watchAmount ? formatAmount(watchAmount) : 0}
-                recurrenceType={watchRecurrenceType}
-                payerName={watchPayerName}
-                isValid={isFormValid && isSettingsValid}
-                validationErrors={validationErrors}
-                onSubmit={handleSubmit(onSubmit)}
-                isLoading={isLoading}
-              />
-            </div>
-          </form>
-
-          {/* Checkout Success Modal */}
-          {showCheckoutModal && checkoutData && (
-            <CheckoutSuccessModal
-              open={showCheckoutModal}
-              onOpenChange={(open) => {
-                setShowCheckoutModal(open);
-                if (!open) {
-                  setCheckoutData(null);
-                  navigate('/charges');
-                }
-              }}
-              checkoutData={checkoutData}
-            />
-          )}
-
-          {/* Simulator Modal */}
-          <SimulatorModal
-            open={showSimulatorModal}
-            onOpenChange={setShowSimulatorModal}
-            initialAmount={watchAmount ? formatAmount(watchAmount) : undefined}
-          />
-          </div>
+    <DashboardShell>
+      <div className="space-y-6">
+        {/* Page Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-ds-text-strong">Nova Cobrança</h1>
+          <p className="text-ds-text-muted">Crie uma nova cobrança para seus clientes</p>
         </div>
-      </Layout>
-    </ErrorBoundary>
+
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Form */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Dados do Pagador */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <User className="h-5 w-5 text-primary" />
+                    Dados do Pagador
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="payer_name">Nome Completo *</Label>
+                      <Input
+                        id="payer_name"
+                        {...register("payer_name")}
+                        placeholder="Nome do pagador"
+                        className={errors.payer_name ? "border-destructive" : ""}
+                      />
+                      {errors.payer_name && (
+                        <p className="text-sm text-destructive">{errors.payer_name.message}</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="payer_email">Email *</Label>
+                      <Input
+                        id="payer_email"
+                        type="email"
+                        {...register("payer_email")}
+                        placeholder="email@exemplo.com"
+                        className={errors.payer_email ? "border-destructive" : ""}
+                      />
+                      {errors.payer_email && (
+                        <p className="text-sm text-destructive">{errors.payer_email.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="payer_phone">Telefone *</Label>
+                      <Controller
+                        name="payer_phone"
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            {...field}
+                            onChange={(e) => field.onChange(formatPhone(e.target.value))}
+                            placeholder="(11) 99999-9999"
+                            className={errors.payer_phone ? "border-destructive" : ""}
+                          />
+                        )}
+                      />
+                      {errors.payer_phone && (
+                        <p className="text-sm text-destructive">{errors.payer_phone.message}</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="payer_document">CPF/CNPJ *</Label>
+                      <Controller
+                        name="payer_document"
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            {...field}
+                            onChange={(e) => field.onChange(formatDocument(e.target.value))}
+                            placeholder="000.000.000-00"
+                            className={errors.payer_document ? "border-destructive" : ""}
+                          />
+                        )}
+                      />
+                      {errors.payer_document && (
+                        <p className="text-sm text-destructive">{errors.payer_document.message}</p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Dados da Cobrança */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Receipt className="h-5 w-5 text-primary" />
+                    Dados da Cobrança
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="amount">Valor *</Label>
+                      <Input
+                        id="amount"
+                        {...register("amount")}
+                        placeholder="R$ 0,00"
+                        className={errors.amount ? "border-destructive" : ""}
+                      />
+                      {errors.amount && (
+                        <p className="text-sm text-destructive">{errors.amount.message}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Método de Pagamento *</Label>
+                      <Controller
+                        name="payment_method"
+                        control={control}
+                        render={({ field }) => (
+                          <RadioGroup
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            className="flex gap-4"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="cartao" id="cartao" />
+                              <Label htmlFor="cartao" className="flex items-center gap-1.5 cursor-pointer">
+                                <CreditCard className="h-4 w-4" />
+                                Cartão
+                              </Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="pix" id="pix" />
+                              <Label htmlFor="pix" className="flex items-center gap-1.5 cursor-pointer">
+                                <QrCode className="h-4 w-4" />
+                                PIX
+                              </Label>
+                            </div>
+                          </RadioGroup>
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Descrição</Label>
+                    <Textarea
+                      id="description"
+                      {...register("description")}
+                      placeholder="Descrição da cobrança (opcional)"
+                      rows={3}
+                    />
+                  </div>
+
+                  {watchPaymentMethod === "cartao" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Parcelas</Label>
+                        <Controller
+                          name="installments"
+                          control={control}
+                          render={({ field }) => (
+                            <Select value={field.value} onValueChange={field.onChange}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Selecione" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[1,2,3,4,5,6,7,8,9,10,11,12].map((i) => (
+                                  <SelectItem key={i} value={i.toString()}>
+                                    {i}x {i === 1 ? 'à vista' : ''}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                      </div>
+
+                      <div className="flex items-center space-x-2 pt-6">
+                        <Controller
+                          name="mask_fee"
+                          control={control}
+                          render={({ field }) => (
+                            <Checkbox
+                              id="mask_fee"
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          )}
+                        />
+                        <Label htmlFor="mask_fee" className="text-sm cursor-pointer">
+                          Ocultar taxa do pagador
+                        </Label>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Vínculo de Boleto */}
+              {watchRecurrenceType === "pontual" && watchPaymentMethod === "cartao" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Banknote className="h-5 w-5 text-primary" />
+                      Vínculo de Boleto
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center space-x-2">
+                      <Controller
+                        name="has_boleto_link"
+                        control={control}
+                        render={({ field }) => (
+                          <Checkbox
+                            id="has_boleto_link"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        )}
+                      />
+                      <Label htmlFor="has_boleto_link" className="cursor-pointer">
+                        Vincular boleto a esta cobrança
+                      </Label>
+                    </div>
+
+                    {watchHasBoletoLink && (
+                      <div className="space-y-2">
+                        <Label htmlFor="boleto_linha_digitavel">Linha Digitável do Boleto</Label>
+                        <Input
+                          id="boleto_linha_digitavel"
+                          {...register("boleto_linha_digitavel")}
+                          placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
+                        />
+                        <p className="text-xs text-ds-text-muted">
+                          Insira a linha digitável completa do boleto (47 dígitos)
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Recorrência */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Wallet className="h-5 w-5 text-primary" />
+                    Recorrência
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Tipo de Recorrência</Label>
+                      <Controller
+                        name="recurrence_type"
+                        control={control}
+                        render={({ field }) => (
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pontual">Pontual (única)</SelectItem>
+                              <SelectItem value="diaria">Diária</SelectItem>
+                              <SelectItem value="semanal">Semanal</SelectItem>
+                              <SelectItem value="quinzenal">Quinzenal</SelectItem>
+                              <SelectItem value="mensal">Mensal</SelectItem>
+                              <SelectItem value="semestral">Semestral</SelectItem>
+                              <SelectItem value="anual">Anual</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+
+                    {watchRecurrenceType !== "pontual" && (
+                      <>
+                        <div className="space-y-2">
+                          <Label>Intervalo</Label>
+                          <Controller
+                            name="recurrence_interval"
+                            control={control}
+                            render={({ field }) => (
+                              <Select value={field.value} onValueChange={field.onChange}>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Selecione" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {[1,2,3,4,5,6].map((i) => (
+                                    <SelectItem key={i} value={i.toString()}>
+                                      A cada {i} {i === 1 ? 'período' : 'períodos'}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="recurrence_end_date">Data Final (opcional)</Label>
+                          <Input
+                            id="recurrence_end_date"
+                            type="date"
+                            {...register("recurrence_end_date")}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Template de Mensagem */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Template de Mensagem</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <Label>Selecionar Template</Label>
+                    <Controller
+                      name="message_template_id"
+                      control={control}
+                      render={({ field }) => (
+                        <Select value={field.value || "none"} onValueChange={field.onChange}>
+                          <SelectTrigger>
+                            <SelectValue placeholder={loadingTemplates ? "Carregando..." : "Selecione um template"} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Nenhum template</SelectItem>
+                            {messageTemplates.map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                    {templatesError && (
+                      <p className="text-xs text-destructive">Erro ao carregar templates</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Summary Sidebar */}
+            <div className="lg:col-span-1">
+              <Card className="sticky top-6">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Calculator className="h-5 w-5 text-primary" />
+                    Resumo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-ds-text-muted">Pagador:</span>
+                      <span className="font-medium text-ds-text-strong truncate max-w-[150px]">
+                        {watchPayerName || '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-ds-text-muted">Valor:</span>
+                      <span className="font-medium text-ds-text-strong">
+                        {watchAmount ? formatCurrency(formatAmount(watchAmount)) : '-'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-ds-text-muted">Método:</span>
+                      <span className="font-medium text-ds-text-strong">
+                        {watchPaymentMethod === 'pix' ? 'PIX' : 'Cartão'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-ds-text-muted">Tipo:</span>
+                      <span className="font-medium text-ds-text-strong capitalize">
+                        {watchRecurrenceType}
+                      </span>
+                    </div>
+                    {watchHasBoletoLink && watchBoletoLinhaDigitavel && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-ds-text-muted">Boleto:</span>
+                        <span className="font-medium text-primary">Vinculado</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-4 border-t border-ds-border-subtle">
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading || settingsLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <span className="animate-spin mr-2">⏳</span>
+                          Criando...
+                        </>
+                      ) : (
+                        'Criar Cobrança'
+                      )}
+                    </Button>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowSimulatorModal(true)}
+                  >
+                    <Calculator className="h-4 w-4 mr-2" />
+                    Simular Pagamento
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </form>
+
+        {/* Modals */}
+        <SimulatorModal
+          open={showSimulatorModal}
+          onOpenChange={setShowSimulatorModal}
+        />
+
+        {showCheckoutModal && checkoutData && (
+          <CheckoutSuccessModal
+            open={showCheckoutModal}
+            onOpenChange={(open) => {
+              setShowCheckoutModal(open);
+              if (!open) setCheckoutData(null);
+            }}
+            checkoutData={{
+              chargeId: checkoutData.chargeId,
+              checkoutUrl: checkoutData.checkoutUrl,
+              amount: checkoutData.amount,
+              payerName: checkoutData.payerName,
+              description: checkoutData.description,
+              status: checkoutData.status
+            }}
+          />
+        )}
+      </div>
+    </DashboardShell>
   );
 }

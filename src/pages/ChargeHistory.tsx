@@ -805,7 +805,7 @@ export default function ChargeHistory() {
                     </div>
                   )}
 
-                  <ChargeRefundTimeline chargeId={selectedCharge.id} />
+                  <ChargeRefundTimeline chargeId={selectedCharge.id} hasBoletoLink={selectedCharge.has_boleto_link} />
                   <ChargeExecutions chargeId={selectedCharge.id} />
                 </div>
                 <SheetFooter>
@@ -829,17 +829,19 @@ export default function ChargeHistory() {
         {/* Checkout Success Modal */}
         {showCheckoutModal && checkoutModalData && (
           <CheckoutSuccessModal
-            isOpen={showCheckoutModal}
-            onClose={() => {
-              setShowCheckoutModal(false);
-              setCheckoutModalData(null);
+            open={showCheckoutModal}
+            onOpenChange={(open) => {
+              setShowCheckoutModal(open);
+              if (!open) setCheckoutModalData(null);
             }}
-            checkoutUrl={checkoutModalData.checkoutUrl}
-            linkId={checkoutModalData.linkId}
-            chargeId={checkoutModalData.chargeId}
-            amount={checkoutModalData.amount}
-            payerName={checkoutModalData.payerName}
-            description={checkoutModalData.description}
+            checkoutData={{
+              chargeId: checkoutModalData.chargeId,
+              checkoutUrl: checkoutModalData.checkoutUrl,
+              amount: checkoutModalData.amount,
+              payerName: checkoutModalData.payerName,
+              description: checkoutModalData.description,
+              status: 'PENDENTE'
+            }}
           />
         )}
       </div>

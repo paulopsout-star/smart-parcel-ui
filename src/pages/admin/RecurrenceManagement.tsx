@@ -11,8 +11,7 @@ import { Loader2, Play, Calendar, Clock, BarChart3, AlertTriangle } from 'lucide
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Layout } from '@/components/Layout';
+import { DashboardShell } from '@/components/dashboard/DashboardShell';
 
 interface PlannerStats {
   charges_analyzed: number;
@@ -155,9 +154,9 @@ export default function RecurrenceManagement() {
   const getStatusBadge = (status: string) => {
     const statusMap = {
       'SCHEDULED': { label: 'Agendado', variant: 'secondary' as const },
-      'READY': { label: 'Pronto', variant: 'default' as const },
-      'RUNNING': { label: 'Executando', variant: 'default' as const },
-      'SUCCESS': { label: 'Sucesso', variant: 'default' as const },
+      'READY': { label: 'Pronto', variant: 'info' as const },
+      'RUNNING': { label: 'Executando', variant: 'warning' as const },
+      'SUCCESS': { label: 'Sucesso', variant: 'success' as const },
       'FAILED': { label: 'Falhou', variant: 'destructive' as const },
       'SKIPPED': { label: 'Pulado', variant: 'outline' as const },
       'CANCELED': { label: 'Cancelado', variant: 'outline' as const },
@@ -192,25 +191,26 @@ export default function RecurrenceManagement() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h2>
-          <p className="text-muted-foreground">Você não tem permissão para acessar esta área.</p>
+      <DashboardShell>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h2>
+            <p className="text-ds-text-muted">Você não tem permissão para acessar esta área.</p>
+          </div>
         </div>
-      </div>
+      </DashboardShell>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <DashboardShell>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Gestão de Recorrentes</h1>
-            <p className="text-muted-foreground">
-              Gerenciar execuções e agendamentos de cobranças recorrentes
-            </p>
-          </div>
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold text-ds-text-strong">Gestão de Recorrentes</h1>
+          <p className="text-ds-text-muted">
+            Gerenciar execuções e agendamentos de cobranças recorrentes
+          </p>
         </div>
 
         {/* Control Panel */}
@@ -218,12 +218,12 @@ export default function RecurrenceManagement() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5" />
+                <Calendar className="w-5 h-5 text-primary" />
                 Planner (Fase A)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="horizon-days">Horizonte (dias)</Label>
                 <Input
                   id="horizon-days"
@@ -233,7 +233,7 @@ export default function RecurrenceManagement() {
                   min="1"
                   max="365"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-ds-text-muted">
                   Gerar execuções para os próximos N dias
                 </p>
               </div>
@@ -244,20 +244,20 @@ export default function RecurrenceManagement() {
               </Button>
 
               {plannerStats && (
-                <div className="mt-4 p-3 bg-muted rounded-lg">
-                  <h4 className="font-medium mb-2">Últimas Estatísticas</h4>
+                <div className="mt-4 p-3 bg-ds-bg-surface-alt rounded-lg">
+                  <h4 className="font-medium mb-2 text-ds-text-strong">Últimas Estatísticas</h4>
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <div className="text-center">
                       <div className="font-bold text-primary">{plannerStats.charges_analyzed}</div>
-                      <div className="text-xs text-muted-foreground">Analisadas</div>
+                      <div className="text-xs text-ds-text-muted">Analisadas</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-success">{plannerStats.executions_created}</div>
-                      <div className="text-xs text-muted-foreground">Criadas</div>
+                      <div className="font-bold text-primary">{plannerStats.executions_created}</div>
+                      <div className="text-xs text-ds-text-muted">Criadas</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-warning">{plannerStats.executions_skipped}</div>
-                      <div className="text-xs text-muted-foreground">Puladas</div>
+                      <div className="font-bold text-primary">{plannerStats.executions_skipped}</div>
+                      <div className="text-xs text-ds-text-muted">Puladas</div>
                     </div>
                   </div>
                   {plannerStats.errors.length > 0 && (
@@ -273,12 +273,12 @@ export default function RecurrenceManagement() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Clock className="w-5 h-5" />
+                <Clock className="w-5 h-5 text-primary" />
                 Dispatcher (Fase B)
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="dispatch-limit">Limite de execuções</Label>
                 <Input
                   id="dispatch-limit"
@@ -288,7 +288,7 @@ export default function RecurrenceManagement() {
                   min="1"
                   max="1000"
                 />
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-ds-text-muted">
                   Processar no máximo N execuções vencidas
                 </p>
               </div>
@@ -299,20 +299,20 @@ export default function RecurrenceManagement() {
               </Button>
 
               {dispatcherStats && (
-                <div className="mt-4 p-3 bg-muted rounded-lg">
-                  <h4 className="font-medium mb-2">Últimas Estatísticas</h4>
+                <div className="mt-4 p-3 bg-ds-bg-surface-alt rounded-lg">
+                  <h4 className="font-medium mb-2 text-ds-text-strong">Últimas Estatísticas</h4>
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <div className="text-center">
                       <div className="font-bold text-primary">{dispatcherStats.executions_processed}</div>
-                      <div className="text-xs text-muted-foreground">Processadas</div>
+                      <div className="text-xs text-ds-text-muted">Processadas</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-success">{dispatcherStats.executions_ready}</div>
-                      <div className="text-xs text-muted-foreground">Prontas</div>
+                      <div className="font-bold text-primary">{dispatcherStats.executions_ready}</div>
+                      <div className="text-xs text-ds-text-muted">Prontas</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-info">{dispatcherStats.payment_links_created}</div>
-                      <div className="text-xs text-muted-foreground">Links</div>
+                      <div className="font-bold text-primary">{dispatcherStats.payment_links_created}</div>
+                      <div className="text-xs text-ds-text-muted">Links</div>
                     </div>
                   </div>
                   {dispatcherStats.errors.length > 0 && (
@@ -330,13 +330,13 @@ export default function RecurrenceManagement() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
+              <BarChart3 className="w-5 h-5 text-primary" />
               Ações em Lote
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex gap-4">
-              <Button onClick={runBoth} disabled={loading} variant="default">
+              <Button onClick={runBoth} disabled={loading}>
                 {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
                 Executar Planner + Dispatcher
               </Button>
@@ -359,7 +359,7 @@ export default function RecurrenceManagement() {
           </CardHeader>
           <CardContent>
             {recentExecutions.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="text-center py-8 text-ds-text-muted">
                 Nenhuma execução encontrada
               </div>
             ) : (
@@ -381,8 +381,8 @@ export default function RecurrenceManagement() {
                       <TableRow key={execution.id}>
                         <TableCell>
                           <div>
-                            <div className="font-medium">{execution.charges.payer_name}</div>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="font-medium text-ds-text-strong">{execution.charges.payer_name}</div>
+                            <div className="text-xs text-ds-text-muted">
                               {execution.charges.description}
                             </div>
                           </div>
@@ -409,15 +409,15 @@ export default function RecurrenceManagement() {
                           <div className="flex items-center gap-1">
                             <span>{execution.attempts}</span>
                             {execution.attempts > 0 && (
-                              <AlertTriangle className="w-3 h-3 text-warning" />
+                              <AlertTriangle className="w-3 h-3 text-destructive" />
                             )}
                           </div>
                         </TableCell>
                         <TableCell>
                           {execution.payment_link_id ? (
-                            <Badge variant="default">Criado</Badge>
+                            <Badge variant="success">Criado</Badge>
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <span className="text-ds-text-muted">-</span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -429,6 +429,6 @@ export default function RecurrenceManagement() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </DashboardShell>
   );
 }

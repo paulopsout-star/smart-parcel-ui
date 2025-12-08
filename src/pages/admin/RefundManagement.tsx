@@ -12,8 +12,7 @@ import { Loader2, Play, RefreshCw, Calendar, DollarSign, AlertTriangle } from 'l
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { DashboardShell } from '@/components/dashboard/DashboardShell';
 
 interface RefundJob {
   id: string;
@@ -50,7 +49,6 @@ export default function RefundManagement() {
   const [executingJob, setExecutingJob] = useState<string | null>(null);
   const [schedulerStats, setSchedulerStats] = useState<SchedulerStats | null>(null);
   
-  // Filters
   const [statusFilter, setStatusFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -65,8 +63,8 @@ export default function RefundManagement() {
 
   const getStatusBadge = (status: string) => {
     const statusMap = {
-      pending: { label: 'Pendente', variant: 'secondary' as const },
-      processed: { label: 'Processado', variant: 'default' as const },
+      pending: { label: 'Pendente', variant: 'warning' as const },
+      processed: { label: 'Processado', variant: 'success' as const },
       failed: { label: 'Falhado', variant: 'destructive' as const },
     };
     return statusMap[status as keyof typeof statusMap] || statusMap.pending;
@@ -126,7 +124,6 @@ export default function RefundManagement() {
         description: `${data.jobs_executados} jobs executados, ${data.splits_refundados} splits estornados`,
       });
 
-      // Reload jobs
       await loadJobs();
     } catch (error: any) {
       console.error('Error running scheduler:', error);
@@ -182,34 +179,36 @@ export default function RefundManagement() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h2>
-          <p className="text-muted-foreground">Você não tem permissão para acessar esta área.</p>
+      <DashboardShell>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-destructive mb-2">Acesso Negado</h2>
+            <p className="text-ds-text-muted">Você não tem permissão para acessar esta área.</p>
+          </div>
         </div>
-      </div>
+      </DashboardShell>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <DashboardShell>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Gestão de Estornos (24h)</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl font-bold text-ds-text-strong">Gestão de Estornos (24h)</h1>
+            <p className="text-ds-text-muted">
               Gerenciar estornos automáticos por timeout de splits pendentes
             </p>
           </div>
           <Button 
             onClick={runScheduler} 
             disabled={runningScheduler}
-            className="gap-2"
           >
             {runningScheduler ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (
-              <Play className="w-4 h-4" />
+              <Play className="w-4 h-4 mr-2" />
             )}
             Executar Scheduler
           </Button>
@@ -220,27 +219,27 @@ export default function RefundManagement() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
+                <DollarSign className="w-5 h-5 text-primary" />
                 Últimas Estatísticas do Scheduler
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="text-center">
+                <div className="text-center p-4 bg-ds-bg-surface-alt rounded-lg">
                   <div className="text-2xl font-bold text-primary">{schedulerStats.charges_eligiveis}</div>
-                  <div className="text-sm text-muted-foreground">Cobranças Elegíveis</div>
+                  <div className="text-sm text-ds-text-muted">Cobranças Elegíveis</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-success">{schedulerStats.jobs_executados}</div>
-                  <div className="text-sm text-muted-foreground">Jobs Executados</div>
+                <div className="text-center p-4 bg-ds-bg-surface-alt rounded-lg">
+                  <div className="text-2xl font-bold text-primary">{schedulerStats.jobs_executados}</div>
+                  <div className="text-sm text-ds-text-muted">Jobs Executados</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-info">{schedulerStats.splits_refundados}</div>
-                  <div className="text-sm text-muted-foreground">Splits Estornados</div>
+                <div className="text-center p-4 bg-ds-bg-surface-alt rounded-lg">
+                  <div className="text-2xl font-bold text-primary">{schedulerStats.splits_refundados}</div>
+                  <div className="text-sm text-ds-text-muted">Splits Estornados</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-bold text-warning">{schedulerStats.errors.length}</div>
-                  <div className="text-sm text-muted-foreground">Erros</div>
+                <div className="text-center p-4 bg-ds-bg-surface-alt rounded-lg">
+                  <div className="text-2xl font-bold text-destructive">{schedulerStats.errors.length}</div>
+                  <div className="text-sm text-ds-text-muted">Erros</div>
                 </div>
               </div>
               
@@ -268,7 +267,7 @@ export default function RefundManagement() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="status-filter">Status</Label>
                 <Select value={statusFilter || 'all'} onValueChange={(value) => setStatusFilter(value === 'all' ? '' : value)}>
                   <SelectTrigger>
@@ -283,7 +282,7 @@ export default function RefundManagement() {
                 </Select>
               </div>
               
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="start-date">Data Início</Label>
                 <Input
                   id="start-date"
@@ -293,7 +292,7 @@ export default function RefundManagement() {
                 />
               </div>
               
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="end-date">Data Fim</Label>
                 <Input
                   id="end-date"
@@ -303,7 +302,7 @@ export default function RefundManagement() {
                 />
               </div>
               
-              <div>
+              <div className="space-y-2">
                 <Label htmlFor="charge-id">ID da Cobrança</Label>
                 <Input
                   id="charge-id"
@@ -331,11 +330,11 @@ export default function RefundManagement() {
           <CardContent>
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                Carregando jobs...
+                <Loader2 className="w-6 h-6 animate-spin mr-2 text-primary" />
+                <span className="text-ds-text-muted">Carregando jobs...</span>
               </div>
             ) : jobs.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="text-center py-8 text-ds-text-muted">
                 Nenhum job de estorno encontrado
               </div>
             ) : (
@@ -362,11 +361,11 @@ export default function RefundManagement() {
                         </TableCell>
                         <TableCell>
                           <div>
-                            <div className="font-medium">{job.charges.payer_name}</div>
-                            <div className="text-xs text-muted-foreground">
+                            <div className="font-medium text-ds-text-strong">{job.charges.payer_name}</div>
+                            <div className="text-xs text-ds-text-muted">
                               {job.charges.description}
                             </div>
-                            <div className="text-xs text-muted-foreground font-mono">
+                            <div className="text-xs text-ds-text-muted font-mono">
                               {job.charge_id.substring(0, 8)}...
                             </div>
                           </div>
@@ -375,7 +374,7 @@ export default function RefundManagement() {
                         <TableCell className="text-destructive">
                           -{formatCurrency(job.fee_amount_cents)}
                         </TableCell>
-                        <TableCell className="font-medium">
+                        <TableCell className="font-medium text-ds-text-strong">
                           {formatCurrency(job.refund_amount_cents - job.fee_amount_cents)}
                         </TableCell>
                         <TableCell>
@@ -396,7 +395,7 @@ export default function RefundManagement() {
                               {format(new Date(job.processed_at), 'dd/MM/yy HH:mm', { locale: ptBR })}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <span className="text-ds-text-muted">-</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -424,6 +423,6 @@ export default function RefundManagement() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </DashboardShell>
   );
 }

@@ -14,7 +14,6 @@ export default function Checkout() {
   const [charge, setCharge] = useState<any>(null);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
   
-  // Verificar modo: 'direct' (default) ou 'split'
   const mode = searchParams.get('mode') || 'direct';
 
   useEffect(() => {
@@ -64,19 +63,16 @@ export default function Checkout() {
 
         setCharge(data);
         
-        // Se for PIX, redirecionar para página de QR Code (sem simulação)
         if (data.payment_method === 'pix' || data.payment_method === 'PIX') {
           navigate(`/checkout-pix/${data.charge_id || id}`, { replace: true });
           return;
         }
         
-        // Se modo for 'direct', redirecionar para pagamento direto (com simulação)
         if (mode === 'direct') {
           navigate(`/payment-direct/${id}`, { replace: true });
           return;
         }
         
-        // Se modo for 'split', abrir modal de split
         if (mode === 'split') {
           setIsSplitModalOpen(true);
         }
@@ -100,10 +96,10 @@ export default function Checkout() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-ds-bg-body flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-ink-secondary">Carregando dados do pagamento...</p>
+          <p className="text-ds-text-muted">Carregando dados do pagamento...</p>
         </div>
       </div>
     );
@@ -111,15 +107,15 @@ export default function Checkout() {
 
   if (!charge) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
         <Card className="max-w-md w-full p-8 text-center">
           <div className="text-destructive mb-4">
             <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-ink mb-2">Link Inválido</h2>
-          <p className="text-ink-secondary">
+          <h2 className="text-2xl font-bold text-ds-text-strong mb-2">Link Inválido</h2>
+          <p className="text-ds-text-muted">
             Este link de pagamento não existe ou expirou.
           </p>
         </Card>
@@ -128,7 +124,7 @@ export default function Checkout() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
       <SplitModal
         isOpen={isSplitModalOpen}
         onClose={() => setIsSplitModalOpen(false)}

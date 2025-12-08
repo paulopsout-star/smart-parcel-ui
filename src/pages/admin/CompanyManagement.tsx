@@ -13,7 +13,7 @@ import { Link } from 'react-router-dom';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Layout } from '@/components/Layout';
+import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { formatDocument } from '@/lib/input-masks';
 
 interface Company {
@@ -80,7 +80,6 @@ export default function CompanyManagement() {
       const cleanDocument = formData.document.replace(/\D/g, '');
       
       if (editingCompany) {
-        // Update
         const { error } = await supabase
           .from('companies')
           .update({
@@ -98,7 +97,6 @@ export default function CompanyManagement() {
           description: "As alterações foram salvas com sucesso",
         });
       } else {
-        // Create
         const { error } = await supabase
           .from('companies')
           .insert({
@@ -165,28 +163,29 @@ export default function CompanyManagement() {
 
   if (!isAdmin) {
     return (
-      <Layout>
-        <div className="min-h-screen flex items-center justify-center">
+      <DashboardShell>
+        <div className="flex items-center justify-center min-h-[400px]">
           <Card>
             <CardHeader>
               <CardTitle>Acesso Negado</CardTitle>
             </CardHeader>
             <CardContent>
-              <p>Você não tem permissão para acessar esta página.</p>
+              <p className="text-ds-text-muted">Você não tem permissão para acessar esta página.</p>
             </CardContent>
           </Card>
         </div>
-      </Layout>
+      </DashboardShell>
     );
   }
 
   return (
-    <Layout>
-      <div className="container mx-auto p-6 space-y-6">
+    <DashboardShell>
+      <div className="space-y-6">
+        {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Gestão de Empresas</h1>
-            <p className="text-muted-foreground">Gerencie empresas e suas configurações</p>
+            <h1 className="text-2xl font-bold text-ds-text-strong">Gestão de Empresas</h1>
+            <p className="text-ds-text-muted">Gerencie empresas e suas configurações</p>
           </div>
           
           <div className="flex gap-2">
@@ -207,68 +206,69 @@ export default function CompanyManagement() {
                 </Button>
               </DialogTrigger>
               <DialogContent>
-              <DialogHeader>
-                <DialogTitle>
-                  {editingCompany ? 'Editar Empresa' : 'Nova Empresa'}
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <Label htmlFor="name">Nome da Empresa *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Empresa LTDA"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="document">CNPJ *</Label>
-                  <Input
-                    id="document"
-                    value={formatDocument(formData.document)}
-                    onChange={(e) => setFormData({ ...formData, document: e.target.value })}
-                    placeholder="00.000.000/0000-00"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="contato@empresa.com.br"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="phone">Telefone</Label>
-                  <Input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="(11) 99999-9999"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit">
-                    {editingCompany ? 'Salvar' : 'Criar'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingCompany ? 'Editar Empresa' : 'Nova Empresa'}
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome da Empresa *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="Empresa LTDA"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="document">CNPJ *</Label>
+                    <Input
+                      id="document"
+                      value={formatDocument(formData.document)}
+                      onChange={(e) => setFormData({ ...formData, document: e.target.value })}
+                      placeholder="00.000.000/0000-00"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      placeholder="contato@empresa.com.br"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Telefone</Label>
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      placeholder="(11) 99999-9999"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit">
+                      {editingCompany ? 'Salvar' : 'Criar'}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
+        {/* Content */}
         {loading ? (
           <div className="flex justify-center items-center h-64">
-            <Loader2 className="h-8 w-8 animate-spin" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
           <div className="grid gap-4">
@@ -277,20 +277,22 @@ export default function CompanyManagement() {
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <Building2 className="h-5 w-5 text-muted-foreground" />
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Building2 className="h-5 w-5 text-primary" />
+                      </div>
                       <div>
                         <CardTitle className="text-lg">{company.name}</CardTitle>
                         <div className="flex gap-2 mt-1">
-                          <Badge variant={company.is_active ? 'default' : 'secondary'}>
+                          <Badge variant={company.is_active ? 'success' : 'secondary'}>
                             {company.is_active ? 'Ativa' : 'Inativa'}
                           </Badge>
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-sm text-ds-text-muted">
                             CNPJ: {formatDocument(company.document)}
                           </span>
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       <Button variant="outline" size="sm" onClick={() => openEditDialog(company)}>
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -302,22 +304,22 @@ export default function CompanyManagement() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                     {company.email && (
                       <div>
-                        <span className="text-muted-foreground">Email:</span>
-                        <p className="font-medium">{company.email}</p>
+                        <span className="text-ds-text-muted">Email:</span>
+                        <p className="font-medium text-ds-text-default">{company.email}</p>
                       </div>
                     )}
                     {company.phone && (
                       <div>
-                        <span className="text-muted-foreground">Telefone:</span>
-                        <p className="font-medium">{company.phone}</p>
+                        <span className="text-ds-text-muted">Telefone:</span>
+                        <p className="font-medium text-ds-text-default">{company.phone}</p>
                       </div>
                     )}
                     <div>
-                      <span className="text-muted-foreground">Criada em:</span>
-                      <p className="font-medium">
+                      <span className="text-ds-text-muted">Criada em:</span>
+                      <p className="font-medium text-ds-text-default">
                         {format(new Date(company.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                       </p>
                     </div>
@@ -329,14 +331,14 @@ export default function CompanyManagement() {
             {companies.length === 0 && (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center h-40">
-                  <Building2 className="h-12 w-12 text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">Nenhuma empresa cadastrada</p>
+                  <Building2 className="h-12 w-12 text-ds-text-muted mb-2" />
+                  <p className="text-ds-text-muted">Nenhuma empresa cadastrada</p>
                 </CardContent>
               </Card>
             )}
           </div>
         )}
       </div>
-    </Layout>
+    </DashboardShell>
   );
 }
