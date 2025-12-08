@@ -14,18 +14,26 @@ const FeatureCard = ({ icon: Icon, title, description, className, style }: Featu
   return (
     <div 
       className={cn(
-        "bg-white rounded-[24px] p-6 shadow-autopay-card",
-        "hover:shadow-autopay-floating hover:-translate-y-1",
+        "bg-white rounded-[20px] p-5 shadow-autopay-card-soft",
+        "hover:shadow-autopay-card hover:-translate-y-1",
         "transition-all duration-300 ease-out",
+        "border border-gray-100",
         className
       )}
       style={style}
     >
-      <div className="w-14 h-14 rounded-2xl bg-autopay-primary/10 flex items-center justify-center mb-4">
-        <Icon className="w-7 h-7 text-autopay-primary-strong" strokeWidth={1.75} />
+      <div className="flex items-start gap-4">
+        {/* Ícone em container arredondado */}
+        <div className="w-12 h-12 rounded-xl bg-autopay-primary/10 flex items-center justify-center flex-shrink-0">
+          <Icon className="w-6 h-6 text-autopay-primary-strong" strokeWidth={1.75} />
+        </div>
+        
+        {/* Conteúdo */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-lg font-bold text-autopay-text mb-1">{title}</h3>
+          <p className="text-sm text-autopay-text-secondary leading-relaxed">{description}</p>
+        </div>
       </div>
-      <h3 className="text-xl font-bold text-autopay-text mb-2">{title}</h3>
-      <p className="text-sm text-autopay-text-secondary leading-relaxed">{description}</p>
     </div>
   );
 };
