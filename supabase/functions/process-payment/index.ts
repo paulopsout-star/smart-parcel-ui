@@ -55,7 +55,7 @@ serve(async (req) => {
     const merchantId = Deno.env.get('QUITA_MAIS_MERCHANT_ID')
     const creditorName = Deno.env.get('QUITA_MAIS_CREDITOR_NAME')
     const creditorDocument = Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT')
-    const apiUrl = 'https://api-sandbox.cappta.com.br'
+    const apiUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://pay-gt.autonegocie.com'
 
     if (!merchantId || !creditorName || !creditorDocument) {
       throw new Error('QuitaMais credentials not configured')

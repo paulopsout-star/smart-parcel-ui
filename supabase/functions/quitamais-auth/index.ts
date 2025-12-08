@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     // Get environment variables and normalize BASE_URL to origin only (no path)
-    const rawBaseUrl = Deno.env.get('BASE_URL') || 'https://api-sandbox.cappta.com.br'
+    const rawBaseUrl = Deno.env.get('BASE_URL') || 'https://pay-gt.autonegocie.com'
     const clientId = Deno.env.get('QUITA_MAIS_CLIENT_ID')
     const clientSecret = Deno.env.get('QUITA_MAIS_CLIENT_SECRET')
 
@@ -22,7 +22,7 @@ serve(async (req) => {
       const parsed = new URL(rawBaseUrl.includes('://') ? rawBaseUrl : `https://${rawBaseUrl}`)
       baseUrl = `${parsed.protocol}//${parsed.host}` // strip any path/query
     } catch (_e) {
-      baseUrl = 'https://api-sandbox.cappta.com.br'
+      baseUrl = 'https://pay-gt.autonegocie.com'
     }
 
     console.log('Environment check:', {

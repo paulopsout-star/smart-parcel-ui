@@ -103,7 +103,7 @@ async function makeApiRequest(
   payload: any,
   maxRetries = 3
 ): Promise<any> {
-  const baseUrl = 'https://api-sandbox.cappta.com.br'
+  const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://pay-gt.autonegocie.com'
   const url = `${baseUrl}/${endpoint}`
   let lastError: any
   
@@ -356,7 +356,7 @@ serve(async (req) => {
     }
     
     
-    const baseUrl = 'https://api-sandbox.cappta.com.br'
+    const baseUrl = Deno.env.get('QUITAPLUS_BASE_URL') || 'https://pay-gt.autonegocie.com'
     
     console.log('REQUEST_BODY (CONTRATO EXATO):', JSON.stringify(maskSensitiveData(REQUEST_BODY), null, 2))
     console.log('EXTRAS_TO_STORE (SOMENTE DB):', JSON.stringify(maskSensitiveData(EXTRAS_TO_STORE), null, 2))
