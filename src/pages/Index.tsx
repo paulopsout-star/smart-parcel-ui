@@ -48,7 +48,7 @@ export default function Index() {
       <TestimonialsSection />
 
       {/* CTA Section */}
-      <CTASection />
+      <CTASection onOpenLeadModal={openLeadModal} />
 
       {/* Footer */}
       <Footer />
@@ -574,7 +574,7 @@ const TestimonialsSection = () => {
 };
 
 // ==================== CTA SECTION ====================
-const CTASection = () => {
+const CTASection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
   return (
     <section className="py-16 px-6">
       <div className="max-w-[1120px] mx-auto">
@@ -588,17 +588,22 @@ const CTASection = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/register">
-              <Button size="lg" className="rounded-full bg-autopay-text text-white hover:bg-autopay-text/90 px-8 py-6 text-base font-semibold shadow-autopay-card group">
-                Comece Agora
-                <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </Link>
-            <Link to="/login">
-              <Button size="lg" variant="outline" className="rounded-full border-2 border-autopay-text text-autopay-text hover:bg-autopay-text hover:text-white px-8 py-6 text-base font-semibold">
-                Falar com especialista
-              </Button>
-            </Link>
+            <Button 
+              size="lg" 
+              onClick={onOpenLeadModal}
+              className="rounded-full bg-autopay-text text-white hover:bg-autopay-text/90 px-8 py-6 text-base font-semibold shadow-autopay-card group"
+            >
+              Comece Agora
+              <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline" 
+              onClick={onOpenLeadModal}
+              className="rounded-full border-2 border-autopay-text text-autopay-text hover:bg-autopay-text hover:text-white px-8 py-6 text-base font-semibold"
+            >
+              Falar com especialista
+            </Button>
           </div>
         </div>
       </div>
