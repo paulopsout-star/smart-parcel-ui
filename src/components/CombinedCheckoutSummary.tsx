@@ -5,8 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QrCode, CreditCard, AlertCircle, CheckCircle2, Shield } from 'lucide-react';
+import { QrCode, CreditCard, AlertCircle, CheckCircle2, Shield, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+import { usePaymentSimulation, InstallmentCondition } from '@/hooks/usePaymentSimulation';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const PIX_FEE_PERCENT = 0.03; // 3%
 const MIN_INSTALLMENT_CENTS = 1000; // R$ 10,00 mínimo por parcela
@@ -35,35 +37,57 @@ export function CombinedCheckoutSummary({
   const [cardCents, setCardCents] = useState(initialCardCents);
   const [cardInstallments, setCardInstallments] = useState(1);
 
+  // Simulação de parcelas com juros via API Quita+
+  const { data: simulationData, isLoading: isSimulating } = usePaymentSimulation(
+    cardCents > 0 ? cardCents : null
+  );
+
+  // Condições de parcelamento da API
+  const installmentConditions = useMemo(() => {
+    if (!simulationData?.simulation?.conditions) return [];
+    return simulationData.simulation.conditions;
+  }, [simulationData]);
+
+  // Encontrar a condição selecionada
+  const selectedCondition = useMemo(() => {
+    return installmentConditions.find(c => c.installments === cardInstallments) || null;
+  }, [installmentConditions, cardInstallments]);
+
+  // Valor total do cartão COM JUROS
+  const cardTotalWithInterest = useMemo(() => {
+    if (selectedCondition) {
+      return selectedCondition.totalAmount;
+    }
+    // Fallback: valor sem juros se não tiver simulação
+    return cardCents;
+  }, [selectedCondition, cardCents]);
+
   // Calcular taxa PIX
   const pixFeeCents = useMemo(() => Math.round(pixBaseCents * PIX_FEE_PERCENT), [pixBaseCents]);
   const pixTotalCents = useMemo(() => pixBaseCents + pixFeeCents, [pixBaseCents, pixFeeCents]);
 
-  // Calcular total com taxa
-  const totalWithFeeCents = useMemo(() => pixTotalCents + cardCents, [pixTotalCents, cardCents]);
+  // Calcular total com taxa e juros
+  const totalWithFeeCents = useMemo(() => pixTotalCents + cardTotalWithInterest, [pixTotalCents, cardTotalWithInterest]);
 
   // Validação: PIX base + Cartão >= Total Original
   const isValid = useMemo(() => (pixBaseCents + cardCents) >= totalOriginalCents, [pixBaseCents, cardCents, totalOriginalCents]);
 
-  // Calcular máximo de parcelas baseado no valor do cartão
+  // Calcular máximo de parcelas baseado nas condições da API ou fallback
   const maxInstallments = useMemo(() => {
+    if (installmentConditions.length > 0) {
+      return Math.max(...installmentConditions.map(c => c.installments));
+    }
     if (cardCents <= 0) return 1;
     const max = Math.floor(cardCents / MIN_INSTALLMENT_CENTS);
     return Math.min(Math.max(max, 1), 12);
-  }, [cardCents]);
+  }, [cardCents, installmentConditions]);
 
   // Ajustar parcelas se exceder o máximo
   useEffect(() => {
     if (cardInstallments > maxInstallments) {
-      setCardInstallments(maxInstallments);
+      setCardInstallments(Math.max(1, maxInstallments));
     }
   }, [maxInstallments, cardInstallments]);
-
-  // Calcular valor da parcela
-  const installmentValue = useMemo(() => {
-    if (cardCents <= 0 || cardInstallments <= 0) return 0;
-    return Math.ceil(cardCents / cardInstallments);
-  }, [cardCents, cardInstallments]);
 
   // Handler para slider
   const handleSliderChange = (value: number[]) => {
@@ -71,6 +95,7 @@ export function CombinedCheckoutSummary({
     const newCard = totalOriginalCents - newPixBase;
     setPixBaseCents(Math.max(0, newPixBase));
     setCardCents(Math.max(0, newCard));
+    setCardInstallments(1); // Reset parcelas ao mudar valor
   };
 
   // Handler para input PIX
@@ -79,6 +104,7 @@ export function CombinedCheckoutSummary({
     if (cents >= 0 && cents <= totalOriginalCents) {
       setPixBaseCents(cents);
       setCardCents(totalOriginalCents - cents);
+      setCardInstallments(1);
     }
   };
 
@@ -88,6 +114,7 @@ export function CombinedCheckoutSummary({
     if (cents >= 0 && cents <= totalOriginalCents) {
       setCardCents(cents);
       setPixBaseCents(totalOriginalCents - cents);
+      setCardInstallments(1);
     }
   };
 
@@ -184,26 +211,59 @@ export function CombinedCheckoutSummary({
                 <>
                   <div>
                     <Label className="text-xs text-blue-700 dark:text-blue-300">Parcelas</Label>
-                    <Select
-                      value={cardInstallments.toString()}
-                      onValueChange={(v) => setCardInstallments(parseInt(v))}
-                    >
-                      <SelectTrigger className="bg-white dark:bg-ds-bg-surface border-blue-300">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: maxInstallments }, (_, i) => i + 1).map((i) => (
-                          <SelectItem key={i} value={i.toString()}>
-                            {i}x de {formatCurrency(Math.ceil(cardCents / i))}
-                            {i === 1 ? ' (à vista)' : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {isSimulating ? (
+                      <Skeleton className="h-10 w-full" />
+                    ) : (
+                      <Select
+                        value={cardInstallments.toString()}
+                        onValueChange={(v) => setCardInstallments(parseInt(v))}
+                      >
+                        <SelectTrigger className="bg-white dark:bg-ds-bg-surface border-blue-300">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {installmentConditions.length > 0 ? (
+                            // Usar condições da API (com juros)
+                            installmentConditions.map((condition) => (
+                              <SelectItem key={condition.installments} value={condition.installments.toString()}>
+                                {condition.installments}x de {formatCurrency(condition.installmentAmount)}
+                                {condition.installments === 1 ? ' (à vista)' : ''}
+                                {condition.totalAmount > cardCents && (
+                                  <span className="text-xs text-muted-foreground ml-1">
+                                    (Total: {formatCurrency(condition.totalAmount)})
+                                  </span>
+                                )}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            // Fallback sem API (cálculo simples)
+                            Array.from({ length: maxInstallments }, (_, i) => i + 1).map((i) => (
+                              <SelectItem key={i} value={i.toString()}>
+                                {i}x de {formatCurrency(Math.ceil(cardCents / i))}
+                                {i === 1 ? ' (à vista)' : ''}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
+                  
+                  {/* Mostrar juros se houver */}
+                  {selectedCondition && selectedCondition.totalAmount > cardCents && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-blue-700 dark:text-blue-300">Juros</span>
+                      <span className="text-blue-600 font-medium">
+                        + {formatCurrency(selectedCondition.totalAmount - cardCents)}
+                      </span>
+                    </div>
+                  )}
+                  
                   <div className="border-t border-blue-200 dark:border-blue-700 pt-2 flex justify-between">
                     <span className="font-medium text-blue-800 dark:text-blue-200">Total Cartão</span>
-                    <span className="font-bold text-blue-600 text-lg">{formatCurrency(cardCents)}</span>
+                    <span className="font-bold text-blue-600 text-lg">
+                      {formatCurrency(cardTotalWithInterest)}
+                    </span>
                   </div>
                 </>
               )}
@@ -216,16 +276,16 @@ export function CombinedCheckoutSummary({
           <div className="space-y-2">
             {pixBaseCents > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-ds-text-muted">PIX (com taxa)</span>
+                <span className="text-ds-text-muted">PIX (com taxa 3%)</span>
                 <span className="text-ds-text-strong">{formatCurrency(pixTotalCents)}</span>
               </div>
             )}
             {cardCents > 0 && (
               <div className="flex justify-between text-sm">
                 <span className="text-ds-text-muted">
-                  Cartão ({cardInstallments}x de {formatCurrency(installmentValue)})
+                  Cartão ({cardInstallments}x de {formatCurrency(selectedCondition?.installmentAmount || Math.ceil(cardCents / cardInstallments))})
                 </span>
-                <span className="text-ds-text-strong">{formatCurrency(cardCents)}</span>
+                <span className="text-ds-text-strong">{formatCurrency(cardTotalWithInterest)}</span>
               </div>
             )}
             <div className="border-t border-ds-border pt-2 flex justify-between">
@@ -254,7 +314,7 @@ export function CombinedCheckoutSummary({
               <p className="font-medium mb-1">Ordem de Pagamento:</p>
               <ol className="list-decimal list-inside space-y-1">
                 {pixBaseCents > 0 && <li>Primeiro: Pagar <strong>{formatCurrency(pixTotalCents)}</strong> via PIX</li>}
-                {cardCents > 0 && <li>{pixBaseCents > 0 ? 'Depois' : 'Primeiro'}: Pagar <strong>{formatCurrency(cardCents)}</strong> via Cartão</li>}
+                {cardCents > 0 && <li>{pixBaseCents > 0 ? 'Depois' : 'Primeiro'}: Pagar <strong>{formatCurrency(cardTotalWithInterest)}</strong> via Cartão ({cardInstallments}x)</li>}
               </ol>
             </div>
           </div>
@@ -263,11 +323,16 @@ export function CombinedCheckoutSummary({
         {/* Botão Confirmar */}
         <Button
           onClick={() => onConfirm(pixTotalCents, cardCents, cardInstallments)}
-          disabled={!isValid || (pixBaseCents === 0 && cardCents === 0)}
+          disabled={!isValid || (pixBaseCents === 0 && cardCents === 0) || isSimulating}
           className="w-full"
           size="lg"
         >
-          {pixBaseCents > 0 ? (
+          {isSimulating ? (
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Calculando parcelas...
+            </>
+          ) : pixBaseCents > 0 ? (
             <>
               <QrCode className="mr-2 h-5 w-5" />
               Continuar para PIX
