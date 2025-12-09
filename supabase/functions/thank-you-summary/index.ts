@@ -44,15 +44,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    // Buscar cobrança relacionada através do payment_links
-    // Primeiro, buscar splits relacionados a este payment_link
-    const { data: splits, error: splitsError } = await supabase
+    // Buscar TODOS os splits relacionados a este payment_link, ordenados por created_at DESC
+    const { data: allSplits, error: splitsError } = await supabase
       .from('payment_splits')
       .select('*')
       .eq('payment_link_id', paymentLink.id)
+      .order('created_at', { ascending: false })
 
-    console.log('[thank-you-summary] Splits found by payment_link_id:', splits?.length || 0)
-    console.log('[thank-you-summary] Splits status:', splits?.map(s => ({ id: s.id, method: s.method, status: s.status })))
+    console.log('[thank-you-summary] Total splits found:', allSplits?.length || 0)
 
     if (splitsError) {
       console.error('Error fetching splits:', splitsError)
@@ -61,6 +60,19 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
+
+    // Filtrar para pegar APENAS o split mais recente de cada método
+    const latestSplitsByMethod = new Map<string, any>();
+    if (allSplits) {
+      for (const split of allSplits) {
+        if (!latestSplitsByMethod.has(split.method)) {
+          latestSplitsByMethod.set(split.method, split);
+        }
+      }
+    }
+    let splits = Array.from(latestSplitsByMethod.values());
+    
+    console.log('[thank-you-summary] Latest splits only:', splits?.map(s => ({ id: s.id, method: s.method, status: s.status })))
 
     // Fallback: buscar por charge_id se não houver splits por payment_link_id
     let finalSplits = splits
@@ -74,10 +86,18 @@ Deno.serve(async (req) => {
           .from('payment_splits')
           .select('*')
           .eq('charge_id', chargeId)
+          .order('created_at', { ascending: false })
 
         if (!chargeError && splitsByCharge && splitsByCharge.length > 0) {
-          finalSplits = splitsByCharge
-          console.log('[thank-you-summary] Fallback successful! Splits found by charge_id:', finalSplits.length)
+          // Também filtrar por método
+          const methodMap = new Map<string, any>();
+          for (const split of splitsByCharge) {
+            if (!methodMap.has(split.method)) {
+              methodMap.set(split.method, split);
+            }
+          }
+          finalSplits = Array.from(methodMap.values());
+          console.log('[thank-you-summary] Fallback successful! Latest splits by charge_id:', finalSplits.length)
         }
       }
 
@@ -111,10 +131,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Verificar se está PAID (todos os splits CONCLUDED)
+    // Verificar se está PAID (todos os splits MAIS RECENTES estão CONCLUDED)
     const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => s.status === 'concluded')
     
-    console.log('[thank-you-summary] isPaid:', isPaid)
+    console.log('[thank-you-summary] isPaid:', isPaid, '- splits checked:', finalSplits?.map(s => ({ method: s.method, status: s.status })))
 
     if (!isPaid) {
       return new Response(JSON.stringify({
@@ -152,13 +172,14 @@ Deno.serve(async (req) => {
 
     // Montar resposta
     const response = {
+      paid: true,
       charge: {
         id: charge?.id || paymentLink.id,
         type: charge?.recurrence_type || 'pontual',
         total_amount_cents: charge?.amount || paymentLink.amount,
         currency: 'BRL',
         paid: true,
-        paid_at: new Date().toISOString(), // Usar timestamp atual já que está PAID
+        paid_at: finalSplits[0]?.processed_at || new Date().toISOString(),
         has_boleto_link: charge?.has_boleto_link || false
       },
       splits: (finalSplits || []).map(split => ({
