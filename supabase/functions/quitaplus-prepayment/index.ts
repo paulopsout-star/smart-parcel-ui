@@ -109,52 +109,25 @@ serve(async (req) => {
       CardCvv: sanitizedCvv,
     };
 
-    // Preparar segundo JSON - Order Details (camelCase)
-    const orderPayload = {
-      orderDetails: {
-        merchantId: merchantId,
-        initiatorKey: requestData.chargeId,
-        expiresAt: expiresAtFormatted,
-        description: "Pagamento com cartão",
-        details: `Cobrança ${requestData.chargeId}`,
-        payer: {
-          document: sanitizedDocument,
-          email: requestData.payer.email.trim(),
-          phoneNumber: sanitizedPhone,
-          name: requestData.payer.name.trim()
-        },
-        bankslip: {
-          number: "",
-          creditorDocument: creditorDocument,
-          creditorName: creditorName
-        },
-        checkout: {
-          maskFee: false,
-          installments: null  // Sempre null - o campo Installments no cardPayload é suficiente
-        }
-      }
-    };
-
     // Log do payload montado para debug
     console.log('[quitaplus-prepayment] Payload montado:', {
       AmountInCents: requestData.amount,
       Installments: requestData.installments,
-      CheckoutInstallments: null,
       ChargeId: requestData.chargeId
     });
 
-    // Concatenar os dois JSONs como string RAW (igual ao teste que funcionou)
-    const rawBody = `${JSON.stringify(cardPayload, null, 2)}
-
-${JSON.stringify(orderPayload, null, 2)}`;
+    // Body com apenas o cardPayload (JSON único)
+    const rawBody = JSON.stringify(cardPayload);
 
     // Construir URL completa
     const fullUrl = `${baseUrl}/prepayment/authorize`;
 
-    // Log detalhado do request completo (igual ao teste)
-    const maskedBody = rawBody
-      .replace(/"CardNumber":\s*"(\d{6})\d+(\d{4})"/g, '"CardNumber": "$1******$2"')
-      .replace(/"CardCvv":\s*"\d+"/g, '"CardCvv": "***"');
+    // Log detalhado do request completo (mascarando dados sensíveis)
+    const maskedPayload = {
+      ...cardPayload,
+      CardNumber: cardPayload.CardNumber.slice(0, 6) + '******' + cardPayload.CardNumber.slice(-4),
+      CardCvv: '***'
+    };
 
     console.log('[quitaplus-prepayment] REQUEST COMPLETO:', {
       url: fullUrl,
@@ -164,7 +137,7 @@ ${JSON.stringify(orderPayload, null, 2)}`;
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: maskedBody
+      body: maskedPayload
     });
 
     // Chamar API Quita+ com retry
@@ -177,7 +150,6 @@ ${JSON.stringify(orderPayload, null, 2)}`;
       try {
         console.log(`[quitaplus-prepayment] Tentativa ${attempts}/3 - Chamando: ${fullUrl}`);
         
-        // Enviar rawBody diretamente (NÃO usar JSON.stringify)
         // Headers melhorados para passar pelo WAF Akamai
         const quitaResponse = await fetch(fullUrl, {
           method: 'POST',
@@ -194,7 +166,7 @@ ${JSON.stringify(orderPayload, null, 2)}`;
             'Pragma': 'no-cache',
             'Connection': 'keep-alive',
           },
-          body: rawBody, // String RAW com dois JSONs concatenados
+          body: rawBody, // JSON único com cardPayload
         });
 
         const responseText = await quitaResponse.text();
