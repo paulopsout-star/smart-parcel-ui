@@ -695,45 +695,21 @@ export default function NewCharge() {
                   </div>
 
                   {(watchPaymentMethod === "cartao" || watchPaymentMethod === "cartao_pix") && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Parcelas</Label>
-                        <Controller
-                          name="installments"
-                          control={control}
-                          render={({ field }) => (
-                            <Select value={field.value} onValueChange={field.onChange}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Selecione" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {[1,2,3,4,5,6,7,8,9,10,11,12].map((i) => (
-                                  <SelectItem key={i} value={i.toString()}>
-                                    {i}x {i === 1 ? 'à vista' : ''}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        />
-                      </div>
-
-                      <div className="flex items-center space-x-2 pt-6">
-                        <Controller
-                          name="mask_fee"
-                          control={control}
-                          render={({ field }) => (
-                            <Checkbox
-                              id="mask_fee"
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          )}
-                        />
-                        <Label htmlFor="mask_fee" className="text-sm cursor-pointer">
-                          Ocultar taxa do pagador
-                        </Label>
-                      </div>
+                    <div className="flex items-center space-x-2">
+                      <Controller
+                        name="mask_fee"
+                        control={control}
+                        render={({ field }) => (
+                          <Checkbox
+                            id="mask_fee"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        )}
+                      />
+                      <Label htmlFor="mask_fee" className="text-sm cursor-pointer">
+                        Ocultar taxa do pagador
+                      </Label>
                     </div>
                   )}
 
