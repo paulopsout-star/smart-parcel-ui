@@ -133,15 +133,56 @@ export default function PaymentPix() {
         return;
       }
 
+      // CENÁRIO 1: PIX JÁ FOI PAGO ANTERIORMENTE
+      if (data?.alreadyPaid) {
+        console.log('[PaymentPix] ✅ PIX já foi pago! Confirmando e redirecionando...');
+        toast({
+          title: 'PIX já pago!',
+          description: 'Detectamos que o pagamento PIX já foi realizado.',
+        });
+        
+        // Atualizar split e redirecionar
+        const pixSplit = chargeInfo.payment_splits?.find((s: any) => s.method === 'pix');
+        if (pixSplit) {
+          await supabase
+            .from('payment_splits')
+            .update({ 
+              status: 'concluded', 
+              pix_paid_at: new Date().toISOString(),
+              processed_at: new Date().toISOString()
+            })
+            .eq('id', pixSplit.id);
+        }
+        
+        // Redirecionar
+        if (hasCardPayment) {
+          navigate(`/payment-card/${id}`);
+        } else {
+          navigate(`/thank-you?pl=${id}`);
+        }
+        return;
+      }
+
+      // CENÁRIO 2: PIX REUTILIZADO (QR Code válido existente)
+      if (data?.reused) {
+        console.log('[PaymentPix] ♻️ QR Code reutilizado:', data.pixId);
+        toast({
+          title: 'QR Code recuperado',
+          description: 'Exibindo seu QR Code PIX válido.',
+        });
+      }
+
+      // Validar resposta (novo ou reutilizado)
       if (!data?.success || !data?.brCode || !data?.brCodeBase64) {
         console.error('[PaymentPix] Resposta inválida:', data);
         setPixError(data?.error || 'Erro ao gerar QR Code PIX.');
         return;
       }
 
-      console.log('[PaymentPix] ✅ QR Code gerado com sucesso:', {
+      console.log('[PaymentPix] ✅ QR Code pronto:', {
         pixId: data.pixId,
-        expiresAt: data.expiresAt
+        expiresAt: data.expiresAt,
+        reused: data.reused || false
       });
 
       setPixData({
@@ -185,41 +226,40 @@ export default function PaymentPix() {
     setPaying(true);
     
     try {
-      // Verificar status do pagamento via AbacatePay
-      if (pixData?.pixId) {
-        const { data: statusData } = await supabase.functions.invoke('abacatepay-check-status', {
-          body: { pixId: pixData.pixId }
+      // Verificar status do pagamento via AbacatePay usando chargeId
+      // para verificar TODOS os PIX IDs históricos
+      const { data: statusData } = await supabase.functions.invoke('abacatepay-check-status', {
+        body: { chargeId: charge.charge_id }
+      });
+      
+      console.log('[PaymentPix] Status do pagamento:', statusData);
+      
+      if (statusData?.status === 'COMPLETED' || statusData?.status === 'PAID') {
+        // Pagamento confirmado pela API
+        const pixSplit = charge.payment_splits?.find((s: any) => s.method === 'pix');
+        if (pixSplit) {
+          await supabase
+            .from('payment_splits')
+            .update({ 
+              status: 'concluded', 
+              pix_paid_at: new Date().toISOString(),
+              processed_at: new Date().toISOString()
+            })
+            .eq('id', pixSplit.id);
+        }
+        
+        toast({
+          title: 'PIX confirmado!',
+          description: 'Pagamento via PIX realizado com sucesso.',
         });
         
-        console.log('[PaymentPix] Status do pagamento:', statusData);
-        
-        if (statusData?.status === 'COMPLETED' || statusData?.status === 'PAID') {
-          // Pagamento confirmado pela API
-          const pixSplit = charge.payment_splits?.find((s: any) => s.method === 'pix');
-          if (pixSplit) {
-            await supabase
-              .from('payment_splits')
-              .update({ 
-                status: 'concluded', 
-                pix_paid_at: new Date().toISOString(),
-                processed_at: new Date().toISOString()
-              })
-              .eq('id', pixSplit.id);
-          }
-          
-          toast({
-            title: 'PIX confirmado!',
-            description: 'Pagamento via PIX realizado com sucesso.',
-          });
-          
-          // Redirecionar para cartão (se houver) ou thank-you
-          if (hasCardPayment) {
-            navigate(`/payment-card/${id}`);
-          } else {
-            navigate(`/thank-you?pl=${id}`);
-          }
-          return;
+        // Redirecionar para cartão (se houver) ou thank-you
+        if (hasCardPayment) {
+          navigate(`/payment-card/${id}`);
+        } else {
+          navigate(`/thank-you?pl=${id}`);
         }
+        return;
       }
       
       // Se não confirmado, mostrar mensagem
