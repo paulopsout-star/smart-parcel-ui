@@ -25,6 +25,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 
+interface PaymentSplitInfo {
+  id: string;
+  method: string;
+  amount_cents: number;
+  status: string;
+  pix_paid_at?: string;
+  pre_payment_key?: string;
+  transaction_id?: string;
+  processed_at?: string;
+  order_index: number;
+  installments?: number;
+}
+
 interface Charge {
   id: string;
   payer_name: string;
@@ -41,6 +54,8 @@ interface Charge {
   checkout_url?: string;
   checkout_link_id?: string;
   payment_method?: string;
+  pix_amount?: number;
+  card_amount?: number;
   fee_amount?: number;
   fee_percentage?: number;
   pre_payment_key?: string;
@@ -60,6 +75,7 @@ interface Charge {
     status: string;
     payment_link_url: string | null;
   }>;
+  splits?: PaymentSplitInfo[];
 }
 
 interface ChargeFilters {
@@ -156,11 +172,92 @@ const getModernStatusBadge = (status: string) => {
 const getPaymentMethodBadge = (method: string) => {
   const configs = {
     cartao: { label: 'Cartão', variant: 'info' as const },
+    cartao_pix: { label: 'PIX + Cartão', variant: 'default' as const },
     pix: { label: 'PIX', variant: 'success' as const },
     boleto: { label: 'Boleto', variant: 'warning' as const },
   };
   const config = configs[method as keyof typeof configs] || configs.cartao;
   return <Badge variant={config.variant}>{config.label}</Badge>;
+};
+
+// Componente para exibir os métodos de pagamento (splits)
+const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
+  const splits = charge.splits || [];
+  
+  // Se não há splits, mostrar baseado em pix_amount/card_amount
+  if (splits.length === 0) {
+    if (charge.payment_method === 'cartao_pix') {
+      return (
+        <div className="grid grid-cols-2 gap-3 p-4 bg-ds-bg-surface-alt rounded-card border border-ds-border-subtle">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-green-500/10">
+              <CreditCard className="h-4 w-4 text-green-600" />
+            </div>
+            <div>
+              <p className="text-xs text-ds-text-muted">PIX</p>
+              <p className="text-sm font-semibold text-ds-text-strong">{formatCurrency(charge.pix_amount || 0)}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-blue-500/10">
+              <CreditCard className="h-4 w-4 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xs text-ds-text-muted">Cartão</p>
+              <p className="text-sm font-semibold text-ds-text-strong">{formatCurrency(charge.card_amount || 0)}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  const pixSplit = splits.find(s => s.method === 'pix');
+  const cardSplit = splits.find(s => s.method === 'credit_card');
+
+  const getSplitStatusBadge = (split: PaymentSplitInfo) => {
+    const isPaid = split.status === 'concluded' || split.pix_paid_at || split.pre_payment_key || split.transaction_id;
+    if (isPaid) {
+      return <Badge variant="success" className="text-xs">✓ Pago</Badge>;
+    }
+    return <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>;
+  };
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-ds-bg-surface-alt rounded-card border border-ds-border-subtle">
+      {pixSplit && (
+        <div className="flex items-center justify-between gap-2 p-3 bg-ds-bg-surface rounded-lg border border-ds-border-subtle">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-green-500/10">
+              <CreditCard className="h-4 w-4 text-green-600" />
+            </div>
+            <div>
+              <p className="text-xs text-ds-text-muted font-medium">PIX</p>
+              <p className="text-sm font-semibold text-ds-text-strong">{formatCurrency(pixSplit.amount_cents)}</p>
+            </div>
+          </div>
+          {getSplitStatusBadge(pixSplit)}
+        </div>
+      )}
+      {cardSplit && (
+        <div className="flex items-center justify-between gap-2 p-3 bg-ds-bg-surface rounded-lg border border-ds-border-subtle">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-blue-500/10">
+              <CreditCard className="h-4 w-4 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xs text-ds-text-muted font-medium">
+                Cartão {cardSplit.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''}
+              </p>
+              <p className="text-sm font-semibold text-ds-text-strong">{formatCurrency(cardSplit.amount_cents)}</p>
+            </div>
+          </div>
+          {getSplitStatusBadge(cardSplit)}
+        </div>
+      )}
+    </div>
+  );
 };
 
 // InfoCard Component
@@ -357,13 +454,41 @@ export default function ChargeHistory() {
             execution_date,
             status,
             payment_link_url
+          ),
+          splits:payment_splits(
+            id,
+            method,
+            amount_cents,
+            status,
+            pix_paid_at,
+            pre_payment_key,
+            transaction_id,
+            processed_at,
+            order_index,
+            installments
           )
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setCharges(data as Charge[]);
-      setFilteredCharges(data as Charge[]);
+      
+      // Deduplicate splits by method (keep the most recent)
+      const processedData = (data || []).map(charge => {
+        if (charge.splits && charge.splits.length > 0) {
+          const splitsByMethod = new Map<string, any>();
+          charge.splits.forEach((split: any) => {
+            const existing = splitsByMethod.get(split.method);
+            if (!existing || new Date(split.created_at) > new Date(existing.created_at)) {
+              splitsByMethod.set(split.method, split);
+            }
+          });
+          charge.splits = Array.from(splitsByMethod.values()).sort((a, b) => a.order_index - b.order_index);
+        }
+        return charge;
+      });
+      
+      setCharges(processedData as Charge[]);
+      setFilteredCharges(processedData as Charge[]);
     } catch (error: any) {
       toast({
         title: "Erro ao carregar cobranças",
@@ -880,9 +1005,21 @@ export default function ChargeHistory() {
                     />
                   </div>
                   
-                  {/* Alerta de erro no vínculo de boleto */}
-                  {charge.metadata?.link_boleto_error && (charge.status === 'pre_authorized' || charge.status === 'pending') && (
-                    <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                  {/* Métodos de Pagamento (Splits) */}
+                  {(charge.payment_method === 'cartao_pix' || (charge.splits && charge.splits.length > 0)) && (
+                    <div className="mb-6">
+                      <p className="text-xs font-medium text-ds-text-muted uppercase tracking-wider mb-2">
+                        Métodos de Pagamento
+                      </p>
+                      <PaymentMethodsSummary charge={charge} />
+                    </div>
+                  )}
+                  
+                  {/* Alerta de erro no vínculo de boleto - só mostra se status ainda é pre_authorized e não foi vinculado */}
+                  {charge.metadata?.link_boleto_error && 
+                   charge.status === 'pre_authorized' && 
+                   !['boleto_linked', 'completed', 'approved'].includes(charge.status) && (
+                    <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
                       <div className="flex items-start gap-3">
                         <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
                         <div className="flex-1">
@@ -957,8 +1094,57 @@ export default function ChargeHistory() {
                     <div className="flex gap-2">
                       {getModernStatusBadge(selectedCharge.status)}
                       <Badge variant="outline">{selectedCharge.recurrence_type}</Badge>
+                      {selectedCharge.payment_method && getPaymentMethodBadge(selectedCharge.payment_method)}
                     </div>
                   </div>
+
+                  {/* Métodos de Pagamento Detalhados */}
+                  {(selectedCharge.payment_method === 'cartao_pix' || (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-ds-text-strong">Métodos de Pagamento</h4>
+                      <PaymentMethodsSummary charge={selectedCharge} />
+                      
+                      {/* Detalhes individuais dos splits */}
+                      {selectedCharge.splits && selectedCharge.splits.length > 0 && (
+                        <div className="space-y-2 mt-3">
+                          {selectedCharge.splits.map((split) => (
+                            <div key={split.id} className="p-3 bg-ds-bg-surface-alt rounded-lg border border-ds-border-subtle">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="font-medium text-sm">
+                                  {split.method === 'pix' ? '💳 PIX' : '💳 Cartão de Crédito'}
+                                </span>
+                                <Badge variant={
+                                  split.status === 'concluded' || split.pix_paid_at || split.pre_payment_key ? 'success' : 'warning'
+                                }>
+                                  {split.status === 'concluded' || split.pix_paid_at || split.pre_payment_key ? '✓ Pago' : '⏳ Pendente'}
+                                </Badge>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs text-ds-text-muted">
+                                <div>
+                                  <span className="font-medium">Valor:</span> {formatCurrency(split.amount_cents)}
+                                </div>
+                                {split.installments && split.installments > 1 && (
+                                  <div>
+                                    <span className="font-medium">Parcelas:</span> {split.installments}x
+                                  </div>
+                                )}
+                                {split.pre_payment_key && (
+                                  <div className="col-span-2">
+                                    <span className="font-medium">PreAuth:</span> {split.pre_payment_key.slice(0, 8)}...
+                                  </div>
+                                )}
+                                {split.pix_paid_at && (
+                                  <div className="col-span-2">
+                                    <span className="font-medium">Pago em:</span> {format(new Date(split.pix_paid_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {selectedCharge.description && (
                     <div className="space-y-2">
