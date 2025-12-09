@@ -6,6 +6,14 @@ import { CombinedCheckoutSummary } from '@/components/CombinedCheckoutSummary';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+interface PaymentSplit {
+  id: string;
+  method: string;
+  status: string;
+  amount_cents: number;
+  installments?: number;
+}
+
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -14,11 +22,12 @@ export default function Checkout() {
   const [loading, setLoading] = useState(true);
   const [charge, setCharge] = useState<any>(null);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
+  const [existingSplits, setExistingSplits] = useState<PaymentSplit[]>([]);
   
   const mode = searchParams.get('mode') || 'direct';
 
   useEffect(() => {
-    const fetchCharge = async () => {
+    const fetchChargeAndSplits = async () => {
       if (!id) {
         toast({
           title: "Erro",
@@ -32,25 +41,29 @@ export default function Checkout() {
       try {
         setLoading(true);
 
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 10000)
-        );
+        // Buscar dados do pagamento E splits existentes em paralelo
+        const [paymentResponse, splitsResponse] = await Promise.all([
+          fetch(`https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`),
+          fetch(`https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-splits?id=${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+          })
+        ]);
 
-        const fetchPromise = fetch(
-          `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`
-        );
-
-        const response = await Promise.race([
-          fetchPromise,
-          timeoutPromise
-        ]) as Response;
-
-        if (!response.ok) {
-          const errorData = await response.json();
+        if (!paymentResponse.ok) {
+          const errorData = await paymentResponse.json();
           throw new Error(errorData.message || 'Failed to fetch payment link');
         }
 
-        const data = await response.json();
+        const data = await paymentResponse.json();
+        let splits: PaymentSplit[] = [];
+
+        if (splitsResponse.ok) {
+          const splitsData = await splitsResponse.json();
+          splits = splitsData.payment_splits || [];
+          console.log('[Checkout] Splits existentes:', splits);
+        }
 
         if (!data?.amount_cents) {
           toast({
@@ -63,6 +76,7 @@ export default function Checkout() {
         }
 
         setCharge(data);
+        setExistingSplits(splits);
         
         // Verificar o método de pagamento
         const paymentMethod = data.payment_method;
@@ -73,9 +87,46 @@ export default function Checkout() {
           return;
         }
         
-        // Se for pagamento combinado (cartão + PIX), exibir o CombinedCheckoutSummary
+        // Se for pagamento combinado (cartão + PIX), verificar splits existentes
         if (paymentMethod === 'cartao_pix') {
-          // Não redirecionar, exibir o componente combinado
+          const pixSplit = splits.find(s => s.method === 'pix');
+          const cardSplit = splits.find(s => s.method === 'credit_card');
+          
+          console.log('[Checkout] Estado dos splits:', {
+            pixSplit: pixSplit ? { status: pixSplit.status, amount: pixSplit.amount_cents } : null,
+            cardSplit: cardSplit ? { status: cardSplit.status, amount: cardSplit.amount_cents } : null
+          });
+
+          // CENÁRIO 1: PIX já pago, cartão pendente → ir direto para cartão
+          if (pixSplit?.status === 'concluded' && cardSplit?.status === 'pending') {
+            console.log('[Checkout] PIX já pago, redirecionando para cartão');
+            navigate(`/payment-card/${id}`, { replace: true });
+            return;
+          }
+
+          // CENÁRIO 2: PIX pendente, cartão pendente (split já definido) → ir para PIX
+          if (pixSplit?.status === 'pending' && cardSplit?.status === 'pending') {
+            console.log('[Checkout] Splits existentes pendentes, redirecionando para PIX');
+            navigate(`/payment-pix/${id}?next=card`, { replace: true });
+            return;
+          }
+
+          // CENÁRIO 3: Ambos concluídos → ir para thank-you
+          if (pixSplit?.status === 'concluded' && cardSplit?.status === 'concluded') {
+            console.log('[Checkout] Ambos pagamentos concluídos');
+            navigate(`/thank-you?pl=${id}`, { replace: true });
+            return;
+          }
+
+          // CENÁRIO 4: Só cartão existe e está pendente → ir para cartão
+          if (!pixSplit && cardSplit?.status === 'pending') {
+            console.log('[Checkout] Só cartão pendente, redirecionando para cartão');
+            navigate(`/payment-card/${id}`, { replace: true });
+            return;
+          }
+
+          // CENÁRIO 5: Nenhum split existe → exibir CombinedCheckoutSummary
+          console.log('[Checkout] Nenhum split existente, exibindo formulário de divisão');
           setLoading(false);
           return;
         }
@@ -104,7 +155,7 @@ export default function Checkout() {
       }
     };
 
-    fetchCharge();
+    fetchChargeAndSplits();
   }, [id, toast, navigate, mode]);
 
   // Handler para confirmação do checkout combinado
