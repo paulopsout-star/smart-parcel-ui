@@ -47,6 +47,8 @@ serve(async (req) => {
 
     // Obter URL do Supabase
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Obter token de autenticação
     const tokenResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-token`, {
@@ -166,12 +168,12 @@ serve(async (req) => {
             'Pragma': 'no-cache',
             'Connection': 'keep-alive',
           },
-          body: rawBody, // JSON único com cardPayload
+          body: rawBody,
         });
 
         const responseText = await quitaResponse.text();
         
-        // Log detalhado da resposta (igual ao teste)
+        // Log detalhado da resposta
         console.log('[quitaplus-prepayment] RESPONSE COMPLETO:', {
           status: quitaResponse.status,
           statusText: quitaResponse.statusText,
@@ -234,16 +236,15 @@ DETALHES TÉCNICOS:
         }
 
         const quitaData = JSON.parse(responseText);
+        const prePaymentKey = quitaData.prePaymentKey || quitaData.pre_payment_key;
 
-        // Inicializar cliente Supabase para atualizar DB
-        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-        const supabase = createClient(supabaseUrl, supabaseKey);
+        console.log('[quitaplus-prepayment] Pré-pagamento autorizado com sucesso, prePaymentKey:', prePaymentKey);
 
         // Atualizar payment_splits com pre_payment_key
         const { error: updateError } = await supabase
           .from('payment_splits')
           .update({
-            pre_payment_key: quitaData.prePaymentKey || quitaData.pre_payment_key,
+            pre_payment_key: prePaymentKey,
             authorization_code: quitaData.authorizationCode || quitaData.authorization_code,
             status: 'pending',
           })
@@ -252,13 +253,151 @@ DETALHES TÉCNICOS:
 
         if (updateError) {
           console.error('[quitaplus-prepayment] Erro ao atualizar payment_splits:', updateError);
-          throw updateError;
         }
 
-        console.log('[quitaplus-prepayment] Pré-pagamento autorizado com sucesso');
+        // Atualizar cobrança com pre_payment_key e status
+        await supabase
+          .from('charges')
+          .update({
+            pre_payment_key: prePaymentKey,
+            payment_authorized_at: new Date().toISOString(),
+            status: 'pre_authorized',
+          })
+          .eq('id', requestData.chargeId);
+
+        // ============================================
+        // FASE 2: VÍNCULO AUTOMÁTICO DE BOLETO
+        // ============================================
+        console.log('[quitaplus-prepayment] Iniciando vínculo automático de boleto...');
+
+        // Buscar dados da cobrança para vínculo do boleto
+        const { data: charge, error: chargeError } = await supabase
+          .from('charges')
+          .select('id, boleto_linha_digitavel, creditor_document, creditor_name')
+          .eq('id', requestData.chargeId)
+          .single();
+
+        if (chargeError) {
+          console.error('[quitaplus-prepayment] Erro ao buscar cobrança:', chargeError);
+        }
+
+        let boletoLinked = false;
+        let linkBoletoError: any = null;
+
+        // Vincular boleto automaticamente se existir linha digitável
+        if (charge?.boleto_linha_digitavel && prePaymentKey) {
+          console.log('[quitaplus-prepayment] Linha digitável encontrada, vinculando boleto...', {
+            chargeId: requestData.chargeId,
+            linhaDigitavelLength: charge.boleto_linha_digitavel.length,
+            prePaymentKey: prePaymentKey,
+          });
+
+          try {
+            const linkResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-link-boleto`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                prePaymentKey: prePaymentKey,
+                paymentLinkId: requestData.paymentLinkId,
+                boleto: {
+                  number: charge.boleto_linha_digitavel,
+                  creditorDocument: charge.creditor_document || creditorDocument,
+                  creditorName: charge.creditor_name || creditorName,
+                }
+              }),
+            });
+
+            const linkResult = await linkResponse.json();
+            console.log('[quitaplus-prepayment] Resultado do vínculo de boleto:', linkResult);
+
+            // Verificar se houve erro no vínculo
+            if (linkResult.error || (linkResult.apiMetadata?.httpStatus && linkResult.apiMetadata.httpStatus >= 400)) {
+              linkBoletoError = {
+                message: linkResult.error || 'Erro ao vincular boleto',
+                apiResponse: linkResult.apiRawResponse,
+                httpStatus: linkResult.apiMetadata?.httpStatus,
+                attemptedAt: new Date().toISOString(),
+              };
+              console.error('[quitaplus-prepayment] Erro no vínculo do boleto:', linkBoletoError);
+
+              // Atualizar cobrança com erro (não falha o fluxo)
+              await supabase
+                .from('charges')
+                .update({
+                  status: 'pre_authorized', // Mantém pre_authorized pois o vínculo falhou
+                  metadata: supabase.rpc ? undefined : {
+                    link_boleto_error: linkBoletoError,
+                  },
+                })
+                .eq('id', requestData.chargeId);
+
+              // Atualizar metadata separadamente para evitar sobrescrever
+              const { data: currentCharge } = await supabase
+                .from('charges')
+                .select('metadata')
+                .eq('id', requestData.chargeId)
+                .single();
+
+              const updatedMetadata = {
+                ...(currentCharge?.metadata as object || {}),
+                link_boleto_error: linkBoletoError,
+              };
+
+              await supabase
+                .from('charges')
+                .update({ metadata: updatedMetadata })
+                .eq('id', requestData.chargeId);
+
+            } else {
+              // Vínculo bem-sucedido
+              boletoLinked = true;
+              console.log('[quitaplus-prepayment] Boleto vinculado com sucesso!');
+
+              await supabase
+                .from('charges')
+                .update({
+                  status: 'boleto_linked',
+                  boleto_linked_at: new Date().toISOString(),
+                })
+                .eq('id', requestData.chargeId);
+            }
+
+          } catch (linkError) {
+            linkBoletoError = {
+              message: linkError instanceof Error ? linkError.message : 'Erro desconhecido ao vincular boleto',
+              attemptedAt: new Date().toISOString(),
+            };
+            console.error('[quitaplus-prepayment] Exceção ao vincular boleto:', linkError);
+
+            // Atualizar metadata com erro
+            const { data: currentCharge } = await supabase
+              .from('charges')
+              .select('metadata')
+              .eq('id', requestData.chargeId)
+              .single();
+
+            const updatedMetadata = {
+              ...(currentCharge?.metadata as object || {}),
+              link_boleto_error: linkBoletoError,
+            };
+
+            await supabase
+              .from('charges')
+              .update({ metadata: updatedMetadata })
+              .eq('id', requestData.chargeId);
+          }
+        } else {
+          console.log('[quitaplus-prepayment] Nenhuma linha digitável encontrada, pulando vínculo de boleto');
+        }
 
         return new Response(
           JSON.stringify({
+            success: true,
+            prePaymentKey: prePaymentKey,
+            boletoLinked: boletoLinked,
+            linkBoletoError: linkBoletoError?.message || null,
             apiRawResponse: responseText,
             apiMetadata: {
               httpStatus: quitaResponse.status,

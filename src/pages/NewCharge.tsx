@@ -48,19 +48,58 @@ const formSchema = z.object({
     }, {
       message: "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos"
     }),
-  payment_method: z.enum(["pix", "cartao"]).default("cartao"),
+  payment_method: z.enum(["pix", "cartao", "cartao_pix"]).default("cartao"),
   amount: z.string().min(1, "Valor é obrigatório"),
+  pix_amount: z.string().optional(),
+  card_amount: z.string().optional(),
   description: z.string().optional(),
   installments: z.string(),
   mask_fee: z.boolean(),
   has_boleto: z.boolean(),
   boleto_barcode: z.string().optional(),
   message_template_id: z.string().optional(),
-  has_boleto_link: z.boolean().default(true),
   boleto_linha_digitavel: z.string().optional(),
   recurrence_type: z.enum(["pontual", "diaria", "semanal", "quinzenal", "mensal", "semestral", "anual"]),
   recurrence_interval: z.string(),
   recurrence_end_date: z.string().optional(),
+}).superRefine((data, ctx) => {
+  // Linha digitável obrigatória (47 dígitos) para cartão e cartao_pix
+  if (data.payment_method === 'cartao' || data.payment_method === 'cartao_pix') {
+    if (!data.boleto_linha_digitavel) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Linha digitável é obrigatória para pagamento com cartão",
+        path: ["boleto_linha_digitavel"],
+      });
+    } else {
+      const digits = data.boleto_linha_digitavel.replace(/\D/g, '');
+      if (digits.length !== 47) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Linha digitável deve ter exatamente 47 dígitos",
+          path: ["boleto_linha_digitavel"],
+        });
+      }
+    }
+  }
+  
+  // Validar split de valores para cartao_pix
+  if (data.payment_method === 'cartao_pix') {
+    if (!data.pix_amount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Valor do PIX é obrigatório",
+        path: ["pix_amount"],
+      });
+    }
+    if (!data.card_amount) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Valor do Cartão é obrigatório",
+        path: ["card_amount"],
+      });
+    }
+  }
 });
 
 interface FormData {
@@ -68,15 +107,16 @@ interface FormData {
   payer_email: string;
   payer_phone: string;
   payer_document: string;
-  payment_method: "pix" | "cartao";
+  payment_method: "pix" | "cartao" | "cartao_pix";
   amount: string;
+  pix_amount?: string;
+  card_amount?: string;
   description?: string;
   installments: string;
   mask_fee: boolean;
   has_boleto: boolean;
   boleto_barcode?: string;
   message_template_id?: string;
-  has_boleto_link: boolean;
   boleto_linha_digitavel?: string;
   recurrence_type: "pontual" | "diaria" | "semanal" | "quinzenal" | "mensal" | "semestral" | "anual";
   recurrence_interval: string;
@@ -125,7 +165,6 @@ export default function NewCharge() {
       payment_method: "cartao",
       mask_fee: false,
       has_boleto: false,
-      has_boleto_link: true,
       installments: "1",
       recurrence_type: "pontual",
       recurrence_interval: "1"
@@ -135,10 +174,11 @@ export default function NewCharge() {
   const watchRecurrenceType = watch("recurrence_type");
   const watchAmount = watch("amount");
   const watchHasBoleto = watch("has_boleto");
-  const watchHasBoletoLink = watch("has_boleto_link");
   const watchBoletoLinhaDigitavel = watch("boleto_linha_digitavel");
   const watchPayerName = watch("payer_name");
   const watchPaymentMethod = watch("payment_method");
+  const watchPixAmount = watch("pix_amount");
+  const watchCardAmount = watch("card_amount");
 
   useEffect(() => {
     if (!profile) return;
@@ -243,8 +283,9 @@ export default function NewCharge() {
       return;
     }
     
-    if (data.recurrence_type === "pontual") {
-      console.log('ui.newcharge.pontual.toggle_boleto_link:', data.has_boleto_link ? 'on' : 'off');
+    // Log para debug
+    if (data.payment_method === 'cartao' || data.payment_method === 'cartao_pix') {
+      console.log('ui.newcharge.cartao.boleto_obrigatorio:', data.boleto_linha_digitavel ? 'preenchido' : 'vazio');
     }
     
     setIsLoading(true);
@@ -286,7 +327,10 @@ export default function NewCharge() {
         ? normalizeBoletoLinhaDigitavel(data.boleto_linha_digitavel)
         : null;
 
-      if (data.has_boleto_link && normalizedLinhaDigitavel) {
+      // Linha digitável é obrigatória para cartão e cartao_pix
+      const requiresBoleto = data.payment_method === 'cartao' || data.payment_method === 'cartao_pix';
+      
+      if (requiresBoleto && normalizedLinhaDigitavel) {
         console.log('Backend: boleto_linha_digitavel saved', {
           length: normalizedLinhaDigitavel.length,
           hash_prefix: normalizedLinhaDigitavel.substring(0, 8)
@@ -309,8 +353,10 @@ export default function NewCharge() {
           mask_fee: data.mask_fee,
           has_boleto: data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
-          has_boleto_link: data.recurrence_type === "pontual" ? data.has_boleto_link : false,
-          boleto_linha_digitavel: data.recurrence_type === "pontual" && data.has_boleto_link ? normalizedLinhaDigitavel : null,
+          has_boleto_link: requiresBoleto, // Agora é true se for cartão ou cartao_pix
+          boleto_linha_digitavel: requiresBoleto ? normalizedLinhaDigitavel : null,
+          pix_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.pix_amount || '0') : null,
+          card_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.card_amount || '0') : null,
           creditor_document: creditorSettings?.creditor_document || null,
           creditor_name: creditorSettings?.creditor_name || null,
           message_template_id: data.message_template_id === "none" ? null : data.message_template_id,
@@ -386,14 +432,14 @@ export default function NewCharge() {
         return;
       }
 
-      if (data.recurrence_type === 'pontual' && data.has_boleto_link && normalizedLinhaDigitavel) {
-        console.log('[NewCharge] ℹ️ Cobrança pontual com boleto criada:', {
+      if (requiresBoleto && normalizedLinhaDigitavel) {
+        console.log('[NewCharge] ℹ️ Cobrança com boleto criada:', {
           chargeId: charge.id,
           temLinhaDigitavel: true,
           comprimentoLinha: normalizedLinhaDigitavel.length,
           creditorDocument: creditorSettings?.creditor_document,
           creditorName: creditorSettings?.creditor_name,
-          info: 'O boleto será vinculado no checkout quando o cliente pagar com cartão (quitaplus-link-boleto)'
+          info: 'O boleto será vinculado automaticamente no backend após autorização do cartão (quitaplus-prepayment)'
         });
       }
 
@@ -607,7 +653,7 @@ export default function NewCharge() {
                           <RadioGroup
                             value={field.value}
                             onValueChange={field.onChange}
-                            className="flex gap-4"
+                            className="flex flex-wrap gap-4"
                           >
                             <div className="flex items-center space-x-2">
                               <RadioGroupItem value="cartao" id="cartao" />
@@ -621,6 +667,15 @@ export default function NewCharge() {
                               <Label htmlFor="pix" className="flex items-center gap-1.5 cursor-pointer">
                                 <QrCode className="h-4 w-4" />
                                 PIX
+                              </Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="cartao_pix" id="cartao_pix" />
+                              <Label htmlFor="cartao_pix" className="flex items-center gap-1.5 cursor-pointer">
+                                <CreditCard className="h-4 w-4" />
+                                <span>+</span>
+                                <QrCode className="h-4 w-4" />
+                                Cartão + PIX
                               </Label>
                             </div>
                           </RadioGroup>
@@ -639,7 +694,7 @@ export default function NewCharge() {
                     />
                   </div>
 
-                  {watchPaymentMethod === "cartao" && (
+                  {(watchPaymentMethod === "cartao" || watchPaymentMethod === "cartao_pix") && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Parcelas</Label>
@@ -681,49 +736,64 @@ export default function NewCharge() {
                       </div>
                     </div>
                   )}
+
+                  {/* Split de valores para Cartão + PIX */}
+                  {watchPaymentMethod === "cartao_pix" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
+                      <div className="space-y-2">
+                        <Label htmlFor="pix_amount">Valor PIX *</Label>
+                        <Input
+                          id="pix_amount"
+                          {...register("pix_amount")}
+                          placeholder="R$ 0,00"
+                          className={errors.pix_amount ? "border-destructive" : ""}
+                        />
+                        {errors.pix_amount && (
+                          <p className="text-sm text-destructive">{errors.pix_amount.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="card_amount">Valor Cartão *</Label>
+                        <Input
+                          id="card_amount"
+                          {...register("card_amount")}
+                          placeholder="R$ 0,00"
+                          className={errors.card_amount ? "border-destructive" : ""}
+                        />
+                        {errors.card_amount && (
+                          <p className="text-sm text-destructive">{errors.card_amount.message}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
-              {/* Vínculo de Boleto */}
-              {watchRecurrenceType === "pontual" && watchPaymentMethod === "cartao" && (
+              {/* Linha Digitável do Boleto - Obrigatória para Cartão e Cartão+PIX */}
+              {(watchPaymentMethod === "cartao" || watchPaymentMethod === "cartao_pix") && (
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg">
                       <Banknote className="h-5 w-5 text-primary" />
-                      Vínculo de Boleto
+                      Linha Digitável do Boleto *
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="flex items-center space-x-2">
-                      <Controller
-                        name="has_boleto_link"
-                        control={control}
-                        render={({ field }) => (
-                          <Checkbox
-                            id="has_boleto_link"
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        )}
+                    <div className="space-y-2">
+                      <Label htmlFor="boleto_linha_digitavel">Linha Digitável (47 dígitos) *</Label>
+                      <Input
+                        id="boleto_linha_digitavel"
+                        {...register("boleto_linha_digitavel")}
+                        placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
+                        className={errors.boleto_linha_digitavel ? "border-destructive" : ""}
                       />
-                      <Label htmlFor="has_boleto_link" className="cursor-pointer">
-                        Vincular boleto a esta cobrança
-                      </Label>
+                      {errors.boleto_linha_digitavel && (
+                        <p className="text-sm text-destructive">{errors.boleto_linha_digitavel.message}</p>
+                      )}
+                      <p className="text-xs text-ds-text-muted">
+                        A linha digitável será vinculada automaticamente após a autorização do cartão
+                      </p>
                     </div>
-
-                    {watchHasBoletoLink && (
-                      <div className="space-y-2">
-                        <Label htmlFor="boleto_linha_digitavel">Linha Digitável do Boleto</Label>
-                        <Input
-                          id="boleto_linha_digitavel"
-                          {...register("boleto_linha_digitavel")}
-                          placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
-                        />
-                        <p className="text-xs text-ds-text-muted">
-                          Insira a linha digitável completa do boleto (47 dígitos)
-                        </p>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               )}
@@ -870,10 +940,10 @@ export default function NewCharge() {
                         {watchRecurrenceType}
                       </span>
                     </div>
-                    {watchHasBoletoLink && watchBoletoLinhaDigitavel && (
+                    {(watchPaymentMethod === 'cartao' || watchPaymentMethod === 'cartao_pix') && watchBoletoLinhaDigitavel && (
                       <div className="flex justify-between text-sm">
                         <span className="text-ds-text-muted">Boleto:</span>
-                        <span className="font-medium text-primary">Vinculado</span>
+                        <span className="font-medium text-primary">Será vinculado</span>
                       </div>
                     )}
                   </div>
