@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PaymentForm } from '@/components/PaymentForm';
 import { useToast } from '@/hooks/use-toast';
+import { formatCurrency } from '@/lib/utils';
+import { CreditCard, CheckCircle2 } from 'lucide-react';
 
 export default function PaymentCard() {
   const { id } = useParams<{ id: string }>();
@@ -14,7 +15,10 @@ export default function PaymentCard() {
   const [loading, setLoading] = useState(true);
   const [charge, setCharge] = useState<any>(null);
   const [cardAmount, setCardAmount] = useState(0);
+  const [cardInstallments, setCardInstallments] = useState(1);
   const [selectedOption, setSelectedOption] = useState<any>(null);
+  const [pixPaid, setPixPaid] = useState(false);
+  const [pixAmount, setPixAmount] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,6 +54,7 @@ export default function PaymentCard() {
         }
 
         const cardSplit = splitData.find((s: any) => s.method === 'credit_card');
+        const pixSplit = splitData.find((s: any) => s.method === 'pix');
 
         if (!cardSplit) {
           toast({
@@ -61,15 +66,22 @@ export default function PaymentCard() {
           return;
         }
 
+        // Verificar se PIX foi pago (se houver)
+        if (pixSplit) {
+          setPixPaid(pixSplit.status === 'concluded');
+          setPixAmount(pixSplit.amount_cents);
+        }
+
         setCharge({ ...paymentLink, payment_splits: splitData });
         setCardAmount(cardSplit.amount_cents);
+        setCardInstallments(cardSplit.installments || 1);
         
         // Usar dados SALVOS do split - ir direto para o formulário
         setSelectedOption({
           id: 'saved',
           totalCents: cardSplit.amount_cents,
           installments: cardSplit.installments || 1,
-          installmentValueCents: Math.floor(cardSplit.amount_cents / (cardSplit.installments || 1))
+          installmentValueCents: Math.ceil(cardSplit.amount_cents / (cardSplit.installments || 1))
         });
         
         setLoading(false);
@@ -112,10 +124,49 @@ export default function PaymentCard() {
     );
   }
 
-  // Ir direto para o formulário com os dados salvos
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <Card className="max-w-2xl w-full p-8">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-950/30 mb-4">
+            <CreditCard className="w-8 h-8 text-blue-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-ink mb-2">Pagamento via Cartão</h1>
+          <p className="text-ink-secondary">
+            Complete o pagamento com seu cartão de crédito
+          </p>
+        </div>
+
+        {/* PIX já pago (se aplicável) */}
+        {pixPaid && pixAmount > 0 && (
+          <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-emerald-800 dark:text-emerald-200">
+                  PIX confirmado: {formatCurrency(pixAmount)}
+                </p>
+                <p className="text-emerald-600 dark:text-emerald-300">
+                  Agora complete o pagamento de {formatCurrency(cardAmount)} no cartão.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Resumo do valor */}
+        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 mb-6 text-center border border-blue-200 dark:border-blue-800">
+          <p className="text-sm text-blue-700 dark:text-blue-300 mb-1">Valor a pagar no cartão</p>
+          <p className="text-3xl font-bold text-blue-600">{formatCurrency(cardAmount)}</p>
+          {cardInstallments > 1 && (
+            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+              {cardInstallments}x de {formatCurrency(Math.ceil(cardAmount / cardInstallments))}
+            </p>
+          )}
+        </div>
+
+        {/* Formulário de Pagamento */}
         <PaymentForm
           amount={selectedOption.totalCents / 100}
           installments={selectedOption.installments}

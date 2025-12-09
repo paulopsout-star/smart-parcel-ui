@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { QrCode, Copy, CheckCircle2, Clock } from 'lucide-react';
+import { QrCode, Copy, CheckCircle2, Clock, CreditCard } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 
@@ -17,6 +17,8 @@ export default function PaymentPix() {
   const [paying, setPaying] = useState(false);
   const [charge, setCharge] = useState<any>(null);
   const [pixAmount, setPixAmount] = useState(0);
+  const [hasCardPayment, setHasCardPayment] = useState(false);
+  const [cardAmount, setCardAmount] = useState(0);
   
   const nextStep = searchParams.get('next'); // 'card' se houver cartão depois
 
@@ -54,9 +56,12 @@ export default function PaymentPix() {
         }
 
         const pixSplit = splitData.find((s: any) => s.method === 'pix');
+        const cardSplit = splitData.find((s: any) => s.method === 'credit_card');
         
         setCharge({ ...paymentLink, payment_splits: splitData });
         setPixAmount(pixSplit?.amount_cents || 0);
+        setHasCardPayment(!!cardSplit);
+        setCardAmount(cardSplit?.amount_cents || 0);
         
         setLoading(false);
       } catch (err) {
@@ -109,7 +114,6 @@ export default function PaymentPix() {
     });
     
     // Redirecionar para cartão (se houver) ou thank-you
-    const hasCardPayment = charge.payment_splits?.some((s: any) => s.method === 'credit_card');
     if (hasCardPayment) {
       navigate(`/payment-card/${id}`);
     } else {
@@ -148,6 +152,23 @@ export default function PaymentPix() {
           <p className="text-sm text-ink-secondary mb-2">Valor a pagar via PIX</p>
           <p className="text-4xl font-bold text-primary">{formatCurrency(pixAmount)}</p>
         </div>
+
+        {/* Próximo pagamento (se houver) */}
+        {hasCardPayment && cardAmount > 0 && (
+          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <CreditCard className="w-5 h-5 text-blue-600 flex-shrink-0" />
+              <div className="text-sm">
+                <p className="font-medium text-blue-800 dark:text-blue-200">
+                  Próximo passo: Pagamento via Cartão
+                </p>
+                <p className="text-blue-600 dark:text-blue-300">
+                  Após confirmar o PIX, você pagará <strong>{formatCurrency(cardAmount)}</strong> no cartão.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* QR Code Mock */}
         <div className="bg-white p-8 rounded-lg mb-6 flex items-center justify-center border-2 border-dashed border-gray-300">
@@ -199,13 +220,13 @@ export default function PaymentPix() {
           ) : (
             <>
               <CheckCircle2 className="mr-2" />
-              Confirmar Pagamento
+              Confirmar Pagamento PIX
             </>
           )}
         </Button>
 
         {/* Info adicional */}
-        {nextStep === 'card' && (
+        {hasCardPayment && (
           <div className="mt-6 text-center text-sm text-ink-muted">
             Após confirmar o PIX, você será direcionado para o pagamento do valor restante no cartão.
           </div>
