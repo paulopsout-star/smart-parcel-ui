@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -180,43 +180,31 @@ const getPaymentMethodBadge = (method: string) => {
   return <Badge variant={config.variant}>{config.label}</Badge>;
 };
 
-// Componente para exibir os métodos de pagamento (splits)
+// Componente para exibir os métodos de pagamento (splits) com breakdown de taxas
 const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
   const splits = charge.splits || [];
   
-  // Se não há splits, mostrar baseado em pix_amount/card_amount
-  if (splits.length === 0) {
-    if (charge.payment_method === 'cartao_pix') {
-      return (
-        <div className="grid grid-cols-2 gap-3 p-4 bg-ds-bg-surface-alt rounded-card border border-ds-border-subtle">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-green-500/10">
-              <CreditCard className="h-4 w-4 text-green-600" />
-            </div>
-            <div>
-              <p className="text-xs text-ds-text-muted">PIX</p>
-              <p className="text-sm font-semibold text-ds-text-strong">{formatCurrency(charge.pix_amount || 0)}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-blue-500/10">
-              <CreditCard className="h-4 w-4 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs text-ds-text-muted">Cartão</p>
-              <p className="text-sm font-semibold text-ds-text-strong">{formatCurrency(charge.card_amount || 0)}</p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  }
-
   const pixSplit = splits.find(s => s.method === 'pix');
   const cardSplit = splits.find(s => s.method === 'credit_card');
 
-  const getSplitStatusBadge = (split: PaymentSplitInfo) => {
+  // Cálculos para PIX
+  const pixBase = charge.pix_amount || 0;
+  const pixTotal = pixSplit?.amount_cents || pixBase;
+  const pixFee = pixTotal > pixBase ? pixTotal - pixBase : 0;
+  const pixFeePercent = pixBase > 0 && pixFee > 0 
+    ? ((pixFee / pixBase) * 100).toFixed(1) 
+    : null;
+
+  // Cálculos para Cartão
+  const cardBase = charge.card_amount || 0;
+  const cardTotal = cardSplit?.amount_cents || cardBase;
+  const cardFee = cardTotal > cardBase ? cardTotal - cardBase : 0;
+  const cardFeePercent = cardBase > 0 && cardFee > 0 
+    ? ((cardFee / cardBase) * 100).toFixed(1) 
+    : null;
+
+  const getSplitStatusBadge = (split: PaymentSplitInfo | undefined, isPix: boolean) => {
+    if (!split) return null;
     const isPaid = split.status === 'concluded' || split.pix_paid_at || split.pre_payment_key || split.transaction_id;
     if (isPaid) {
       return <Badge variant="success" className="text-xs">✓ Pago</Badge>;
@@ -224,36 +212,100 @@ const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
     return <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>;
   };
 
+  // Se não há splits e não é pagamento combinado
+  if (splits.length === 0 && charge.payment_method !== 'cartao_pix') {
+    return null;
+  }
+
+  const hasPix = pixSplit || (charge.payment_method === 'cartao_pix' && pixBase > 0);
+  const hasCard = cardSplit || (charge.payment_method === 'cartao_pix' && cardBase > 0);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-ds-bg-surface-alt rounded-card border border-ds-border-subtle">
-      {pixSplit && (
-        <div className="flex items-center justify-between gap-2 p-3 bg-ds-bg-surface rounded-lg border border-ds-border-subtle">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-green-500/10">
-              <CreditCard className="h-4 w-4 text-green-600" />
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium text-ds-text-strong">
+        <Wallet className="h-4 w-4" />
+        Métodos de Pagamento
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* PIX Card */}
+        {hasPix && (
+          <div className="p-4 bg-green-500/5 rounded-card border border-green-500/10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-green-500/10">
+                  <QrCode className="h-4 w-4 text-green-600" />
+                </div>
+                <span className="font-medium text-green-700">PIX</span>
+              </div>
+              {getSplitStatusBadge(pixSplit, true)}
             </div>
-            <div>
-              <p className="text-xs text-ds-text-muted font-medium">PIX</p>
-              <p className="text-sm font-semibold text-ds-text-strong">{formatCurrency(pixSplit.amount_cents)}</p>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between text-ds-text-muted">
+                <span>Valor base:</span>
+                <span>{formatCurrency(pixBase)}</span>
+              </div>
+              {pixFee > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>Taxa ({pixFeePercent}%):</span>
+                  <span>+ {formatCurrency(pixFee)}</span>
+                </div>
+              )}
+              <div className="border-t border-green-500/10 pt-1.5 mt-1.5">
+                <div className="flex justify-between font-semibold text-green-700">
+                  <span>Total pago:</span>
+                  <span>{formatCurrency(pixTotal)}</span>
+                </div>
+              </div>
             </div>
           </div>
-          {getSplitStatusBadge(pixSplit)}
-        </div>
-      )}
-      {cardSplit && (
-        <div className="flex items-center justify-between gap-2 p-3 bg-ds-bg-surface rounded-lg border border-ds-border-subtle">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-blue-500/10">
-              <CreditCard className="h-4 w-4 text-blue-600" />
+        )}
+
+        {/* Card Card */}
+        {hasCard && (
+          <div className="p-4 bg-blue-500/5 rounded-card border border-blue-500/10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-blue-500/10">
+                  <CreditCard className="h-4 w-4 text-blue-600" />
+                </div>
+                <span className="font-medium text-blue-700">
+                  Cartão {cardSplit?.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''}
+                </span>
+              </div>
+              {getSplitStatusBadge(cardSplit, false)}
             </div>
-            <div>
-              <p className="text-xs text-ds-text-muted font-medium">
-                Cartão {cardSplit.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''}
-              </p>
-              <p className="text-sm font-semibold text-ds-text-strong">{formatCurrency(cardSplit.amount_cents)}</p>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between text-ds-text-muted">
+                <span>Valor base:</span>
+                <span>{formatCurrency(cardBase)}</span>
+              </div>
+              {cardFee > 0 && (
+                <div className="flex justify-between text-blue-600">
+                  <span>Juros ({cardFeePercent}%):</span>
+                  <span>+ {formatCurrency(cardFee)}</span>
+                </div>
+              )}
+              <div className="border-t border-blue-500/10 pt-1.5 mt-1.5">
+                <div className="flex justify-between font-semibold text-blue-700">
+                  <span>Total pago:</span>
+                  <span>{formatCurrency(cardTotal)}</span>
+                </div>
+              </div>
             </div>
           </div>
-          {getSplitStatusBadge(cardSplit)}
+        )}
+      </div>
+
+      {/* Total Geral */}
+      {hasPix && hasCard && (
+        <div className="p-3 bg-ds-bg-surface-alt rounded-card border border-ds-border-subtle flex justify-between items-center">
+          <div className="flex items-center gap-2 text-ds-text-muted">
+            <TrendingUp className="h-4 w-4" />
+            <span className="text-sm font-medium">Total pago pelo cliente:</span>
+          </div>
+          <span className="text-lg font-bold text-ds-text-strong">
+            {formatCurrency(pixTotal + cardTotal)}
+          </span>
         </div>
       )}
     </div>
