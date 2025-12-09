@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, CheckCircle2, XCircle, Radio, Play, TestTube, Info, CreditCard, FileText } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, Radio, Play, TestTube, Info, CreditCard } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 type ConnectionStatus = 'idle' | 'testing' | 'success' | 'error';
@@ -33,30 +33,24 @@ export default function ConnectivityTest() {
   const [tokenStatus, setTokenStatus] = useState<ConnectionStatus>('idle');
   const [simulationStatus, setSimulationStatus] = useState<ConnectionStatus>('idle');
   const [prepaymentStatus, setPrepaymentStatus] = useState<ConnectionStatus>('idle');
-  const [linkBoletoStatus, setLinkBoletoStatus] = useState<ConnectionStatus>('idle');
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [tokenResult, setTokenResult] = useState<TestResult | null>(null);
   const [simulationResult, setSimulationResult] = useState<TestResult | null>(null);
   const [prepaymentResult, setPrepaymentResult] = useState<TestResult | null>(null);
-  const [linkBoletoResult, setLinkBoletoResult] = useState<TestResult | null>(null);
 
-  // Helper para formatar resposta da API (JSON ou texto puro)
   const formatApiResponse = (raw: string | undefined) => {
     if (!raw) return 'Sem resposta';
     try {
       const parsed = JSON.parse(raw);
       return JSON.stringify(parsed, null, 2);
     } catch {
-      // Não é JSON válido (ex: HTML do WAF), mostra como texto puro
       return raw;
     }
   };
   const { toast } = useToast();
 
-  // Estado do formulário de pré-pagamento
+  // Estado do formulário de pré-pagamento (apenas campos necessários)
   const [prepaymentForm, setPrepaymentForm] = useState({
-    chargeId: crypto.randomUUID(),
-    paymentLinkId: crypto.randomUUID(),
     amount: '100.00',
     installments: '1',
     cardHolderName: 'TESTE USUARIO',
@@ -67,15 +61,6 @@ export default function ConnectivityTest() {
     payerDocument: '12345678900',
     payerEmail: 'teste@exemplo.com',
     payerPhoneNumber: '11999999999'
-  });
-
-  // Estado do formulário de vínculo de boleto
-  const [linkBoletoForm, setLinkBoletoForm] = useState({
-    prePaymentKey: '',
-    paymentLinkId: crypto.randomUUID(),
-    boletoNumber: '07790001161210147229304375381466112160000000250',
-    creditorDocument: '54329414000198',
-    creditorName: 'AUTONEGOCIE'
   });
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
@@ -177,7 +162,7 @@ export default function ConnectivityTest() {
       addLog('📤 Enviando requisição para quitaplus-simulation', 'info');
       
       const { data, error } = await supabase.functions.invoke('quitaplus-simulation', {
-        body: { amountInCents: 10000 } // R$ 100,00
+        body: { amountInCents: 10000 }
       });
       
       const duration = Date.now() - startTime;
@@ -242,12 +227,17 @@ export default function ConnectivityTest() {
     try {
       const amountInCents = Math.round(parseFloat(prepaymentForm.amount) * 100);
       
+      // Gerar IDs automaticamente para o teste
+      const chargeId = crypto.randomUUID();
+      const paymentLinkId = crypto.randomUUID();
+      
       addLog('📤 Enviando requisição para quitaplus-prepayment', 'info');
+      addLog(`📋 Payload: valor=${amountInCents} centavos, parcelas=${prepaymentForm.installments}`, 'info');
       
       const { data, error } = await supabase.functions.invoke('quitaplus-prepayment', {
         body: {
-          chargeId: prepaymentForm.chargeId,
-          paymentLinkId: prepaymentForm.paymentLinkId,
+          chargeId,
+          paymentLinkId,
           amount: amountInCents,
           installments: parseInt(prepaymentForm.installments),
           card: {
@@ -304,17 +294,21 @@ export default function ConnectivityTest() {
         addLog('✅ Pré-pagamento autorizado com sucesso', 'success');
         addLog(`Resposta: ${result.apiRawResponse?.substring(0, 200)}...`, 'info');
         
-        // Tentar extrair prePaymentKey do JSON para auto-preencher
+        // Tentar extrair prePaymentKey
         try {
           const parsed = JSON.parse(result.apiRawResponse);
           if (parsed.prePaymentKey || parsed.pre_payment_key) {
             const key = parsed.prePaymentKey || parsed.pre_payment_key;
             addLog(`✅ PrePaymentKey obtida: ${maskCredential(key)}`, 'success');
-            setLinkBoletoForm(prev => ({ ...prev, prePaymentKey: key }));
           }
         } catch (e) {
           // Não é JSON válido
         }
+        
+        toast({
+          title: 'Pré-pagamento executado com sucesso!',
+          description: `Tempo: ${duration}ms`
+        });
       } else {
         setPrepaymentStatus('error');
         addLog(`❌ HTTP ${httpStatus}: ${result.apiMetadata?.httpStatusText}`, 'error');
@@ -327,20 +321,6 @@ export default function ConnectivityTest() {
           addLog('🛡️ BLOQUEIO DETECTADO: WAF/Firewall da Cappta', 'error');
         }
       }
-      
-      if (httpStatus >= 200 && httpStatus < 300) {
-        // Tentar extrair prePaymentKey para o toast
-        let prePaymentKey = 'N/A';
-        try {
-          const parsed = JSON.parse(result.apiRawResponse);
-          prePaymentKey = parsed.prePaymentKey || parsed.pre_payment_key || 'N/A';
-        } catch (e) {}
-        
-        toast({
-          title: 'Pré-pagamento executado com sucesso!',
-          description: `PrePaymentKey: ${maskCredential(prePaymentKey)}`
-        });
-      }
     } catch (err: any) {
       const duration = Date.now() - startTime;
       addLog(`💥 Exceção capturada: ${err.message}`, 'error');
@@ -351,99 +331,6 @@ export default function ConnectivityTest() {
         error: err.message
       });
       setPrepaymentStatus('error');
-    }
-  };
-
-  const testLinkBoleto = async () => {
-    if (!linkBoletoForm.prePaymentKey) {
-      toast({
-        title: 'PrePaymentKey obrigatória',
-        description: 'Execute o pré-pagamento primeiro ou insira uma chave válida.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    setLinkBoletoStatus('testing');
-    setLinkBoletoResult(null);
-    addLog('🔄 Iniciando teste de vínculo de boleto...', 'info');
-    
-    const startTime = Date.now();
-    
-    try {
-      addLog('📤 Enviando requisição para quitaplus-link-boleto', 'info');
-      
-      const { data, error } = await supabase.functions.invoke('quitaplus-link-boleto', {
-        body: {
-          prePaymentKey: linkBoletoForm.prePaymentKey,
-          paymentLinkId: linkBoletoForm.paymentLinkId,
-          boleto: {
-            number: linkBoletoForm.boletoNumber,
-            creditorDocument: linkBoletoForm.creditorDocument,
-            creditorName: linkBoletoForm.creditorName
-          }
-        }
-      });
-      
-      const duration = Date.now() - startTime;
-      
-      if (error) {
-        addLog(`❌ Erro na requisição: ${error.message}`, 'error');
-        
-        setLinkBoletoResult({
-          status: 500,
-          statusText: 'Error',
-          duration,
-          error: error.message,
-          response: { error: error.message }
-        });
-        setLinkBoletoStatus('error');
-        toast({
-          title: 'Erro no teste',
-          description: error.message,
-          variant: 'destructive'
-        });
-        return;
-      }
-
-      addLog(`✅ Resposta recebida em ${duration}ms`, 'success');
-      
-      const result = data as any;
-      const httpStatus = result.apiMetadata?.httpStatus || 200;
-      
-      setLinkBoletoResult({
-        status: httpStatus >= 200 && httpStatus < 300 ? 200 : 500,
-        statusText: httpStatus >= 200 && httpStatus < 300 ? 'OK' : 'Error',
-        duration,
-        response: result,
-        error: httpStatus >= 400 ? result.apiRawResponse : undefined
-      });
-
-      if (httpStatus >= 200 && httpStatus < 300) {
-        setLinkBoletoStatus('success');
-        addLog('✅ Boleto vinculado com sucesso', 'success');
-        addLog(`Resposta: ${result.apiRawResponse?.substring(0, 200)}...`, 'info');
-      } else {
-        setLinkBoletoStatus('error');
-        addLog(`❌ HTTP ${httpStatus}: ${result.apiMetadata?.httpStatusText}`, 'error');
-      }
-      
-      if (httpStatus >= 200 && httpStatus < 300) {
-        toast({
-          title: 'Boleto vinculado com sucesso!',
-          description: `Tempo de resposta: ${duration}ms`
-        });
-      }
-    } catch (err: any) {
-      const duration = Date.now() - startTime;
-      addLog(`💥 Exceção capturada: ${err.message}`, 'error');
-      setLinkBoletoResult({
-        status: 0,
-        statusText: 'Network Error',
-        duration,
-        error: err.message
-      });
-      setLinkBoletoStatus('error');
     }
   };
 
@@ -490,7 +377,7 @@ export default function ConnectivityTest() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">🔌 Diagnóstico de Conectividade</h1>
-          <p className="text-muted-foreground">QuitaPlus / Cappta API</p>
+          <p className="text-muted-foreground">QuitaPlus / Cappta API - Teste de Pré-Pagamento</p>
         </div>
       </div>
 
@@ -502,29 +389,23 @@ export default function ConnectivityTest() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               {getStatusIcon(tokenStatus)}
               <span className="font-medium">Token:</span>
               {getStatusBadge(tokenStatus)}
             </div>
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="h-6 hidden md:block" />
             <div className="flex items-center gap-2">
               {getStatusIcon(simulationStatus)}
               <span className="font-medium">Simulação:</span>
               {getStatusBadge(simulationStatus)}
             </div>
-            <Separator orientation="vertical" className="h-6" />
+            <Separator orientation="vertical" className="h-6 hidden md:block" />
             <div className="flex items-center gap-2">
               {getStatusIcon(prepaymentStatus)}
               <span className="font-medium">Pré-Pagamento:</span>
               {getStatusBadge(prepaymentStatus)}
-            </div>
-            <Separator orientation="vertical" className="h-6" />
-            <div className="flex items-center gap-2">
-              {getStatusIcon(linkBoletoStatus)}
-              <span className="font-medium">Vínculo Boleto:</span>
-              {getStatusBadge(linkBoletoStatus)}
             </div>
           </div>
           
@@ -550,7 +431,7 @@ export default function ConnectivityTest() {
       </Card>
 
       {/* Alert de Bloqueio WAF */}
-      {(prepaymentResult?.response?.isWafBlock || linkBoletoResult?.response?.isWafBlock) && (
+      {prepaymentResult?.response?.isWafBlock && (
         <Alert variant="destructive" className="border-2 border-destructive">
           <AlertDescription className="space-y-3">
             <div className="flex items-start gap-3">
@@ -558,7 +439,7 @@ export default function ConnectivityTest() {
               <div className="flex-1 space-y-2">
                 <h3 className="font-bold text-base">WAF/CDN Akamai Bloqueando Requisições</h3>
                 <p className="text-sm">
-                  {prepaymentResult?.response?.message || linkBoletoResult?.response?.message}
+                  {prepaymentResult?.response?.message}
                 </p>
                 <div className="bg-destructive/10 p-3 rounded text-xs space-y-2 mt-3">
                   <p className="font-semibold">💡 Soluções Recomendadas:</p>
@@ -567,9 +448,6 @@ export default function ConnectivityTest() {
                     <li>Implementar proxy com IP fixo</li>
                     <li>Contatar suporte da Cappta para liberação</li>
                   </ol>
-                  <p className="mt-2 text-muted-foreground">
-                    📄 Consulte <code className="bg-muted px-1 py-0.5 rounded">README-WAF-BLOCK.md</code> para detalhes completos
-                  </p>
                 </div>
               </div>
             </div>
@@ -577,239 +455,155 @@ export default function ConnectivityTest() {
         </Alert>
       )}
 
-      {/* Testes de Pré-Pagamento e Vínculo de Boleto */}
+      {/* Teste de Pré-Pagamento */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <TestTube className="w-5 h-5" />
-            Testes de Pagamento
+            <CreditCard className="w-5 h-5" />
+            Teste de Pré-Pagamento com Cartão
           </CardTitle>
           <CardDescription>
-            Execute testes de pré-pagamento (cartão) e vínculo de boleto
+            Preencha os dados para testar a autorização de pré-pagamento
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="prepayment" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="prepayment" className="flex items-center gap-2">
+        <CardContent className="space-y-6">
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Coluna 1: Dados do Cartão */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
                 <CreditCard className="w-4 h-4" />
-                Pré-Pagamento
-              </TabsTrigger>
-              <TabsTrigger value="boleto" className="flex items-center gap-2">
-                <FileText className="w-4 h-4" />
-                Vínculo Boleto
-              </TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="prepayment" className="space-y-4 mt-4">
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* Coluna 1: Dados do Cartão */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-sm flex items-center gap-2">
-                    <CreditCard className="w-4 h-4" />
-                    Dados do Cartão
-                  </h3>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="cardNumber">Número do Cartão</Label>
-                      <Input
-                        id="cardNumber"
-                        value={prepaymentForm.cardNumber}
-                        onChange={(e) => setPrepaymentForm(prev => ({ ...prev, cardNumber: e.target.value }))}
-                        placeholder="4111111111111111"
-                        maxLength={16}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="cardHolderName">Nome no Cartão</Label>
-                      <Input
-                        id="cardHolderName"
-                        value={prepaymentForm.cardHolderName}
-                        onChange={(e) => setPrepaymentForm(prev => ({ ...prev, cardHolderName: e.target.value }))}
-                        placeholder="TESTE USUARIO"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <Label htmlFor="cardExpirationDate">Validade</Label>
-                        <Input
-                          id="cardExpirationDate"
-                          value={prepaymentForm.cardExpirationDate}
-                          onChange={(e) => setPrepaymentForm(prev => ({ ...prev, cardExpirationDate: e.target.value }))}
-                          placeholder="MM/AA"
-                          maxLength={5}
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="cardCvv">CVV</Label>
-                        <Input
-                          id="cardCvv"
-                          value={prepaymentForm.cardCvv}
-                          onChange={(e) => setPrepaymentForm(prev => ({ ...prev, cardCvv: e.target.value }))}
-                          placeholder="123"
-                          maxLength={4}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Coluna 2: Dados do Pagador */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-sm">Dados do Pagador</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="payerName">Nome</Label>
-                      <Input
-                        id="payerName"
-                        value={prepaymentForm.payerName}
-                        onChange={(e) => setPrepaymentForm(prev => ({ ...prev, payerName: e.target.value }))}
-                        placeholder="Nome completo"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="payerDocument">CPF/CNPJ</Label>
-                      <Input
-                        id="payerDocument"
-                        value={prepaymentForm.payerDocument}
-                        onChange={(e) => setPrepaymentForm(prev => ({ ...prev, payerDocument: e.target.value }))}
-                        placeholder="12345678900"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="payerEmail">Email</Label>
-                      <Input
-                        id="payerEmail"
-                        type="email"
-                        value={prepaymentForm.payerEmail}
-                        onChange={(e) => setPrepaymentForm(prev => ({ ...prev, payerEmail: e.target.value }))}
-                        placeholder="teste@exemplo.com"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="payerPhoneNumber">Telefone</Label>
-                      <Input
-                        id="payerPhoneNumber"
-                        value={prepaymentForm.payerPhoneNumber}
-                        onChange={(e) => setPrepaymentForm(prev => ({ ...prev, payerPhoneNumber: e.target.value }))}
-                        placeholder="11999999999"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Valor e Parcelas */}
-              <div className="grid md:grid-cols-2 gap-3 pt-4 border-t">
-                <div>
-                  <Label htmlFor="amount">Valor (R$)</Label>
-                  <Input
-                    id="amount"
-                    type="number"
-                    step="0.01"
-                    value={prepaymentForm.amount}
-                    onChange={(e) => setPrepaymentForm(prev => ({ ...prev, amount: e.target.value }))}
-                    placeholder="100.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="installments">Parcelas</Label>
-                  <Input
-                    id="installments"
-                    type="number"
-                    min="1"
-                    max="12"
-                    value={prepaymentForm.installments}
-                    onChange={(e) => setPrepaymentForm(prev => ({ ...prev, installments: e.target.value }))}
-                    placeholder="1"
-                  />
-                </div>
-              </div>
-
-              <Button 
-                onClick={testPrepayment} 
-                disabled={prepaymentStatus === 'testing'}
-                className="w-full"
-              >
-                {prepaymentStatus === 'testing' ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Play className="w-4 h-4 mr-2" />
-                )}
-                Executar Pré-Pagamento
-              </Button>
-            </TabsContent>
-            
-            <TabsContent value="boleto" className="space-y-4 mt-4">
-              <Alert>
-                <Info className="w-4 h-4" />
-                <AlertDescription>
-                  Execute primeiro o pré-pagamento para obter a PrePaymentKey, ou insira uma chave válida manualmente.
-                </AlertDescription>
-              </Alert>
-
+                Dados do Cartão
+              </h3>
               <div className="space-y-3">
                 <div>
-                  <Label htmlFor="prePaymentKey">PrePaymentKey *</Label>
+                  <Label htmlFor="cardNumber">Número do Cartão</Label>
                   <Input
-                    id="prePaymentKey"
-                    value={linkBoletoForm.prePaymentKey}
-                    onChange={(e) => setLinkBoletoForm(prev => ({ ...prev, prePaymentKey: e.target.value }))}
-                    placeholder="Chave obtida no pré-pagamento"
-                    className={linkBoletoForm.prePaymentKey ? 'border-green-500' : ''}
+                    id="cardNumber"
+                    value={prepaymentForm.cardNumber}
+                    onChange={(e) => setPrepaymentForm(prev => ({ ...prev, cardNumber: e.target.value }))}
+                    placeholder="4111111111111111"
+                    maxLength={16}
                   />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {linkBoletoForm.prePaymentKey ? '✅ Preenchido automaticamente' : 'Aguardando pré-pagamento...'}
-                  </p>
                 </div>
-                
                 <div>
-                  <Label htmlFor="boletoNumber">Linha Digitável do Boleto</Label>
+                  <Label htmlFor="cardHolderName">Nome no Cartão</Label>
                   <Input
-                    id="boletoNumber"
-                    value={linkBoletoForm.boletoNumber}
-                    onChange={(e) => setLinkBoletoForm(prev => ({ ...prev, boletoNumber: e.target.value }))}
-                    placeholder="47-48 dígitos"
-                    maxLength={48}
+                    id="cardHolderName"
+                    value={prepaymentForm.cardHolderName}
+                    onChange={(e) => setPrepaymentForm(prev => ({ ...prev, cardHolderName: e.target.value }))}
+                    placeholder="TESTE USUARIO"
                   />
                 </div>
-                
-                <div className="grid md:grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label htmlFor="creditorDocument">Documento do Credor</Label>
+                    <Label htmlFor="cardExpirationDate">Validade</Label>
                     <Input
-                      id="creditorDocument"
-                      value={linkBoletoForm.creditorDocument}
-                      onChange={(e) => setLinkBoletoForm(prev => ({ ...prev, creditorDocument: e.target.value }))}
-                      placeholder="CNPJ sem pontuação"
+                      id="cardExpirationDate"
+                      value={prepaymentForm.cardExpirationDate}
+                      onChange={(e) => setPrepaymentForm(prev => ({ ...prev, cardExpirationDate: e.target.value }))}
+                      placeholder="MM/AA"
+                      maxLength={5}
                     />
                   </div>
                   <div>
-                    <Label htmlFor="creditorName">Nome do Credor</Label>
+                    <Label htmlFor="cardCvv">CVV</Label>
                     <Input
-                      id="creditorName"
-                      value={linkBoletoForm.creditorName}
-                      onChange={(e) => setLinkBoletoForm(prev => ({ ...prev, creditorName: e.target.value }))}
-                      placeholder="Nome da empresa"
+                      id="cardCvv"
+                      value={prepaymentForm.cardCvv}
+                      onChange={(e) => setPrepaymentForm(prev => ({ ...prev, cardCvv: e.target.value }))}
+                      placeholder="123"
+                      maxLength={4}
                     />
                   </div>
                 </div>
               </div>
+            </div>
 
-              <Button 
-                onClick={testLinkBoleto} 
-                disabled={linkBoletoStatus === 'testing' || !linkBoletoForm.prePaymentKey}
-                className="w-full"
-              >
-                {linkBoletoStatus === 'testing' ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Play className="w-4 h-4 mr-2" />
-                )}
-                Vincular Boleto
-              </Button>
-            </TabsContent>
-          </Tabs>
+            {/* Coluna 2: Dados do Pagador */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-sm">Dados do Pagador</h3>
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="payerName">Nome</Label>
+                  <Input
+                    id="payerName"
+                    value={prepaymentForm.payerName}
+                    onChange={(e) => setPrepaymentForm(prev => ({ ...prev, payerName: e.target.value }))}
+                    placeholder="Nome completo"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="payerDocument">CPF/CNPJ</Label>
+                  <Input
+                    id="payerDocument"
+                    value={prepaymentForm.payerDocument}
+                    onChange={(e) => setPrepaymentForm(prev => ({ ...prev, payerDocument: e.target.value }))}
+                    placeholder="12345678900"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="payerEmail">Email</Label>
+                  <Input
+                    id="payerEmail"
+                    type="email"
+                    value={prepaymentForm.payerEmail}
+                    onChange={(e) => setPrepaymentForm(prev => ({ ...prev, payerEmail: e.target.value }))}
+                    placeholder="teste@exemplo.com"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="payerPhoneNumber">Telefone</Label>
+                  <Input
+                    id="payerPhoneNumber"
+                    value={prepaymentForm.payerPhoneNumber}
+                    onChange={(e) => setPrepaymentForm(prev => ({ ...prev, payerPhoneNumber: e.target.value }))}
+                    placeholder="11999999999"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Valor e Parcelas */}
+          <div className="grid md:grid-cols-2 gap-3 pt-4 border-t">
+            <div>
+              <Label htmlFor="amount">Valor (R$)</Label>
+              <Input
+                id="amount"
+                type="number"
+                step="0.01"
+                value={prepaymentForm.amount}
+                onChange={(e) => setPrepaymentForm(prev => ({ ...prev, amount: e.target.value }))}
+                placeholder="100.00"
+              />
+            </div>
+            <div>
+              <Label htmlFor="installments">Parcelas</Label>
+              <Input
+                id="installments"
+                type="number"
+                min="1"
+                max="12"
+                value={prepaymentForm.installments}
+                onChange={(e) => setPrepaymentForm(prev => ({ ...prev, installments: e.target.value }))}
+                placeholder="1"
+              />
+            </div>
+          </div>
+
+          <Button 
+            onClick={testPrepayment} 
+            disabled={prepaymentStatus === 'testing'}
+            className="w-full"
+            size="lg"
+          >
+            {prepaymentStatus === 'testing' ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Play className="w-4 h-4 mr-2" />
+            )}
+            Executar Pré-Pagamento
+          </Button>
         </CardContent>
       </Card>
 
@@ -843,12 +637,12 @@ export default function ConnectivityTest() {
               
               <Tabs defaultValue="response" className="w-full mt-4">
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="response">Resposta Completa</TabsTrigger>
+                  <TabsTrigger value="response">Resposta</TabsTrigger>
                   <TabsTrigger value="details">Detalhes</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="response" className="mt-2">
-                  <ScrollArea className="h-64 w-full rounded border p-3 bg-muted/30">
+                  <ScrollArea className="h-48 w-full rounded border p-3 bg-muted/30">
                     <pre className="text-xs font-mono whitespace-pre-wrap break-words">
                       {JSON.stringify(tokenResult.response, null, 2)}
                     </pre>
@@ -868,18 +662,6 @@ export default function ConnectivityTest() {
                     <div className="flex justify-between text-sm border-b pb-2">
                       <span className="font-medium">Expira em:</span>
                       <span>{tokenResult.response.expiresIn}s</span>
-                    </div>
-                  )}
-                  {tokenResult.response?.error && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium">Erro Retornado:</span>
-                      <ScrollArea className="h-32 w-full rounded border p-2 bg-destructive/5">
-                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive">
-                          {typeof tokenResult.response.error === 'string' 
-                            ? tokenResult.response.error 
-                            : JSON.stringify(tokenResult.response.error, null, 2)}
-                        </pre>
-                      </ScrollArea>
                     </div>
                   )}
                 </TabsContent>
@@ -908,236 +690,74 @@ export default function ConnectivityTest() {
                 </div>
               </div>
               
-              {simulationResult.error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{simulationResult.error}</AlertDescription>
-                </Alert>
-              )}
-              
-              <Tabs defaultValue="response" className="w-full mt-4">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="response">Resposta Completa</TabsTrigger>
-                  <TabsTrigger value="details">Detalhes</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="response" className="mt-2">
-                  <ScrollArea className="h-64 w-full rounded border p-3 bg-muted/30">
-                    <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-                      {JSON.stringify(simulationResult.response, null, 2)}
-                    </pre>
-                  </ScrollArea>
-                </TabsContent>
-                
-                <TabsContent value="details" className="mt-2 space-y-3">
-                  {simulationResult.response?.success !== undefined && (
-                    <div className="flex justify-between text-sm border-b pb-2">
-                      <span className="font-medium">Success:</span>
-                      <Badge variant={simulationResult.response.success ? 'default' : 'destructive'}>
-                        {simulationResult.response.success ? 'true' : 'false'}
-                      </Badge>
-                    </div>
-                  )}
-                  {simulationResult.response?.error && (
-                    <div className="space-y-2">
-                      <span className="text-sm font-medium">Erro Retornado:</span>
-                      <ScrollArea className="h-32 w-full rounded border p-2 bg-destructive/5">
-                        <pre className="text-xs whitespace-pre-wrap break-words text-destructive">
-                          {typeof simulationResult.response.error === 'string' 
-                            ? simulationResult.response.error 
-                            : JSON.stringify(simulationResult.response.error, null, 2)}
-                        </pre>
-                      </ScrollArea>
-                    </div>
-                  )}
-                  {simulationResult.response?.message && (
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium">Mensagem:</span>
-                      <p className="text-sm text-muted-foreground p-2 bg-muted rounded">
-                        {simulationResult.response.message}
-                      </p>
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Prepayment Result */}
-        {prepaymentResult && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Resultado - Pré-Pagamento</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">Status:</span>
-                  <Badge variant={prepaymentResult.status === 200 ? 'default' : 'destructive'}>
-                    {prepaymentResult.status} {prepaymentResult.statusText}
-                  </Badge>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">Tempo:</span>
-                  <span>{prepaymentResult.duration}ms</span>
-                </div>
-                {prepaymentResult.response?.prePaymentKey && (
-                  <div className="flex justify-between text-sm">
-                    <span className="font-medium">PrePaymentKey:</span>
-                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                      {maskCredential(prepaymentResult.response.prePaymentKey)}
-                    </code>
-                  </div>
-                )}
-              </div>
-              
-              {/* Resposta Estruturada da API */}
-              {prepaymentResult.response && (
-                <div className="space-y-3 mt-4">
-                  <div className="text-sm font-semibold border-b pb-2">📊 Resposta da API</div>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    {prepaymentResult.response?.success !== undefined && (
-                      <div className="p-3 rounded-lg border bg-card">
-                        <div className="text-xs text-muted-foreground mb-1">Success</div>
-                        <Badge variant={prepaymentResult.response.success ? 'default' : 'destructive'}>
-                          {prepaymentResult.response.success ? 'true' : 'false'}
-                        </Badge>
-                      </div>
-                    )}
-                    
-                    {prepaymentResult.response?.code && (
-                      <div className="p-3 rounded-lg border bg-card">
-                        <div className="text-xs text-muted-foreground mb-1">Code</div>
-                        <Badge variant="outline" className="text-base">{prepaymentResult.response.code}</Badge>
-                      </div>
-                    )}
-                    
-                    {prepaymentResult.response?.isWafBlock !== undefined && (
-                      <div className="p-3 rounded-lg border bg-card col-span-2">
-                        <div className="text-xs text-muted-foreground mb-1">WAF Block</div>
-                        <Badge variant={prepaymentResult.response.isWafBlock ? 'destructive' : 'default'}>
-                          {prepaymentResult.response.isWafBlock ? '🛡️ Bloqueado' : '✅ Não Bloqueado'}
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {prepaymentResult.response?.message && (
-                    <div className="p-3 rounded-lg border-2 border-primary/20 bg-primary/5">
-                      <div className="text-xs text-muted-foreground mb-1">Mensagem</div>
-                      <p className="text-sm font-medium text-primary">
-                        {prepaymentResult.response.message}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {prepaymentResult.response?.error && (
-                    <div className="p-3 rounded-lg border-2 border-destructive/30 bg-destructive/5">
-                      <div className="text-xs text-muted-foreground mb-2">Detalhes do Erro</div>
-                      <ScrollArea className="max-h-32">
-                        <p className="text-xs font-mono whitespace-pre-wrap break-words text-destructive">
-                          {typeof prepaymentResult.response.error === 'string' 
-                            ? prepaymentResult.response.error 
-                            : JSON.stringify(prepaymentResult.response.error, null, 2)}
-                        </p>
-                      </ScrollArea>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              <Tabs defaultValue="response" className="w-full mt-4">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="response">Resposta Completa</TabsTrigger>
-                  <TabsTrigger value="details">Detalhes</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="response" className="mt-2">
-                  <ScrollArea className="h-64 w-full rounded border p-3 bg-muted/30">
-                    <pre className="text-xs font-mono whitespace-pre-wrap break-words">
-                      {JSON.stringify(prepaymentResult.response, null, 2)}
-                    </pre>
-                  </ScrollArea>
-                </TabsContent>
-                
-                <TabsContent value="details" className="mt-2 space-y-3">
-                  {prepaymentResult.response?.success !== undefined && (
-                    <div className="flex justify-between text-sm border-b pb-2">
-                      <span className="font-medium">Success:</span>
-                      <Badge variant={prepaymentResult.response.success ? 'default' : 'destructive'}>
-                        {prepaymentResult.response.success ? 'true' : 'false'}
-                      </Badge>
-                    </div>
-                  )}
-                  
-                  <div className="space-y-4 mt-4">
-                    <div className="flex gap-2 items-center text-sm border-b pb-2">
-                      <Badge variant={prepaymentResult.response?.apiMetadata?.httpStatus >= 200 && prepaymentResult.response?.apiMetadata?.httpStatus < 300 ? "default" : "destructive"}>
-                        HTTP {prepaymentResult.response?.apiMetadata?.httpStatus || 'N/A'}
-                      </Badge>
-                      <span className="text-muted-foreground">{prepaymentResult.response?.apiMetadata?.httpStatusText || 'N/A'}</span>
-                    </div>
-
-                    <div>
-                      <div className="font-semibold mb-2 text-sm">Resposta Original da API</div>
-                      <ScrollArea className="h-96 w-full rounded border bg-muted/30">
-                        <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words">
-                          {formatApiResponse(prepaymentResult.response?.apiRawResponse)}
-                        </pre>
-                      </ScrollArea>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Link Boleto Result */}
-        {linkBoletoResult && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Resultado - Vínculo Boleto</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">Status:</span>
-                  <Badge variant={linkBoletoResult.status === 200 ? 'default' : 'destructive'}>
-                    {linkBoletoResult.status} {linkBoletoResult.statusText}
-                  </Badge>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium">Tempo:</span>
-                  <span>{linkBoletoResult.duration}ms</span>
-                </div>
-              </div>
-              
-              {/* Resposta Estruturada da API */}
-              {linkBoletoResult.response && (
-                <div className="space-y-4 mt-4">
-                  <div className="flex gap-2 items-center text-sm border-b pb-2">
-                    <Badge variant={linkBoletoResult.response?.apiMetadata?.httpStatus >= 200 && linkBoletoResult.response?.apiMetadata?.httpStatus < 300 ? "default" : "destructive"}>
-                      HTTP {linkBoletoResult.response?.apiMetadata?.httpStatus || 'N/A'}
-                    </Badge>
-                    <span className="text-muted-foreground">{linkBoletoResult.response?.apiMetadata?.httpStatusText || 'N/A'}</span>
-                  </div>
-
-                  <div>
-                    <div className="font-semibold mb-2 text-sm">Resposta Original da API</div>
-                    <ScrollArea className="h-96 w-full rounded border bg-muted/30">
-                      <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words">
-                        {formatApiResponse(linkBoletoResult.response?.apiRawResponse)}
-                      </pre>
-                    </ScrollArea>
-                  </div>
-                </div>
-              )}
+              <ScrollArea className="h-48 w-full rounded border p-3 bg-muted/30">
+                <pre className="text-xs font-mono whitespace-pre-wrap break-words">
+                  {JSON.stringify(simulationResult.response, null, 2)}
+                </pre>
+              </ScrollArea>
             </CardContent>
           </Card>
         )}
       </div>
+
+      {/* Prepayment Result - Full Width */}
+      {prepaymentResult && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Resultado - Pré-Pagamento
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="text-xs text-muted-foreground mb-1">Status HTTP</div>
+                <Badge variant={prepaymentResult.status === 200 ? 'default' : 'destructive'}>
+                  {prepaymentResult.response?.apiMetadata?.httpStatus || prepaymentResult.status}
+                </Badge>
+              </div>
+              <div className="p-3 rounded-lg border bg-card">
+                <div className="text-xs text-muted-foreground mb-1">Tempo</div>
+                <span className="font-mono text-sm">{prepaymentResult.duration}ms</span>
+              </div>
+              {prepaymentResult.response?.success !== undefined && (
+                <div className="p-3 rounded-lg border bg-card">
+                  <div className="text-xs text-muted-foreground mb-1">Success</div>
+                  <Badge variant={prepaymentResult.response.success ? 'default' : 'destructive'}>
+                    {prepaymentResult.response.success ? 'true' : 'false'}
+                  </Badge>
+                </div>
+              )}
+              {prepaymentResult.response?.isWafBlock !== undefined && (
+                <div className="p-3 rounded-lg border bg-card">
+                  <div className="text-xs text-muted-foreground mb-1">WAF Block</div>
+                  <Badge variant={prepaymentResult.response.isWafBlock ? 'destructive' : 'default'}>
+                    {prepaymentResult.response.isWafBlock ? '🛡️ Bloqueado' : '✅ OK'}
+                  </Badge>
+                </div>
+              )}
+            </div>
+            
+            {prepaymentResult.response?.message && (
+              <Alert>
+                <AlertDescription className="font-medium">
+                  {prepaymentResult.response.message}
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            <div>
+              <div className="font-semibold mb-2 text-sm">Resposta Original da API</div>
+              <ScrollArea className="h-64 w-full rounded border bg-muted/30">
+                <pre className="p-3 text-xs font-mono whitespace-pre-wrap break-words">
+                  {formatApiResponse(prepaymentResult.response?.apiRawResponse)}
+                </pre>
+              </ScrollArea>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Logs em Tempo Real */}
       <Card>
@@ -1150,7 +770,7 @@ export default function ConnectivityTest() {
           </div>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-64 w-full rounded border p-4 bg-muted/30">
+          <ScrollArea className="h-48 w-full rounded border p-4 bg-muted/30">
             {logs.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhum log ainda. Execute um teste.</p>
             ) : (
@@ -1180,44 +800,22 @@ export default function ConnectivityTest() {
             <Info className="w-5 h-5" />
             Informações do Ambiente
           </CardTitle>
-          <CardDescription>
-            Configurações do sistema (dados sensíveis mascarados)
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 text-sm">
             <div className="flex justify-between">
-              <span className="font-medium">Base URL:</span>
-              <span className="text-muted-foreground">https://api.cappta.com.br</span>
+              <span className="font-medium">API URL:</span>
+              <span className="text-muted-foreground">pay-gt.autonegocie.com</span>
             </div>
             <div className="flex justify-between">
               <span className="font-medium">Merchant ID:</span>
               <span className="text-muted-foreground">{maskCredential('54.329.414/0001-98')}</span>
             </div>
             <div className="flex justify-between">
-              <span className="font-medium">Client ID:</span>
-              <span className="text-muted-foreground">{maskCredential('configured')}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-medium">Edge Functions:</span>
-              <span className="text-muted-foreground text-xs">
-                quitaplus-token, quitaplus-simulation, quitaplus-prepayment, quitaplus-link-boleto
-              </span>
+              <span className="font-medium">Edge Function:</span>
+              <span className="text-muted-foreground">quitaplus-prepayment</span>
             </div>
           </div>
-
-          <Separator className="my-4" />
-
-          <Alert>
-            <Info className="w-4 h-4" />
-            <AlertDescription>
-              <strong>Problema Identificado:</strong> A API Cappta/QuitaPlus está protegida por WAF (Akamai) 
-              que bloqueia requisições de IPs dinâmicos. As Edge Functions do Supabase usam IPs dinâmicos, 
-              resultando em erros 403 (Access Denied).
-              <br /><br />
-              <strong>Solução:</strong> Implementar proxy com IP fixo e solicitar whitelist à Cappta.
-            </AlertDescription>
-          </Alert>
         </CardContent>
       </Card>
     </div>
