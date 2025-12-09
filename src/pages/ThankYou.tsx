@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, ArrowLeft, History, Printer, RefreshCw, Calendar, Download } from "lucide-react";
+import { CheckCircle, ArrowLeft, History, Printer, RefreshCw, Calendar, Download, QrCode, CreditCard, Phone, Mail, Building2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -36,10 +36,10 @@ interface ThankYouData {
     id: string;
     type: string;
     total_amount_cents: number;
+    total_paid_cents: number;
     currency: string;
     paid: boolean;
     paid_at: string;
-    has_boleto_link: boolean;
   };
   splits?: Array<{
     id: string;
@@ -58,9 +58,14 @@ interface ThankYouData {
   recurrence?: {
     next_dates: string[];
   };
+  company?: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
   ui?: {
     return_url?: string;
-    support_hint: string;
+    support_email: string;
   };
 }
 
@@ -123,7 +128,7 @@ export default function ThankYou() {
       if (data.paid && data.charge) {
         analyticsLocal.track('thank_you.view', {
           charge_id: data.charge.id,
-          total: data.charge.total_amount_cents,
+          total: data.charge.total_paid_cents,
           methods: data.splits?.map((s: any) => s.method) || []
         });
       }
@@ -181,6 +186,7 @@ export default function ThankYou() {
     switch (method.toUpperCase()) {
       case 'PIX': return 'success';
       case 'CARD': return 'info';
+      case 'CREDIT_CARD': return 'info';
       case 'QUITA': return 'outline';
       default: return 'outline';
     }
@@ -190,6 +196,7 @@ export default function ThankYou() {
     switch (method.toUpperCase()) {
       case 'PIX': return 'PIX';
       case 'CARD': return 'Cartão';
+      case 'CREDIT_CARD': return 'Cartão';
       case 'QUITA': return 'Quita+';
       default: return method;
     }
@@ -198,7 +205,7 @@ export default function ThankYou() {
   const handlePrint = () => {
     analyticsLocal.track('thank_you.print', {
       charge_id: data?.charge?.id,
-      total: data?.charge?.total_amount_cents
+      total: data?.charge?.total_paid_cents
     });
     window.print();
   };
@@ -209,7 +216,7 @@ export default function ThankYou() {
     try {
       analyticsLocal.track('thank_you.download_pdf', {
         charge_id: data?.charge?.id,
-        total: data?.charge?.total_amount_cents
+        total: data?.charge?.total_paid_cents
       });
 
       const html2pdf = (await import('html2pdf.js')).default;
@@ -244,6 +251,10 @@ export default function ThankYou() {
       setIsDownloadingPDF(false);
     }
   };
+
+  // Helper para buscar split por método
+  const getPixSplit = () => data?.splits?.find(s => s.method.toUpperCase() === 'PIX');
+  const getCardSplit = () => data?.splits?.find(s => s.method.toUpperCase() === 'CREDIT_CARD' || s.method.toUpperCase() === 'CARD');
 
   if (loading) {
     return (
@@ -292,6 +303,9 @@ export default function ThankYou() {
     );
   }
 
+  const pixSplit = getPixSplit();
+  const cardSplit = getCardSplit();
+
   return (
     <div className="min-h-screen bg-ds-bg-body">
       <div id="comprovante-container" className="container mx-auto py-8 px-4 max-w-4xl">
@@ -316,9 +330,9 @@ export default function ThankYou() {
             </CardHeader>
             <CardContent className="space-y-4 print:space-y-2">
               <div className="flex justify-between items-center">
-                <span className="font-medium text-ds-text-muted print:text-sm">Valor Total:</span>
+                <span className="font-medium text-ds-text-muted print:text-sm">Valor Total Pago:</span>
                 <span className="text-2xl font-bold text-primary print:text-lg">
-                  {formatCurrency(data?.charge?.total_amount_cents || 0)}
+                  {formatCurrency(data?.charge?.total_paid_cents || 0)}
                 </span>
               </div>
 
@@ -348,51 +362,65 @@ export default function ThankYou() {
                   ))}
                 </div>
               </div>
-
-              {data?.charge?.has_boleto_link && (
-                <div className="bg-ds-bg-surface-alt p-3 rounded-lg print:p-2 print:text-xs">
-                  <p className="text-sm text-ds-text-muted">
-                    ℹ️ Pagamento vinculado a boleto (simulado)
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
         )}
 
-        {/* Detalhes dos Splits */}
-        {data?.splits && data.splits.length > 0 && (
-          <Card className="mb-6 print:shadow-none">
-            <CardHeader className="print:pb-2">
-              <CardTitle className="print:text-lg">Detalhamento do Pagamento</CardTitle>
+        {/* Comprovante PIX */}
+        {pixSplit && (
+          <Card className="mb-6 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 print:shadow-none">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-emerald-700 dark:text-emerald-400 text-base flex items-center gap-2">
+                <QrCode className="h-4 w-4" />
+                Comprovante PIX
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-3 print:space-y-1">
-                {data.splits.map((split, index) => (
-                  <div key={split.id}>
-                    <div className="flex justify-between items-center print:text-sm">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={getMethodBadgeVariant(split.method) as any} className="print:text-xs">
-                          {getMethodLabel(split.method)}
-                        </Badge>
-                        <span className="text-sm text-ds-text-muted print:text-xs">
-                          {split.processed_at ? formatDate(split.processed_at) : '-'}
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-ds-text-strong">
-                          {formatCurrency(split.amount_cents)}
-                        </div>
-                        <Badge variant="outline" className="text-xs print:text-xs">
-                          {split.status}
-                        </Badge>
-                      </div>
-                    </div>
-                    {index < data.splits.length - 1 && (
-                      <Separator className="mt-3 print:mt-1" />
-                    )}
-                  </div>
-                ))}
+            <CardContent className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-ds-text-muted">Valor:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  {formatCurrency(pixSplit.amount_cents)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ds-text-muted">Data/Hora:</span>
+                <span>{pixSplit.processed_at ? formatDate(pixSplit.processed_at) : '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ds-text-muted">Status:</span>
+                <Badge variant="success" className="text-xs">
+                  {pixSplit.status}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Comprovante Cartão */}
+        {cardSplit && (
+          <Card className="mb-6 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 print:shadow-none">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-blue-700 dark:text-blue-400 text-base flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                Comprovante Cartão de Crédito
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex justify-between">
+                <span className="text-ds-text-muted">Valor:</span>
+                <span className="font-bold text-blue-600 dark:text-blue-400">
+                  {formatCurrency(cardSplit.amount_cents)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ds-text-muted">Data/Hora:</span>
+                <span>{cardSplit.processed_at ? formatDate(cardSplit.processed_at) : '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ds-text-muted">Status:</span>
+                <Badge variant="info" className="text-xs">
+                  {cardSplit.status}
+                </Badge>
               </div>
             </CardContent>
           </Card>
@@ -457,10 +485,45 @@ export default function ThankYou() {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-8 text-sm text-ds-text-muted print:mt-4 print:text-xs">
-          <p>{data?.ui?.support_hint}</p>
-          <p className="mt-2">
+        {/* Footer - Suporte */}
+        <div className="mt-8 text-sm text-ds-text-muted print:mt-4 print:text-xs">
+          {/* Empresa Cobradora */}
+          {data?.company?.name && (
+            <Card className="mb-4 print:shadow-none">
+              <CardContent className="pt-4">
+                <div className="flex items-start gap-3">
+                  <Building2 className="h-5 w-5 text-ds-text-muted mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-ds-text-strong mb-1">Empresa Cobradora</p>
+                    <p className="text-ds-text-default">{data.company.name}</p>
+                    {data.company.phone && (
+                      <p className="flex items-center gap-1 mt-1">
+                        <Phone className="h-3 w-3" />
+                        {data.company.phone}
+                      </p>
+                    )}
+                    {data.company.email && (
+                      <p className="flex items-center gap-1 mt-1">
+                        <Mail className="h-3 w-3" />
+                        {data.company.email}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Suporte AutoPay */}
+          <div className="text-center border-t border-ds-border pt-4">
+            <p className="font-medium text-ds-text-strong">Suporte AutoPay</p>
+            <p className="flex items-center justify-center gap-1">
+              <Mail className="h-3 w-3" />
+              {data?.ui?.support_email || 'faleconosco@autonegocie.com'}
+            </p>
+          </div>
+
+          <p className="text-center mt-4">
             Guarde este comprovante para seus registros.
           </p>
         </div>
@@ -499,8 +562,38 @@ export default function ThankYou() {
             box-shadow: none !important;
           }
           
+          .print\\:pb-2 {
+            padding-bottom: 0.5rem !important;
+          }
+          
+          .print\\:mt-4 {
+            margin-top: 1rem !important;
+          }
+          
+          .print\\:mb-4 {
+            margin-bottom: 1rem !important;
+          }
+          
+          .print\\:space-y-1 > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 0.25rem !important;
+          }
+          
+          .print\\:space-y-2 > :not([hidden]) ~ :not([hidden]) {
+            margin-top: 0.5rem !important;
+          }
+          
           .print\\:break-inside-avoid {
-            break-inside: avoid;
+            break-inside: avoid !important;
+          }
+          
+          .print\\:px-1 {
+            padding-left: 0.25rem !important;
+            padding-right: 0.25rem !important;
+          }
+          
+          .print\\:py-0 {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
           }
         }
       `}</style>
