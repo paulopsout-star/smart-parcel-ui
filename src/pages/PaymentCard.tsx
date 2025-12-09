@@ -25,7 +25,6 @@ export default function PaymentCard() {
       if (!id) return;
 
       try {
-        // Usar Edge Function pública para buscar dados
         const { data, error } = await supabase.functions.invoke('public-payment-splits', {
           body: { id },
         });
@@ -66,7 +65,6 @@ export default function PaymentCard() {
           return;
         }
 
-        // ✅ Se tem pre_payment_key, verificar status na API da Cappta
         if (cardSplit.pre_payment_key) {
           console.log('[PaymentCard] Verificando status do pré-pagamento na API Cappta...');
           
@@ -77,28 +75,22 @@ export default function PaymentCard() {
 
             console.log('[PaymentCard] Status da API:', statusData);
 
-            // Se status for LINKED, pagamento já foi concluído
             if (statusData?.success && statusData?.status === 'LINKED') {
               console.log('[PaymentCard] ✅ Pagamento já LINKED na API, redirecionando para comprovante...');
               navigate(`/thank-you?pl=${id}`, { replace: true });
               return;
             }
 
-            // Se status for AUTHORIZED, cartão foi autorizado mas boleto não foi vinculado ainda
-            // Isso é tratado pelo operador no ChargeHistory
             if (statusData?.success && statusData?.status === 'AUTHORIZED') {
               console.log('[PaymentCard] ⚠️ Cartão AUTHORIZED mas não LINKED - redirecionar para thank-you');
-              // Mesmo assim, redirecionar pois o pagamento foi feito
               navigate(`/thank-you?pl=${id}`, { replace: true });
               return;
             }
           } catch (statusError) {
             console.error('[PaymentCard] Erro ao verificar status na API:', statusError);
-            // Continuar com verificação local se falhar
           }
         }
 
-        // ✅ Fallback: verificar indicadores locais
         const isCardPaid = 
           cardSplit.status === 'concluded' || 
           cardSplit.transaction_id;
@@ -109,7 +101,6 @@ export default function PaymentCard() {
           return;
         }
 
-        // Verificar se PIX foi pago (se houver)
         if (pixSplit) {
           setPixPaid(pixSplit.status === 'concluded');
           setPixAmount(pixSplit.amount_cents);
@@ -117,7 +108,6 @@ export default function PaymentCard() {
 
         setCharge({ ...paymentLink, payment_splits: splitData });
         
-        // O amount_cents já inclui os juros (foi salvo no CombinedCheckoutSummary)
         const cardTotalWithInterest = cardSplit.amount_cents;
         const installments = cardSplit.installments || 1;
         const installmentValue = Math.ceil(cardTotalWithInterest / installments);
@@ -125,10 +115,9 @@ export default function PaymentCard() {
         setCardAmount(cardTotalWithInterest);
         setCardInstallments(installments);
         
-        // Usar dados SALVOS do split - valor já inclui juros
         setSelectedOption({
           id: 'saved',
-          totalCents: cardTotalWithInterest, // Valor total COM juros
+          totalCents: cardTotalWithInterest,
           installments: installments,
           installmentValueCents: installmentValue
         });
@@ -158,7 +147,6 @@ export default function PaymentCard() {
     try {
       console.log('[PaymentCard] Finalizando pagamento via edge function...');
       
-      // Usar Edge Function com service_role para atualizar split (bypass RLS)
       const { data, error } = await supabase.functions.invoke('conclude-card-payment', {
         body: {
           payment_link_id: charge.id,
@@ -183,38 +171,45 @@ export default function PaymentCard() {
       
     } catch (err) {
       console.error('[PaymentCard] Erro inesperado:', err);
-      // Navegar mesmo assim, pois o pagamento foi aprovado
       navigate(`/thank-you?pl=${id}`);
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Skeleton className="h-96 w-full max-w-6xl" />
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+        <Card className="max-w-2xl w-full p-8 rounded-2xl">
+          <Skeleton className="h-16 w-16 rounded-full mx-auto mb-4" />
+          <Skeleton className="h-8 w-48 mx-auto mb-2" />
+          <Skeleton className="h-4 w-64 mx-auto mb-6" />
+          <Skeleton className="h-24 w-full mb-6 rounded-2xl" />
+          <Skeleton className="h-96 w-full rounded-2xl" />
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="max-w-2xl w-full p-8">
+    <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+      <Card className="max-w-2xl w-full p-6 lg:p-8 rounded-2xl shadow-md">
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 dark:bg-blue-950/30 mb-4">
-            <CreditCard className="w-8 h-8 text-blue-600" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-100 dark:bg-blue-950/30 mb-4">
+            <CreditCard className="w-7 h-7 text-blue-600" />
           </div>
-          <h1 className="text-2xl font-bold text-ink mb-2">Pagamento via Cartão</h1>
-          <p className="text-ink-secondary">
+          <h1 className="text-2xl font-semibold text-foreground mb-2">Pagamento via Cartão</h1>
+          <p className="text-sm text-muted-foreground">
             Complete o pagamento com seu cartão de crédito
           </p>
         </div>
 
-        {/* PIX já pago (se aplicável) */}
+        {/* PIX Confirmed */}
         {pixPaid && pixAmount > 0 && (
-          <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4 mb-6">
+          <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 mb-6">
             <div className="flex items-center gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 flex-shrink-0">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
               <div className="text-sm">
                 <p className="font-medium text-emerald-800 dark:text-emerald-200">
                   PIX confirmado: {formatCurrency(pixAmount)}
@@ -227,8 +222,8 @@ export default function PaymentCard() {
           </div>
         )}
 
-        {/* Resumo do valor */}
-        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 mb-6 text-center border border-blue-200 dark:border-blue-800">
+        {/* Amount Summary */}
+        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-4 mb-6 text-center border border-blue-200 dark:border-blue-800">
           <p className="text-sm text-blue-700 dark:text-blue-300 mb-1">Valor a pagar no cartão</p>
           <p className="text-3xl font-bold text-blue-600">{formatCurrency(cardAmount)}</p>
           {cardInstallments > 1 && selectedOption && (
@@ -238,7 +233,7 @@ export default function PaymentCard() {
           )}
         </div>
 
-        {/* Formulário de Pagamento */}
+        {/* Payment Form */}
         <PaymentForm
           amount={selectedOption.totalCents / 100}
           installments={selectedOption.installments}

@@ -1,11 +1,8 @@
 import React from 'react';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PaymentOption } from '@/types/payment-options';
 import { CheckoutCharge } from '@/hooks/useCheckoutStore';
 import { formatCurrency } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator';
-import { ShoppingCart, CreditCard } from 'lucide-react';
 
 interface CheckoutSummaryProps {
   charge: CheckoutCharge;
@@ -21,13 +18,13 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
   disabled
 }) => {
   return (
-    <div className="bg-white rounded-lg p-6 border border-gray-200 shadow-sm">
+    <div className="bg-card rounded-2xl p-5 border border-border shadow-sm">
       <div className="space-y-4">
-        <div className="flex justify-between items-center pb-4 border-b border-gray-100">
-          <div className="text-sm text-ink-secondary">
+        <div className="flex justify-between items-center pb-4 border-b border-border">
+          <div className="text-sm text-muted-foreground">
             {charge.title}
           </div>
-          <div className="text-lg font-semibold text-ink">
+          <div className="text-lg font-semibold text-foreground">
             {formatCurrency(charge.totalCents)}
           </div>
         </div>
@@ -35,13 +32,13 @@ export const CheckoutSummary: React.FC<CheckoutSummaryProps> = ({
         <Button
           onClick={onContinue}
           disabled={disabled}
-          className="w-full bg-primary hover:bg-primary/90 text-white font-medium py-4 text-base rounded-lg"
+          className="w-full h-11 rounded-full text-sm font-semibold"
           size="lg"
         >
           Continuar para o Checkout
         </Button>
         
-        <div className="text-center text-xs text-ink-muted leading-relaxed">
+        <div className="text-center text-xs text-muted-foreground leading-relaxed">
           Ao continuar, você concorda com nossos{' '}
           <a href="#" className="text-primary hover:underline">
             Termos de Uso
