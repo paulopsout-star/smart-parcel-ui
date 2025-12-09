@@ -110,24 +110,9 @@ export function CombinedCheckoutSummary({
                 <h3 className="font-semibold text-emerald-800 dark:text-emerald-200">Pagamento via PIX</h3>
               </div>
               
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs text-emerald-700 dark:text-emerald-300">Valor Base</Label>
-                  <div className="p-3 bg-white/50 dark:bg-ds-bg-surface rounded border border-emerald-300">
-                    <p className="text-lg font-semibold text-emerald-800 dark:text-emerald-200">
-                      {formatCurrency(pixBaseCents)}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="flex justify-between text-sm">
-                  <span className="text-emerald-700 dark:text-emerald-300">Taxa PIX (3%)</span>
-                  <span className="text-emerald-600 font-medium">+ {formatCurrency(pixFeeCents)}</span>
-                </div>
-                <div className="border-t border-emerald-200 dark:border-emerald-700 pt-2 flex justify-between">
-                  <span className="font-medium text-emerald-800 dark:text-emerald-200">Total PIX</span>
-                  <span className="font-bold text-emerald-600 text-lg">{formatCurrency(pixTotalCents)}</span>
-                </div>
+              <div className="flex justify-between items-center pt-2">
+                <span className="font-medium text-emerald-800 dark:text-emerald-200">Total PIX</span>
+                <span className="font-bold text-emerald-600 text-xl">{formatCurrency(pixTotalCents)}</span>
               </div>
             </div>
           )}
@@ -142,15 +127,6 @@ export function CombinedCheckoutSummary({
               
               <div className="space-y-3">
                 <div>
-                  <Label className="text-xs text-blue-700 dark:text-blue-300">Valor</Label>
-                  <div className="p-3 bg-white/50 dark:bg-ds-bg-surface rounded border border-blue-300">
-                    <p className="text-lg font-semibold text-blue-800 dark:text-blue-200">
-                      {formatCurrency(cardCents)}
-                    </p>
-                  </div>
-                </div>
-                
-                <div>
                   <Label className="text-xs text-blue-700 dark:text-blue-300">Parcelas</Label>
                   {isSimulating ? (
                     <Skeleton className="h-10 w-full" />
@@ -164,20 +140,13 @@ export function CombinedCheckoutSummary({
                       </SelectTrigger>
                       <SelectContent>
                         {installmentConditions.length > 0 ? (
-                          // Usar condições da API (com juros)
                           installmentConditions.map((condition) => (
                             <SelectItem key={condition.installments} value={condition.installments.toString()}>
                               {condition.installments}x de {formatCurrency(condition.installmentAmount)}
-                              {condition.installments === 1 ? ' (à vista)' : ''}
-                              {condition.totalAmount > cardCents && (
-                                <span className="text-xs text-muted-foreground ml-1">
-                                  (Total: {formatCurrency(condition.totalAmount)})
-                                </span>
-                              )}
+                              {condition.installments === 1 ? ' (à vista)' : ` (Total: ${formatCurrency(condition.totalAmount)})`}
                             </SelectItem>
                           ))
                         ) : (
-                          // Fallback sem API (cálculo simples)
                           Array.from({ length: maxInstallments }, (_, i) => i + 1).map((i) => (
                             <SelectItem key={i} value={i.toString()}>
                               {i}x de {formatCurrency(Math.ceil(cardCents / i))}
@@ -189,16 +158,6 @@ export function CombinedCheckoutSummary({
                     </Select>
                   )}
                 </div>
-                
-                {/* Mostrar juros se houver */}
-                {selectedCondition && selectedCondition.totalAmount > cardCents && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-blue-700 dark:text-blue-300">Juros</span>
-                    <span className="text-blue-600 font-medium">
-                      + {formatCurrency(selectedCondition.totalAmount - cardCents)}
-                    </span>
-                  </div>
-                )}
                 
                 <div className="border-t border-blue-200 dark:border-blue-700 pt-2 flex justify-between">
                   <span className="font-medium text-blue-800 dark:text-blue-200">Total Cartão</span>
@@ -216,7 +175,7 @@ export function CombinedCheckoutSummary({
           <div className="space-y-2">
             {pixBaseCents > 0 && (
               <div className="flex justify-between text-sm">
-                <span className="text-ds-text-muted">PIX (com taxa 3%)</span>
+                <span className="text-ds-text-muted">PIX</span>
                 <span className="text-ds-text-strong">{formatCurrency(pixTotalCents)}</span>
               </div>
             )}
