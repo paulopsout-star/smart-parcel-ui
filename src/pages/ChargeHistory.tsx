@@ -117,9 +117,17 @@ const getModernStatusBadge = (status: string) => {
       label: 'Cancelada', 
       variant: 'secondary' as const
     },
+    pre_authorized: { 
+      label: 'Pré-autorizado', 
+      variant: 'info' as const
+    },
+    boleto_linked: { 
+      label: 'Boleto Vinculado', 
+      variant: 'success' as const
+    },
   };
   
-  const config = configs[status as keyof typeof configs] || configs.cancelled;
+  const config = configs[status as keyof typeof configs] || configs.pending;
   return (
     <Badge variant={config.variant}>
       {config.label}
