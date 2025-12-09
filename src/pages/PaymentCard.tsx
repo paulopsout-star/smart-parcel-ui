@@ -66,6 +66,13 @@ export default function PaymentCard() {
           return;
         }
 
+        // ✅ VERIFICAR SE CARTÃO JÁ FOI PAGO - redirecionar para comprovante
+        if (cardSplit.status === 'concluded') {
+          console.log('[PaymentCard] ✅ Cartão já foi pago, redirecionando para comprovante...');
+          navigate(`/thank-you?pl=${id}`, { replace: true });
+          return;
+        }
+
         // Verificar se PIX foi pago (se houver)
         if (pixSplit) {
           setPixPaid(pixSplit.status === 'concluded');
