@@ -298,49 +298,54 @@ export function PaymentForm({
         creditorName: creditorName || 'VAZIO'
       });
 
-      // ETAPA 2: Vincular boleto (se existir)
+      // ETAPA 2: Vincular boleto (se existir) - SILENCIOSO para o cliente
       if (hasBoleto && boletoLinhaDigitavel && creditorDocument && creditorName) {
         console.log('[PaymentForm] ✅ Vinculando boleto ao pré-pagamento...');
-        console.log('[PaymentForm] Vinculando boleto à autorização...');
 
-        const { data: linkData, error: linkError } = await supabase.functions.invoke(
-          'quitaplus-link-boleto',
-          {
-            body: {
-              prePaymentKey,
-              paymentLinkId,
-              boleto: {
-                number: boletoLinhaDigitavel.replace(/\D/g, ''),
-                creditorDocument: creditorDocument.replace(/\D/g, ''),
-                creditorName,
+        try {
+          const { data: linkData, error: linkError } = await supabase.functions.invoke(
+            'quitaplus-link-boleto',
+            {
+              body: {
+                prePaymentKey,
+                paymentLinkId,
+                boleto: {
+                  number: boletoLinhaDigitavel.replace(/\D/g, ''),
+                  creditorDocument: creditorDocument.replace(/\D/g, ''),
+                  creditorName,
+                },
               },
-            },
+            }
+          );
+
+          if (linkError || linkData?.error) {
+            // SILENCIOSO: Apenas logar, NÃO exibir toast ao cliente
+            const errorMessage = linkError?.message || linkData?.message || linkData?.error || 'Erro desconhecido';
+            console.error('[PaymentForm] ❌ Erro ao vincular boleto (silencioso):', errorMessage);
+            
+            // Salvar erro em metadata para operador resolver depois
+            if (chargeId) {
+              await supabase.from('charges')
+                .update({ 
+                  metadata: { 
+                    link_boleto_error: { 
+                      message: errorMessage, 
+                      attemptedAt: new Date().toISOString(),
+                      httpStatus: linkData?.httpStatus || null
+                    }
+                  }
+                })
+                .eq('id', chargeId);
+              console.log('[PaymentForm] ⚠️ Erro salvo em metadata para operador');
+            }
+            // NÃO retorna - continua para exibir comprovante
+          } else {
+            console.log('[PaymentForm] ✅ Boleto vinculado com sucesso!');
           }
-        );
-
-        if (linkError) {
-          console.error('[PaymentForm] Erro ao vincular boleto:', linkError);
-          throw new Error(linkError.message || 'Falha ao vincular boleto');
+        } catch (linkErr) {
+          // Mesmo erro de rede não impede mostrar comprovante
+          console.error('[PaymentForm] ❌ Erro inesperado no vínculo (silencioso):', linkErr);
         }
-
-        if (linkData?.error) {
-          const errorMessage = linkData.message || linkData.error || 'Erro ao vincular boleto';
-          console.error('[PaymentForm] Boleto não vinculado:', errorMessage);
-          toast({
-            title: "Erro ao vincular boleto",
-            description: errorMessage,
-            variant: "destructive",
-          });
-          setPaymentState({
-            isProcessing: false,
-            isSuccess: false,
-            error: errorMessage,
-            transactionId: null,
-          });
-          return;
-        }
-
-        console.log('[PaymentForm] Boleto vinculado com sucesso!');
       }
 
       // ETAPA 3: Sucesso total

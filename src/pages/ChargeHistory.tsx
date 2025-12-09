@@ -43,6 +43,17 @@ interface Charge {
   payment_method?: string;
   fee_amount?: number;
   fee_percentage?: number;
+  pre_payment_key?: string;
+  boleto_linha_digitavel?: string;
+  creditor_document?: string;
+  creditor_name?: string;
+  metadata?: {
+    link_boleto_error?: {
+      message: string;
+      attemptedAt: string;
+      httpStatus?: number;
+    };
+  };
   executions: Array<{
     id: string;
     execution_date: string;
@@ -417,6 +428,65 @@ export default function ChargeHistory() {
     }
   };
 
+  const handleRetryLinkBoleto = async (charge: Charge) => {
+    if (!charge.pre_payment_key || !charge.boleto_linha_digitavel) {
+      toast({
+        title: "Erro",
+        description: "Dados insuficientes para vincular boleto.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      toast({ title: "Vinculando boleto...", description: "Aguarde..." });
+      
+      const { data, error } = await supabase.functions.invoke('quitaplus-link-boleto', {
+        body: {
+          prePaymentKey: charge.pre_payment_key,
+          paymentLinkId: charge.id,
+          boleto: {
+            number: charge.boleto_linha_digitavel.replace(/\D/g, ''),
+            creditorDocument: charge.creditor_document?.replace(/\D/g, '') || '',
+            creditorName: charge.creditor_name || '',
+          },
+        },
+      });
+
+      if (error || data?.error) {
+        const errorMessage = error?.message || data?.message || data?.error || 'Erro desconhecido';
+        toast({
+          title: "Erro ao vincular",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Sucesso!",
+          description: "Boleto vinculado com sucesso.",
+        });
+        
+        // Atualizar status da charge para boleto_linked e limpar erro
+        await supabase.from('charges')
+          .update({ 
+            status: 'boleto_linked',
+            boleto_linked_at: new Date().toISOString(),
+            metadata: { ...charge.metadata, link_boleto_error: null }
+          })
+          .eq('id', charge.id);
+          
+        fetchCharges(); // Recarregar lista
+      }
+    } catch (err) {
+      console.error('Erro ao tentar vincular boleto:', err);
+      toast({
+        title: "Erro inesperado",
+        description: "Falha ao vincular boleto. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleViewExecutions = (chargeId: string, chargeName: string) => {
     setExecutionsDialog({ open: true, chargeId, chargeName });
   };
@@ -743,6 +813,32 @@ export default function ChargeHistory() {
                       value={charge.description || 'Sem descrição'}
                     />
                   </div>
+                  
+                  {/* Alerta de erro no vínculo de boleto */}
+                  {charge.metadata?.link_boleto_error && (charge.status === 'pre_authorized' || charge.status === 'pending') && (
+                    <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-medium text-amber-800 dark:text-amber-200 text-sm">
+                            Erro ao vincular boleto
+                          </p>
+                          <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
+                            O cartão foi aprovado, mas houve falha ao vincular o boleto.
+                          </p>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRetryLinkBoleto(charge)}
+                            className="mt-3 gap-2 border-amber-300 text-amber-700 hover:bg-amber-100"
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                            Tentar Vincular Novamente
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   
                   <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-ds-border-subtle">
                     <CheckoutButtons charge={charge} />
