@@ -1,13 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { QrCode, CreditCard, AlertCircle, CheckCircle2, Shield, Loader2 } from 'lucide-react';
+import { QrCode, CreditCard, CheckCircle2, Shield, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { usePaymentSimulation, InstallmentCondition } from '@/hooks/usePaymentSimulation';
+import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const PIX_FEE_PERCENT = 0.03; // 3%
@@ -33,9 +31,9 @@ export function CombinedCheckoutSummary({
   title,
   onConfirm,
 }: CombinedCheckoutSummaryProps) {
-  // Estado para valores base (sem taxa)
-  const [pixBaseCents, setPixBaseCents] = useState(initialPixCents);
-  const [cardCents, setCardCents] = useState(initialCardCents);
+  // Valores fixos definidos pelo operador (não editáveis pelo cliente)
+  const pixBaseCents = initialPixCents;
+  const cardCents = initialCardCents;
   const [cardInstallments, setCardInstallments] = useState(1);
 
   // Simulação de parcelas com juros via API Quita+
@@ -70,9 +68,6 @@ export function CombinedCheckoutSummary({
   // Calcular total com taxa e juros
   const totalWithFeeCents = useMemo(() => pixTotalCents + cardTotalWithInterest, [pixTotalCents, cardTotalWithInterest]);
 
-  // Validação: PIX base + Cartão >= Total Original
-  const isValid = useMemo(() => (pixBaseCents + cardCents) >= totalOriginalCents, [pixBaseCents, cardCents, totalOriginalCents]);
-
   // Calcular máximo de parcelas baseado nas condições da API ou fallback
   const maxInstallments = useMemo(() => {
     if (installmentConditions.length > 0) {
@@ -90,35 +85,6 @@ export function CombinedCheckoutSummary({
     }
   }, [maxInstallments, cardInstallments]);
 
-  // Handler para slider
-  const handleSliderChange = (value: number[]) => {
-    const newPixBase = value[0];
-    const newCard = totalOriginalCents - newPixBase;
-    setPixBaseCents(Math.max(0, newPixBase));
-    setCardCents(Math.max(0, newCard));
-    setCardInstallments(1); // Reset parcelas ao mudar valor
-  };
-
-  // Handler para input PIX
-  const handlePixInputChange = (value: string) => {
-    const cents = Math.round(parseFloat(value.replace(',', '.') || '0') * 100);
-    if (cents >= 0 && cents <= totalOriginalCents) {
-      setPixBaseCents(cents);
-      setCardCents(totalOriginalCents - cents);
-      setCardInstallments(1);
-    }
-  };
-
-  // Handler para input Cartão
-  const handleCardInputChange = (value: string) => {
-    const cents = Math.round(parseFloat(value.replace(',', '.') || '0') * 100);
-    if (cents >= 0 && cents <= totalOriginalCents) {
-      setCardCents(cents);
-      setPixBaseCents(totalOriginalCents - cents);
-      setCardInstallments(1);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
       <Card className="max-w-2xl w-full p-8">
@@ -134,142 +100,115 @@ export function CombinedCheckoutSummary({
           <p className="text-3xl font-bold text-ds-text-strong">{formatCurrency(totalOriginalCents)}</p>
         </div>
 
-        {/* Slider de Redistribuição */}
-        <div className="mb-8">
-          <Label className="text-sm font-medium text-ds-text-strong mb-4 block">
-            Distribua o valor entre PIX e Cartão
-          </Label>
-          <Slider
-            value={[pixBaseCents]}
-            min={0}
-            max={totalOriginalCents}
-            step={100}
-            onValueChange={handleSliderChange}
-            className="mb-4"
-          />
-          <div className="flex justify-between text-sm text-ds-text-muted">
-            <span>100% PIX</span>
-            <span>100% Cartão</span>
-          </div>
-        </div>
-
         {/* Cards de Valores */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           {/* Card PIX */}
-          <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <QrCode className="w-5 h-5 text-emerald-600" />
-              <h3 className="font-semibold text-emerald-800 dark:text-emerald-200">Pagamento via PIX</h3>
-            </div>
-            
-            <div className="space-y-3">
-              <div>
-                <Label className="text-xs text-emerald-700 dark:text-emerald-300">Valor Base</Label>
-                <Input
-                  type="text"
-                  value={(pixBaseCents / 100).toFixed(2).replace('.', ',')}
-                  onChange={(e) => handlePixInputChange(e.target.value)}
-                  className="bg-white dark:bg-ds-bg-surface border-emerald-300"
-                  placeholder="0,00"
-                />
+          {pixBaseCents > 0 && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <QrCode className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-semibold text-emerald-800 dark:text-emerald-200">Pagamento via PIX</h3>
               </div>
               
-              {pixBaseCents > 0 && (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-emerald-700 dark:text-emerald-300">Taxa PIX (3%)</span>
-                    <span className="text-emerald-600 font-medium">+ {formatCurrency(pixFeeCents)}</span>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-emerald-700 dark:text-emerald-300">Valor Base</Label>
+                  <div className="p-3 bg-white/50 dark:bg-ds-bg-surface rounded border border-emerald-300">
+                    <p className="text-lg font-semibold text-emerald-800 dark:text-emerald-200">
+                      {formatCurrency(pixBaseCents)}
+                    </p>
                   </div>
-                  <div className="border-t border-emerald-200 dark:border-emerald-700 pt-2 flex justify-between">
-                    <span className="font-medium text-emerald-800 dark:text-emerald-200">Total PIX</span>
-                    <span className="font-bold text-emerald-600 text-lg">{formatCurrency(pixTotalCents)}</span>
-                  </div>
-                </>
-              )}
+                </div>
+                
+                <div className="flex justify-between text-sm">
+                  <span className="text-emerald-700 dark:text-emerald-300">Taxa PIX (3%)</span>
+                  <span className="text-emerald-600 font-medium">+ {formatCurrency(pixFeeCents)}</span>
+                </div>
+                <div className="border-t border-emerald-200 dark:border-emerald-700 pt-2 flex justify-between">
+                  <span className="font-medium text-emerald-800 dark:text-emerald-200">Total PIX</span>
+                  <span className="font-bold text-emerald-600 text-lg">{formatCurrency(pixTotalCents)}</span>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Card Cartão */}
-          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <CreditCard className="w-5 h-5 text-blue-600" />
-              <h3 className="font-semibold text-blue-800 dark:text-blue-200">Pagamento via Cartão</h3>
-            </div>
-            
-            <div className="space-y-3">
-              <div>
-                <Label className="text-xs text-blue-700 dark:text-blue-300">Valor</Label>
-                <Input
-                  type="text"
-                  value={(cardCents / 100).toFixed(2).replace('.', ',')}
-                  onChange={(e) => handleCardInputChange(e.target.value)}
-                  className="bg-white dark:bg-ds-bg-surface border-blue-300"
-                  placeholder="0,00"
-                />
+          {cardCents > 0 && (
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <CreditCard className="w-5 h-5 text-blue-600" />
+                <h3 className="font-semibold text-blue-800 dark:text-blue-200">Pagamento via Cartão</h3>
               </div>
               
-              {cardCents > 0 && (
-                <>
-                  <div>
-                    <Label className="text-xs text-blue-700 dark:text-blue-300">Parcelas</Label>
-                    {isSimulating ? (
-                      <Skeleton className="h-10 w-full" />
-                    ) : (
-                      <Select
-                        value={cardInstallments.toString()}
-                        onValueChange={(v) => setCardInstallments(parseInt(v))}
-                      >
-                        <SelectTrigger className="bg-white dark:bg-ds-bg-surface border-blue-300">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {installmentConditions.length > 0 ? (
-                            // Usar condições da API (com juros)
-                            installmentConditions.map((condition) => (
-                              <SelectItem key={condition.installments} value={condition.installments.toString()}>
-                                {condition.installments}x de {formatCurrency(condition.installmentAmount)}
-                                {condition.installments === 1 ? ' (à vista)' : ''}
-                                {condition.totalAmount > cardCents && (
-                                  <span className="text-xs text-muted-foreground ml-1">
-                                    (Total: {formatCurrency(condition.totalAmount)})
-                                  </span>
-                                )}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            // Fallback sem API (cálculo simples)
-                            Array.from({ length: maxInstallments }, (_, i) => i + 1).map((i) => (
-                              <SelectItem key={i} value={i.toString()}>
-                                {i}x de {formatCurrency(Math.ceil(cardCents / i))}
-                                {i === 1 ? ' (à vista)' : ''}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    )}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-blue-700 dark:text-blue-300">Valor</Label>
+                  <div className="p-3 bg-white/50 dark:bg-ds-bg-surface rounded border border-blue-300">
+                    <p className="text-lg font-semibold text-blue-800 dark:text-blue-200">
+                      {formatCurrency(cardCents)}
+                    </p>
                   </div>
-                  
-                  {/* Mostrar juros se houver */}
-                  {selectedCondition && selectedCondition.totalAmount > cardCents && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-blue-700 dark:text-blue-300">Juros</span>
-                      <span className="text-blue-600 font-medium">
-                        + {formatCurrency(selectedCondition.totalAmount - cardCents)}
-                      </span>
-                    </div>
+                </div>
+                
+                <div>
+                  <Label className="text-xs text-blue-700 dark:text-blue-300">Parcelas</Label>
+                  {isSimulating ? (
+                    <Skeleton className="h-10 w-full" />
+                  ) : (
+                    <Select
+                      value={cardInstallments.toString()}
+                      onValueChange={(v) => setCardInstallments(parseInt(v))}
+                    >
+                      <SelectTrigger className="bg-white dark:bg-ds-bg-surface border-blue-300">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {installmentConditions.length > 0 ? (
+                          // Usar condições da API (com juros)
+                          installmentConditions.map((condition) => (
+                            <SelectItem key={condition.installments} value={condition.installments.toString()}>
+                              {condition.installments}x de {formatCurrency(condition.installmentAmount)}
+                              {condition.installments === 1 ? ' (à vista)' : ''}
+                              {condition.totalAmount > cardCents && (
+                                <span className="text-xs text-muted-foreground ml-1">
+                                  (Total: {formatCurrency(condition.totalAmount)})
+                                </span>
+                              )}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          // Fallback sem API (cálculo simples)
+                          Array.from({ length: maxInstallments }, (_, i) => i + 1).map((i) => (
+                            <SelectItem key={i} value={i.toString()}>
+                              {i}x de {formatCurrency(Math.ceil(cardCents / i))}
+                              {i === 1 ? ' (à vista)' : ''}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
                   )}
-                  
-                  <div className="border-t border-blue-200 dark:border-blue-700 pt-2 flex justify-between">
-                    <span className="font-medium text-blue-800 dark:text-blue-200">Total Cartão</span>
-                    <span className="font-bold text-blue-600 text-lg">
-                      {formatCurrency(cardTotalWithInterest)}
+                </div>
+                
+                {/* Mostrar juros se houver */}
+                {selectedCondition && selectedCondition.totalAmount > cardCents && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-blue-700 dark:text-blue-300">Juros</span>
+                    <span className="text-blue-600 font-medium">
+                      + {formatCurrency(selectedCondition.totalAmount - cardCents)}
                     </span>
                   </div>
-                </>
-              )}
+                )}
+                
+                <div className="border-t border-blue-200 dark:border-blue-700 pt-2 flex justify-between">
+                  <span className="font-medium text-blue-800 dark:text-blue-200">Total Cartão</span>
+                  <span className="font-bold text-blue-600 text-lg">
+                    {formatCurrency(cardTotalWithInterest)}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Resumo Final */}
@@ -296,17 +235,6 @@ export function CombinedCheckoutSummary({
           </div>
         </div>
 
-        {/* Validação */}
-        {!isValid && (
-          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 mb-6 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-destructive">
-              <p className="font-medium">Valor insuficiente</p>
-              <p>A soma dos valores (PIX base + Cartão) deve ser igual ou maior que o valor original de {formatCurrency(totalOriginalCents)}.</p>
-            </div>
-          </div>
-        )}
-
         {/* Hierarquia de Pagamento */}
         <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-6">
           <div className="flex items-start gap-3">
@@ -329,7 +257,7 @@ export function CombinedCheckoutSummary({
             cardInstallments,
             selectedCondition?.installmentAmount || Math.ceil(cardTotalWithInterest / cardInstallments)
           )}
-          disabled={!isValid || (pixBaseCents === 0 && cardCents === 0) || isSimulating}
+          disabled={(pixBaseCents === 0 && cardCents === 0) || isSimulating}
           className="w-full"
           size="lg"
         >
