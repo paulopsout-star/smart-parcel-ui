@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { QrCode, Copy, CheckCircle2, Clock, CreditCard } from 'lucide-react';
+import { QrCode, Copy, CheckCircle2, Clock, CreditCard, RefreshCw, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 
@@ -13,12 +13,23 @@ export default function PaymentPix() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  
   const [loading, setLoading] = useState(true);
+  const [generatingPix, setGeneratingPix] = useState(false);
   const [paying, setPaying] = useState(false);
   const [charge, setCharge] = useState<any>(null);
   const [pixAmount, setPixAmount] = useState(0);
   const [hasCardPayment, setHasCardPayment] = useState(false);
   const [cardAmount, setCardAmount] = useState(0);
+  
+  // Dados do QR Code do AbacatePay
+  const [pixData, setPixData] = useState<{
+    brCode: string;
+    brCodeBase64: string;
+    pixId: string;
+    expiresAt: string;
+  } | null>(null);
+  const [pixError, setPixError] = useState<string | null>(null);
   
   const nextStep = searchParams.get('next'); // 'card' se houver cartão depois
 
@@ -43,7 +54,7 @@ export default function PaymentPix() {
           return;
         }
 
-        const { payment_link: paymentLink, payment_splits: splitData } = data;
+        const { payment_link: paymentLink, payment_splits: splitData, charge: chargeData } = data;
 
         if (!paymentLink || !splitData || splitData.length === 0) {
           toast({
@@ -58,12 +69,27 @@ export default function PaymentPix() {
         const pixSplit = splitData.find((s: any) => s.method === 'pix');
         const cardSplit = splitData.find((s: any) => s.method === 'credit_card');
         
-        setCharge({ ...paymentLink, payment_splits: splitData });
+        const chargeInfo = { 
+          ...paymentLink, 
+          payment_splits: splitData,
+          payer_document: chargeData?.payer_document || paymentLink.payer_document,
+          payer_phone: chargeData?.payer_phone || paymentLink.payer_phone_number,
+          payer_email: chargeData?.payer_email || paymentLink.payer_email,
+          payer_name: chargeData?.payer_name || paymentLink.payer_name,
+          charge_id: paymentLink.charge_id
+        };
+        
+        setCharge(chargeInfo);
         setPixAmount(pixSplit?.amount_cents || 0);
         setHasCardPayment(!!cardSplit);
         setCardAmount(cardSplit?.amount_cents || 0);
         
         setLoading(false);
+        
+        // Gerar QR Code automaticamente após carregar os dados
+        if (pixSplit?.amount_cents > 0) {
+          generatePixQrCode(chargeInfo, pixSplit.amount_cents);
+        }
       } catch (err) {
         console.error('[PaymentPix] Unexpected error:', err);
         toast({
@@ -78,46 +104,139 @@ export default function PaymentPix() {
     fetchData();
   }, [id, navigate, toast]);
 
-  const handleCopyPixCode = () => {
-    // Mock: código PIX simulado
-    const mockPixCode = `00020126580014br.gov.bcb.pix0136${crypto.randomUUID()}520400005303986540${(pixAmount / 100).toFixed(2)}5802BR5925AUTONEGOCIE6009SAO PAULO62070503***6304`;
+  const generatePixQrCode = async (chargeInfo: any, amountCents: number) => {
+    setGeneratingPix(true);
+    setPixError(null);
     
-    navigator.clipboard.writeText(mockPixCode);
+    try {
+      console.log('[PaymentPix] Gerando QR Code PIX via AbacatePay...', {
+        chargeId: chargeInfo.charge_id,
+        amountCents,
+        payerEmail: chargeInfo.payer_email
+      });
+
+      const { data, error } = await supabase.functions.invoke('abacatepay-pix-create', {
+        body: {
+          chargeId: chargeInfo.charge_id,
+          amountCents: amountCents,
+          payerEmail: chargeInfo.payer_email,
+          payerName: chargeInfo.payer_name,
+          payerPhone: chargeInfo.payer_phone,
+          payerDocument: chargeInfo.payer_document,
+          description: `Pagamento PIX - ${chargeInfo.payer_name}`
+        }
+      });
+
+      if (error) {
+        console.error('[PaymentPix] Erro ao gerar QR Code:', error);
+        setPixError('Falha ao gerar QR Code. Tente novamente.');
+        return;
+      }
+
+      if (!data?.success || !data?.brCode || !data?.brCodeBase64) {
+        console.error('[PaymentPix] Resposta inválida:', data);
+        setPixError(data?.error || 'Erro ao gerar QR Code PIX.');
+        return;
+      }
+
+      console.log('[PaymentPix] ✅ QR Code gerado com sucesso:', {
+        pixId: data.pixId,
+        expiresAt: data.expiresAt
+      });
+
+      setPixData({
+        brCode: data.brCode,
+        brCodeBase64: data.brCodeBase64,
+        pixId: data.pixId,
+        expiresAt: data.expiresAt
+      });
+    } catch (err) {
+      console.error('[PaymentPix] Erro inesperado:', err);
+      setPixError('Erro inesperado ao gerar QR Code.');
+    } finally {
+      setGeneratingPix(false);
+    }
+  };
+
+  const handleCopyPixCode = () => {
+    if (!pixData?.brCode) {
+      toast({
+        title: 'Erro',
+        description: 'QR Code ainda não foi gerado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    navigator.clipboard.writeText(pixData.brCode);
     toast({
       title: 'Copiado!',
       description: 'Código PIX copiado para a área de transferência.',
     });
   };
 
+  const handleRegenerateQrCode = () => {
+    if (charge && pixAmount > 0) {
+      generatePixQrCode(charge, pixAmount);
+    }
+  };
+
   const handleConfirmPayment = async () => {
     setPaying(true);
     
-    // Mock: simular pagamento de PIX (2 segundos)
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Atualizar split do PIX como pago
-    const pixSplit = charge.payment_splits?.find((s: any) => s.method === 'pix');
-    if (pixSplit) {
-      await supabase
-        .from('payment_splits')
-        .update({ 
-          status: 'concluded', 
-          pix_paid_at: new Date().toISOString(),
-          processed_at: new Date().toISOString()
-        })
-        .eq('id', pixSplit.id);
-    }
-    
-    toast({
-      title: 'PIX confirmado!',
-      description: 'Pagamento via PIX realizado com sucesso.',
-    });
-    
-    // Redirecionar para cartão (se houver) ou thank-you
-    if (hasCardPayment) {
-      navigate(`/payment-card/${id}`);
-    } else {
-      navigate(`/thank-you?pl=${id}`);
+    try {
+      // Verificar status do pagamento via AbacatePay
+      if (pixData?.pixId) {
+        const { data: statusData } = await supabase.functions.invoke('abacatepay-check-status', {
+          body: { pixId: pixData.pixId }
+        });
+        
+        console.log('[PaymentPix] Status do pagamento:', statusData);
+        
+        if (statusData?.status === 'COMPLETED' || statusData?.status === 'PAID') {
+          // Pagamento confirmado pela API
+          const pixSplit = charge.payment_splits?.find((s: any) => s.method === 'pix');
+          if (pixSplit) {
+            await supabase
+              .from('payment_splits')
+              .update({ 
+                status: 'concluded', 
+                pix_paid_at: new Date().toISOString(),
+                processed_at: new Date().toISOString()
+              })
+              .eq('id', pixSplit.id);
+          }
+          
+          toast({
+            title: 'PIX confirmado!',
+            description: 'Pagamento via PIX realizado com sucesso.',
+          });
+          
+          // Redirecionar para cartão (se houver) ou thank-you
+          if (hasCardPayment) {
+            navigate(`/payment-card/${id}`);
+          } else {
+            navigate(`/thank-you?pl=${id}`);
+          }
+          return;
+        }
+      }
+      
+      // Se não confirmado, mostrar mensagem
+      toast({
+        title: 'Aguardando pagamento',
+        description: 'O pagamento ainda não foi identificado. Verifique se o PIX foi realizado.',
+        variant: 'destructive',
+      });
+    } catch (err) {
+      console.error('[PaymentPix] Erro ao verificar pagamento:', err);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível verificar o status do pagamento.',
+        variant: 'destructive',
+      });
+    } finally {
+      setPaying(false);
     }
   };
 
@@ -170,12 +289,47 @@ export default function PaymentPix() {
           </div>
         )}
 
-        {/* QR Code Mock */}
-        <div className="bg-white p-8 rounded-lg mb-6 flex items-center justify-center border-2 border-dashed border-gray-300">
-          <div className="text-center">
-            <QrCode className="w-48 h-48 text-gray-400 mx-auto mb-4" />
-            <p className="text-sm text-ink-muted">QR Code simulado</p>
-          </div>
+        {/* QR Code */}
+        <div className="bg-white p-6 rounded-lg mb-6 flex items-center justify-center border border-gray-200">
+          {generatingPix ? (
+            <div className="text-center py-8">
+              <RefreshCw className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+              <p className="text-ink-secondary">Gerando QR Code PIX...</p>
+            </div>
+          ) : pixError ? (
+            <div className="text-center py-8">
+              <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+              <p className="text-destructive mb-4">{pixError}</p>
+              <Button 
+                variant="outline" 
+                onClick={handleRegenerateQrCode}
+                className="gap-2"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Tentar novamente
+              </Button>
+            </div>
+          ) : pixData?.brCodeBase64 ? (
+            <div className="text-center">
+              <img 
+                src={pixData.brCodeBase64.startsWith('data:') 
+                  ? pixData.brCodeBase64 
+                  : `data:image/png;base64,${pixData.brCodeBase64}`}
+                alt="QR Code PIX"
+                className="w-64 h-64 mx-auto"
+              />
+              {pixData.expiresAt && (
+                <p className="text-xs text-ink-muted mt-2">
+                  Expira em: {new Date(pixData.expiresAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <QrCode className="w-24 h-24 text-gray-300 mx-auto mb-4" />
+              <p className="text-ink-muted">Aguardando geração do QR Code...</p>
+            </div>
+          )}
         </div>
 
         {/* Botão Copiar */}
@@ -183,6 +337,7 @@ export default function PaymentPix() {
           onClick={handleCopyPixCode}
           variant="outline"
           className="w-full mb-6"
+          disabled={!pixData?.brCode || generatingPix}
         >
           <Copy className="mr-2" />
           Copiar código PIX
@@ -208,14 +363,14 @@ export default function PaymentPix() {
         {/* Botão Confirmar */}
         <Button
           onClick={handleConfirmPayment}
-          disabled={paying}
+          disabled={paying || !pixData?.pixId || generatingPix}
           className="w-full"
           size="lg"
         >
           {paying ? (
             <>
               <Clock className="mr-2 animate-spin" />
-              Confirmando pagamento...
+              Verificando pagamento...
             </>
           ) : (
             <>
@@ -224,6 +379,18 @@ export default function PaymentPix() {
             </>
           )}
         </Button>
+
+        {/* Botão para regenerar */}
+        {pixData && !generatingPix && (
+          <Button
+            onClick={handleRegenerateQrCode}
+            variant="ghost"
+            className="w-full mt-3 text-ink-muted"
+          >
+            <RefreshCw className="mr-2 w-4 h-4" />
+            Gerar novo QR Code
+          </Button>
+        )}
 
         {/* Info adicional */}
         {hasCardPayment && (

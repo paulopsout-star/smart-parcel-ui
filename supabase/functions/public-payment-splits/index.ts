@@ -56,7 +56,11 @@ serve(async (req) => {
           creditor_document,
           creditor_name,
           payment_method,
-          description
+          description,
+          payer_name,
+          payer_email,
+          payer_document,
+          payer_phone
         )
       `)
       .eq('id', id)
@@ -81,7 +85,11 @@ serve(async (req) => {
             creditor_document,
             creditor_name,
             payment_method,
-            description
+            description,
+            payer_name,
+            payer_email,
+            payer_document,
+            payer_phone
           )
         `)
         .eq('charge_id', id)
@@ -153,7 +161,7 @@ serve(async (req) => {
 
     console.log(`[public-payment-splits] ✅ Found payment_link and ${paymentSplits.length} splits`);
 
-    // Formatar resposta
+    // Formatar resposta - priorizar dados da charge sobre payment_link
     const response = {
       payment_link: {
         id: paymentLink.id,
@@ -162,10 +170,10 @@ serve(async (req) => {
         pix_amount: chargeData?.pix_amount || 0,
         card_amount: chargeData?.card_amount || 0,
         description: paymentLink.description || chargeData?.description || 'Pagamento',
-        payer_name: paymentLink.payer_name || '',
-        payer_email: paymentLink.payer_email || '',
-        payer_document: paymentLink.payer_document || '',
-        payer_phone: paymentLink.payer_phone_number || '',
+        payer_name: chargeData?.payer_name || paymentLink.payer_name || '',
+        payer_email: chargeData?.payer_email || paymentLink.payer_email || '',
+        payer_document: chargeData?.payer_document || paymentLink.payer_document || '',
+        payer_phone: chargeData?.payer_phone || paymentLink.payer_phone_number || '',
         has_boleto_link: chargeData?.has_boleto_link || false,
         boleto_linha_digitavel: chargeData?.boleto_linha_digitavel || '',
         creditor_document: chargeData?.creditor_document || '',
@@ -173,6 +181,14 @@ serve(async (req) => {
         payment_method: chargeData?.payment_method || null,
       },
       payment_splits: paymentSplits,
+      // Retornar dados da charge separadamente para facilitar acesso
+      charge: chargeData ? {
+        id: chargeData.id,
+        payer_name: chargeData.payer_name,
+        payer_email: chargeData.payer_email,
+        payer_document: chargeData.payer_document,
+        payer_phone: chargeData.payer_phone,
+      } : null,
     };
 
     return new Response(
