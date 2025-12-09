@@ -56,7 +56,9 @@ serve(async (req) => {
           boleto_linha_digitavel,
           creditor_document,
           creditor_name,
-          payment_method
+          payment_method,
+          pix_amount,
+          card_amount
         )
       `)
       .eq('id', id)
@@ -85,7 +87,9 @@ serve(async (req) => {
             boleto_linha_digitavel,
             creditor_document,
             creditor_name,
-            payment_method
+            payment_method,
+            pix_amount,
+            card_amount
           )
         `)
         .eq('charge_id', id)
@@ -132,6 +136,8 @@ serve(async (req) => {
           title: chargeData.description || 'Pagamento',
           description: chargeData.description || '',
           amount_cents: chargeData.amount,
+          pix_amount: chargeData.pix_amount || 0,
+          card_amount: chargeData.card_amount || 0,
           payer_name: chargeData.payer_name || 'Cliente',
           payer_email: chargeData.payer_email || '',
           payer_document: chargeData.payer_document || '',
@@ -174,6 +180,8 @@ serve(async (req) => {
       title: paymentLink.description || 'Pagamento',
       description: paymentLink.description || '',
       amount_cents: paymentLink.amount,
+      pix_amount: chargeData?.pix_amount || 0,
+      card_amount: chargeData?.card_amount || 0,
       payer_name: paymentLink.payer_name || 'Cliente',
       payer_email: paymentLink.payer_email || '',
       payer_document: paymentLink.payer_document || '',

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { SplitModal } from '@/components/SplitModal';
+import { CombinedCheckoutSummary } from '@/components/CombinedCheckoutSummary';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -63,11 +64,23 @@ export default function Checkout() {
 
         setCharge(data);
         
-        if (data.payment_method === 'pix' || data.payment_method === 'PIX') {
+        // Verificar o método de pagamento
+        const paymentMethod = data.payment_method;
+        
+        // Se for PIX puro, redirecionar para checkout PIX
+        if (paymentMethod === 'pix' || paymentMethod === 'PIX') {
           navigate(`/checkout-pix/${data.charge_id || id}`, { replace: true });
           return;
         }
         
+        // Se for pagamento combinado (cartão + PIX), exibir o CombinedCheckoutSummary
+        if (paymentMethod === 'cartao_pix') {
+          // Não redirecionar, exibir o componente combinado
+          setLoading(false);
+          return;
+        }
+        
+        // Se for cartão puro, redirecionar para payment-direct
         if (mode === 'direct') {
           navigate(`/payment-direct/${id}`, { replace: true });
           return;
@@ -92,7 +105,77 @@ export default function Checkout() {
     };
 
     fetchCharge();
-  }, [id, toast]);
+  }, [id, toast, navigate, mode]);
+
+  // Handler para confirmação do checkout combinado
+  const handleCombinedConfirm = async (pixTotalCents: number, cardCents: number, cardInstallments: number) => {
+    if (!charge) return;
+
+    try {
+      // Salvar splits no banco de dados
+      const chargeId = charge.charge_id || charge.id;
+      
+      // Primeiro, deletar splits existentes (se houver)
+      await supabase
+        .from('payment_splits')
+        .delete()
+        .eq('charge_id', chargeId);
+
+      // Criar novos splits
+      const splits = [];
+      
+      if (pixTotalCents > 0) {
+        splits.push({
+          charge_id: chargeId,
+          payment_link_id: charge.id,
+          method: 'pix',
+          amount_cents: pixTotalCents,
+          order_index: 1,
+          status: 'pending',
+        });
+      }
+      
+      if (cardCents > 0) {
+        splits.push({
+          charge_id: chargeId,
+          payment_link_id: charge.id,
+          method: 'credit_card',
+          amount_cents: cardCents,
+          installments: cardInstallments,
+          order_index: pixTotalCents > 0 ? 2 : 1,
+          status: 'pending',
+        });
+      }
+
+      if (splits.length > 0) {
+        const { error: insertError } = await supabase
+          .from('payment_splits')
+          .insert(splits);
+
+        if (insertError) {
+          console.error('[Checkout] Error inserting splits:', insertError);
+          throw new Error('Falha ao salvar configuração de pagamento');
+        }
+      }
+
+      // Redirecionar para o primeiro método de pagamento
+      if (pixTotalCents > 0) {
+        // Se há PIX, ir para tela de PIX primeiro
+        navigate(`/payment-pix/${id}?next=card`);
+      } else if (cardCents > 0) {
+        // Se só há cartão, ir direto para cartão
+        navigate(`/payment-card/${id}`);
+      }
+
+    } catch (error: any) {
+      console.error('[Checkout] Error in handleCombinedConfirm:', error);
+      toast({
+        title: "Erro",
+        description: error.message || "Falha ao processar configuração de pagamento.",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (loading) {
     return (
@@ -120,6 +203,21 @@ export default function Checkout() {
           </p>
         </Card>
       </div>
+    );
+  }
+
+  // Renderizar checkout combinado para cartao_pix
+  if (charge.payment_method === 'cartao_pix') {
+    return (
+      <CombinedCheckoutSummary
+        totalOriginalCents={charge.amount_cents}
+        initialPixCents={charge.pix_amount || 0}
+        initialCardCents={charge.card_amount || 0}
+        chargeId={charge.charge_id || charge.id}
+        paymentLinkId={charge.id || id || ''}
+        title={charge.title || charge.description || 'Pagamento'}
+        onConfirm={handleCombinedConfirm}
+      />
     );
   }
 
