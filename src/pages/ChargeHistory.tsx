@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2 } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -38,6 +38,11 @@ interface PaymentSplitInfo {
   installments?: number;
 }
 
+interface Company {
+  id: string;
+  name: string;
+}
+
 interface Charge {
   id: string;
   payer_name: string;
@@ -62,6 +67,8 @@ interface Charge {
   boleto_linha_digitavel?: string;
   creditor_document?: string;
   creditor_name?: string;
+  company_id?: string;
+  company?: Company;
   metadata?: {
     link_boleto_error?: {
       message: string;
@@ -84,6 +91,7 @@ interface ChargeFilters {
   date_from: Date | undefined;
   date_to: Date | undefined;
   payer_document: string;
+  company_id: string;
 }
 
 // Helper functions
@@ -464,7 +472,7 @@ const ExecutionsDialogContent = ({
 };
 
 export default function ChargeHistory() {
-  const { isOperador } = useAuth();
+  const { isOperador, isAdmin } = useAuth();
   const [charges, setCharges] = useState<Charge[]>([]);
   const [filteredCharges, setFilteredCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -475,13 +483,17 @@ export default function ChargeHistory() {
     chargeName: ''
   });
   
+  // Companies list for admin filter
+  const [companies, setCompanies] = useState<Company[]>([]);
+  
   // Filter state
   const [filters, setFilters] = useState<ChargeFilters>({
     status: 'all',
     recurrence_type: 'all',
     date_from: undefined,
     date_to: undefined,
-    payer_document: ''
+    payer_document: '',
+    company_id: 'all'
   });
   const [showFilters, setShowFilters] = useState(false);
   
@@ -494,6 +506,24 @@ export default function ChargeHistory() {
     openPaymentLink
   } = useChargeLinks();
 
+  const fetchCompanies = async () => {
+    if (!isAdmin) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name');
+
+      if (!error && data) {
+        setCompanies(data);
+      }
+    } catch (error) {
+      console.error('Error loading companies:', error);
+    }
+  };
+
   const fetchCharges = async () => {
     try {
       setLoading(true);
@@ -501,6 +531,7 @@ export default function ChargeHistory() {
         .from('charges')
         .select(`
           *,
+          company:companies(id, name),
           executions:charge_executions(
             id,
             execution_date,
@@ -586,6 +617,11 @@ export default function ChargeHistory() {
       );
     }
 
+    // Company filter (admin only)
+    if (isAdmin && filters.company_id !== 'all') {
+      filtered = filtered.filter(charge => charge.company_id === filters.company_id);
+    }
+
     setFilteredCharges(filtered);
   };
 
@@ -595,7 +631,8 @@ export default function ChargeHistory() {
       recurrence_type: 'all',
       date_from: undefined,
       date_to: undefined,
-      payer_document: ''
+      payer_document: '',
+      company_id: 'all'
     });
     setFilteredCharges(charges);
   };
@@ -605,7 +642,8 @@ export default function ChargeHistory() {
            filters.recurrence_type !== 'all' || 
            filters.date_from !== undefined || 
            filters.date_to !== undefined || 
-           filters.payer_document !== '';
+           filters.payer_document !== '' ||
+           (isAdmin && filters.company_id !== 'all');
   };
 
   const processCharge = async (chargeId: string) => {
@@ -839,6 +877,7 @@ export default function ChargeHistory() {
 
   useEffect(() => {
     fetchCharges();
+    fetchCompanies();
     
     const handleOpenCheckoutModal = (event: CustomEvent) => {
       setCheckoutModalData(event.detail);
@@ -847,7 +886,7 @@ export default function ChargeHistory() {
     
     window.addEventListener('openCheckoutModal', handleOpenCheckoutModal as EventListener);
     return () => window.removeEventListener('openCheckoutModal', handleOpenCheckoutModal as EventListener);
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     applyFilters();
@@ -858,9 +897,17 @@ export default function ChargeHistory() {
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-ds-text-strong">Histórico de Cobranças</h1>
-            <p className="text-ds-text-muted">Gerencie e acompanhe todas as suas cobranças</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-2xl font-semibold text-ds-text-strong">Histórico de Cobranças</h1>
+              <p className="text-ds-text-muted">Gerencie e acompanhe todas as suas cobranças</p>
+            </div>
+            {isAdmin && (
+              <Badge variant="info" className="gap-1.5">
+                <Building2 className="h-3.5 w-3.5" />
+                Todas as Empresas
+              </Badge>
+            )}
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
@@ -887,7 +934,24 @@ export default function ChargeHistory() {
         {showFilters && (
           <Card>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                {/* Company filter - Admin only */}
+                {isAdmin && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-ds-text-muted">Empresa</label>
+                    <Select value={filters.company_id} onValueChange={(value) => setFilters(prev => ({ ...prev, company_id: value }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todas as empresas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas as empresas</SelectItem>
+                        {companies.map(company => (
+                          <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-ds-text-muted">Status</label>
                   <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
@@ -1025,7 +1089,13 @@ export default function ChargeHistory() {
                         <p className="text-sm text-ds-text-muted">{charge.payer_email}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isAdmin && charge.company && (
+                        <Badge variant="outline" className="gap-1 text-xs">
+                          <Building2 className="h-3 w-3" />
+                          {charge.company.name}
+                        </Badge>
+                      )}
                       {getModernStatusBadge(charge.status)}
                       {charge.payment_method && getPaymentMethodBadge(charge.payment_method)}
                     </div>
