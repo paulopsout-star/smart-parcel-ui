@@ -66,9 +66,18 @@ export default function PaymentCard() {
           return;
         }
 
-        // ✅ VERIFICAR SE CARTÃO JÁ FOI PAGO - redirecionar para comprovante
-        if (cardSplit.status === 'concluded') {
-          console.log('[PaymentCard] ✅ Cartão já foi pago, redirecionando para comprovante...');
+        // ✅ VERIFICAR SE CARTÃO JÁ FOI PAGO - múltiplos indicadores
+        const isCardPaid = 
+          cardSplit.status === 'concluded' || 
+          cardSplit.pre_payment_key ||  // Se tem pre_payment_key, cartão foi autorizado
+          cardSplit.transaction_id;      // Se tem transaction_id, pagamento foi processado
+        
+        if (isCardPaid) {
+          console.log('[PaymentCard] ✅ Cartão já foi pago, redirecionando para comprovante...', {
+            status: cardSplit.status,
+            hasPrePaymentKey: !!cardSplit.pre_payment_key,
+            hasTransactionId: !!cardSplit.transaction_id
+          });
           navigate(`/thank-you?pl=${id}`, { replace: true });
           return;
         }

@@ -131,10 +131,23 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Verificar se está PAID (todos os splits MAIS RECENTES estão CONCLUDED)
-    const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => s.status === 'concluded')
+    // Verificar se está PAID - considera múltiplos indicadores para cartão
+    // Um split de cartão com pre_payment_key indica pagamento aprovado (mesmo se vínculo de boleto falhou)
+    const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => {
+      if (s.method === 'credit_card') {
+        // Cartão: considerar pago se concluded OU tem pre_payment_key/transaction_id
+        return s.status === 'concluded' || s.pre_payment_key || s.transaction_id;
+      }
+      // Outros métodos: apenas status concluded
+      return s.status === 'concluded';
+    });
     
-    console.log('[thank-you-summary] isPaid:', isPaid, '- splits checked:', finalSplits?.map(s => ({ method: s.method, status: s.status })))
+    console.log('[thank-you-summary] isPaid:', isPaid, '- splits checked:', finalSplits?.map(s => ({ 
+      method: s.method, 
+      status: s.status, 
+      hasPrePaymentKey: !!s.pre_payment_key,
+      hasTransactionId: !!s.transaction_id 
+    })))
 
     if (!isPaid) {
       return new Response(JSON.stringify({
