@@ -66,18 +66,45 @@ export default function PaymentCard() {
           return;
         }
 
-        // ✅ VERIFICAR SE CARTÃO JÁ FOI PAGO - múltiplos indicadores
+        // ✅ Se tem pre_payment_key, verificar status na API da Cappta
+        if (cardSplit.pre_payment_key) {
+          console.log('[PaymentCard] Verificando status do pré-pagamento na API Cappta...');
+          
+          try {
+            const { data: statusData } = await supabase.functions.invoke('quitaplus-prepayment-status', {
+              body: { prePaymentKey: cardSplit.pre_payment_key }
+            });
+
+            console.log('[PaymentCard] Status da API:', statusData);
+
+            // Se status for LINKED, pagamento já foi concluído
+            if (statusData?.success && statusData?.status === 'LINKED') {
+              console.log('[PaymentCard] ✅ Pagamento já LINKED na API, redirecionando para comprovante...');
+              navigate(`/thank-you?pl=${id}`, { replace: true });
+              return;
+            }
+
+            // Se status for AUTHORIZED, cartão foi autorizado mas boleto não foi vinculado ainda
+            // Isso é tratado pelo operador no ChargeHistory
+            if (statusData?.success && statusData?.status === 'AUTHORIZED') {
+              console.log('[PaymentCard] ⚠️ Cartão AUTHORIZED mas não LINKED - redirecionar para thank-you');
+              // Mesmo assim, redirecionar pois o pagamento foi feito
+              navigate(`/thank-you?pl=${id}`, { replace: true });
+              return;
+            }
+          } catch (statusError) {
+            console.error('[PaymentCard] Erro ao verificar status na API:', statusError);
+            // Continuar com verificação local se falhar
+          }
+        }
+
+        // ✅ Fallback: verificar indicadores locais
         const isCardPaid = 
           cardSplit.status === 'concluded' || 
-          cardSplit.pre_payment_key ||  // Se tem pre_payment_key, cartão foi autorizado
-          cardSplit.transaction_id;      // Se tem transaction_id, pagamento foi processado
+          cardSplit.transaction_id;
         
         if (isCardPaid) {
-          console.log('[PaymentCard] ✅ Cartão já foi pago, redirecionando para comprovante...', {
-            status: cardSplit.status,
-            hasPrePaymentKey: !!cardSplit.pre_payment_key,
-            hasTransactionId: !!cardSplit.transaction_id
-          });
+          console.log('[PaymentCard] ✅ Cartão já foi pago (indicadores locais), redirecionando...');
           navigate(`/thank-you?pl=${id}`, { replace: true });
           return;
         }

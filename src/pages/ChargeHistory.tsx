@@ -439,6 +439,46 @@ export default function ChargeHistory() {
     }
 
     try {
+      toast({ title: "Verificando status...", description: "Aguarde..." });
+      
+      // ✅ PRIMEIRO: Verificar status atual na API Cappta
+      const { data: statusData } = await supabase.functions.invoke('quitaplus-prepayment-status', {
+        body: { prePaymentKey: charge.pre_payment_key }
+      });
+
+      console.log('[ChargeHistory] Status da API Cappta:', statusData);
+
+      // Se já está LINKED, atualizar DB e não tentar vincular novamente
+      if (statusData?.success && statusData?.status === 'LINKED') {
+        toast({
+          title: "✅ Já vinculado!",
+          description: "O boleto já foi vinculado com sucesso na API.",
+        });
+        
+        // Atualizar status no banco
+        await supabase.from('charges')
+          .update({ 
+            status: 'boleto_linked',
+            boleto_linked_at: new Date().toISOString(),
+            metadata: { ...charge.metadata, link_boleto_error: null }
+          })
+          .eq('id', charge.id);
+          
+        fetchCharges();
+        return;
+      }
+
+      // Se não está AUTHORIZED, não pode vincular
+      if (statusData?.success && statusData?.status !== 'AUTHORIZED') {
+        toast({
+          title: "Status inválido",
+          description: `Status atual: ${statusData?.status}. Não é possível vincular.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // ✅ SEGUNDO: Tentar vincular boleto
       toast({ title: "Vinculando boleto...", description: "Aguarde..." });
       
       const { data, error } = await supabase.functions.invoke('quitaplus-link-boleto', {
