@@ -12,8 +12,15 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Use service_role to bypass RLS
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
   try {
     let id: string | null = null;
+    let action: string | null = null;
+    let splits: any[] = [];
 
     // Suportar GET (query param) e POST (body)
     if (req.method === 'GET') {
@@ -22,6 +29,8 @@ serve(async (req) => {
     } else if (req.method === 'POST') {
       const body = await req.json();
       id = body.id;
+      action = body.action;
+      splits = body.splits || [];
     }
 
     if (!id) {
@@ -32,12 +41,55 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[public-payment-splits] Fetching data for id: ${id}`);
+    console.log(`[public-payment-splits] Action: ${action || 'GET'}, id: ${id}`);
 
-    // Use service_role to bypass RLS
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // ====== AÇÃO: CRIAR SPLITS (com deleção de antigos) ======
+    if (action === 'create_splits' && splits.length > 0) {
+      const chargeId = splits[0]?.charge_id;
+      
+      if (!chargeId) {
+        return new Response(
+          JSON.stringify({ error: 'charge_id is required in splits' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Primeiro, deletar TODOS os splits existentes para este charge_id
+      const { error: deleteError } = await supabase
+        .from('payment_splits')
+        .delete()
+        .eq('charge_id', chargeId);
+
+      if (deleteError) {
+        console.error('[public-payment-splits] Error deleting old splits:', deleteError);
+        // Continuar mesmo com erro
+      } else {
+        console.log(`[public-payment-splits] ✅ Deleted old splits for charge_id: ${chargeId}`);
+      }
+
+      // Inserir novos splits
+      const { data: insertedSplits, error: insertError } = await supabase
+        .from('payment_splits')
+        .insert(splits)
+        .select();
+
+      if (insertError) {
+        console.error('[public-payment-splits] Error inserting splits:', insertError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to create splits', details: insertError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`[public-payment-splits] ✅ Created ${insertedSplits?.length} new splits`);
+      
+      return new Response(
+        JSON.stringify({ success: true, payment_splits: insertedSplits }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ====== AÇÃO PADRÃO: BUSCAR DADOS ======
 
     // Tentar buscar payment_link primeiro por ID
     let paymentLink = null;
@@ -136,30 +188,34 @@ serve(async (req) => {
     // Extrair dados da charge
     const chargeData = Array.isArray(paymentLink.charges) ? paymentLink.charges[0] : paymentLink.charges;
 
-    // Buscar payment_splits por payment_link_id ou charge_id
-    let paymentSplits = [];
+    // Buscar payment_splits - APENAS OS MAIS RECENTES
+    // Agrupa por method e pega o mais recente de cada
+    let paymentSplits: any[] = [];
     
-    // Primeiro, tentar por payment_link_id
-    const { data: splitsByLinkId } = await supabase
-      .from('payment_splits')
-      .select('*')
-      .eq('payment_link_id', paymentLink.id)
-      .order('order_index');
-
-    if (splitsByLinkId && splitsByLinkId.length > 0) {
-      paymentSplits = splitsByLinkId;
-    } else if (chargeId) {
-      // Fallback: buscar por charge_id
-      const { data: splitsByChargeId } = await supabase
+    if (chargeId) {
+      // Buscar todos os splits para esta charge, ordenados por created_at DESC
+      const { data: allSplits } = await supabase
         .from('payment_splits')
         .select('*')
         .eq('charge_id', chargeId)
-        .order('order_index');
+        .order('created_at', { ascending: false });
 
-      paymentSplits = splitsByChargeId || [];
+      if (allSplits && allSplits.length > 0) {
+        // Pegar apenas o mais recente de cada method
+        const methodMap = new Map<string, any>();
+        for (const split of allSplits) {
+          if (!methodMap.has(split.method)) {
+            methodMap.set(split.method, split);
+          }
+        }
+        paymentSplits = Array.from(methodMap.values());
+        
+        // Ordenar por order_index
+        paymentSplits.sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+      }
     }
 
-    console.log(`[public-payment-splits] ✅ Found payment_link and ${paymentSplits.length} splits`);
+    console.log(`[public-payment-splits] ✅ Found payment_link and ${paymentSplits.length} splits (latest only)`);
 
     // Formatar resposta - priorizar dados da charge sobre payment_link
     const response = {
