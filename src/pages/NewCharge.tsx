@@ -6,11 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Receipt, Banknote, Wallet, Calculator, CreditCard, QrCode } from "lucide-react";
+import { User, Receipt, Banknote, Calculator, CreditCard, QrCode } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,12 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { useMessageTemplates } from '@/hooks/useMessageTemplates';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
-import { FormSection } from '@/components/forms/FormSection';
-import { FormField } from '@/components/forms/FormField';
-import { SummaryCard } from '@/components/forms/SummaryCard';
-import { FieldSkeleton } from '@/components/forms/FieldSkeleton';
 import { formatPhone, formatDocument, unformatPhone, unformatDocument } from '@/lib/input-masks';
 import { cn } from '@/lib/utils';
 import { SimulatorModal } from '@/components/SimulatorModal';
@@ -57,11 +51,7 @@ const formSchema = z.object({
   mask_fee: z.boolean(),
   has_boleto: z.boolean(),
   boleto_barcode: z.string().optional(),
-  message_template_id: z.string().optional(),
   boleto_linha_digitavel: z.string().optional(),
-  recurrence_type: z.enum(["pontual", "diaria", "semanal", "quinzenal", "mensal", "semestral", "anual"]),
-  recurrence_interval: z.string(),
-  recurrence_end_date: z.string().optional(),
 }).superRefine((data, ctx) => {
   // Linha digitável obrigatória (47 dígitos) para cartão e cartao_pix
   if (data.payment_method === 'cartao' || data.payment_method === 'cartao_pix') {
@@ -116,11 +106,7 @@ interface FormData {
   mask_fee: boolean;
   has_boleto: boolean;
   boleto_barcode?: string;
-  message_template_id?: string;
   boleto_linha_digitavel?: string;
-  recurrence_type: "pontual" | "diaria" | "semanal" | "quinzenal" | "mensal" | "semestral" | "anual";
-  recurrence_interval: string;
-  recurrence_end_date?: string;
 }
 
 export default function NewCharge() {
@@ -129,7 +115,6 @@ export default function NewCharge() {
   const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [enableSplit, setEnableSplit] = useState(false);
   const [showSimulatorModal, setShowSimulatorModal] = useState(false);
   
   const { 
@@ -149,8 +134,6 @@ export default function NewCharge() {
   const { profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  
-  const { data: messageTemplates = [], isLoading: loadingTemplates, isError: templatesError } = useMessageTemplates(profile?.id);
 
   const {
     register,
@@ -165,13 +148,10 @@ export default function NewCharge() {
       payment_method: "cartao",
       mask_fee: false,
       has_boleto: false,
-      installments: "1",
-      recurrence_type: "pontual",
-      recurrence_interval: "1"
+      installments: "1"
     }
   });
 
-  const watchRecurrenceType = watch("recurrence_type");
   const watchAmount = watch("amount");
   const watchHasBoleto = watch("has_boleto");
   const watchBoletoLinhaDigitavel = watch("boleto_linha_digitavel");
@@ -221,43 +201,12 @@ export default function NewCharge() {
     }).format(cents / 100);
   };
 
-  const calculateNextChargeDate = (recurrenceType: string, interval: number = 1) => {
-    const now = new Date();
-    const utcNow = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-    
-    switch (recurrenceType) {
-      case 'pontual':
-        return null;
-      case 'diaria':
-        return new Date(utcNow.getTime() + (interval * 24 * 60 * 60 * 1000));
-      case 'semanal':
-        return new Date(utcNow.getTime() + (interval * 7 * 24 * 60 * 60 * 1000));
-      case 'quinzenal':
-        return new Date(utcNow.getTime() + (interval * 14 * 24 * 60 * 60 * 1000));
-      case 'mensal':
-        const nextMonth = new Date(utcNow);
-        nextMonth.setMonth(nextMonth.getMonth() + interval);
-        return nextMonth;
-      case 'semestral':
-        const nextSemester = new Date(utcNow);
-        nextSemester.setMonth(nextSemester.getMonth() + (interval * 6));
-        return nextSemester;
-      case 'anual':
-        const nextYear = new Date(utcNow);
-        nextYear.setFullYear(nextYear.getFullYear() + interval);
-        return nextYear;
-      default:
-        return null;
-    }
-  };
-
   const normalizeBoletoLinhaDigitavel = (linha: string) => {
     return linha.replace(/\D/g, '');
   };
 
   const onSubmit = async (data: FormData) => {
     console.log('✅ Iniciando criação de cobrança:', {
-      tipo: data.recurrence_type,
       valor: data.amount,
       pagador: data.payer_name
     });
@@ -268,16 +217,6 @@ export default function NewCharge() {
       toast({
         title: 'Configurações da empresa ausentes',
         description: 'Atualize a página e tente novamente. Se o problema persistir, entre em contato com o suporte.',
-        variant: 'destructive'
-      });
-      return;
-    }
-    
-    if (data.recurrence_type !== 'pontual' && !data.has_boleto && !hasPayoutAccount) {
-      setError('Para cobranças recorrentes sem boleto, é necessário ter uma conta PIX cadastrada.');
-      toast({
-        title: "Conta PIX necessária",
-        description: "Cadastre uma conta PIX em 'Contas PIX' antes de criar cobranças recorrentes sem boleto.",
         variant: 'destructive'
       });
       return;
@@ -300,27 +239,6 @@ export default function NewCharge() {
         feeAmount = Math.round(amountInCents * 0.03);
         feePercentage = 3.00;
         amountInCents = amountInCents + feeAmount;
-      }
-      
-      const interval = parseInt(data.recurrence_interval) || 1;
-      const nextChargeDate = calculateNextChargeDate(data.recurrence_type, interval);
-
-      let messageTemplateSnapshot = null;
-      if (data.message_template_id && data.message_template_id !== "none") {
-        const { data: template } = await supabase
-          .from('message_templates')
-          .select('*')
-          .eq('id', data.message_template_id)
-          .single();
-        
-        if (template) {
-          messageTemplateSnapshot = {
-            id: template.id,
-            name: template.name ?? '',
-            content: template.content ?? '',
-            variables: template.variables ?? []
-          };
-        }
       }
 
       const normalizedLinhaDigitavel = data.boleto_linha_digitavel 
@@ -353,18 +271,18 @@ export default function NewCharge() {
           mask_fee: data.mask_fee,
           has_boleto: data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
-          has_boleto_link: requiresBoleto, // Agora é true se for cartão ou cartao_pix
+          has_boleto_link: requiresBoleto,
           boleto_linha_digitavel: requiresBoleto ? normalizedLinhaDigitavel : null,
           pix_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.pix_amount || '0') : null,
           card_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.card_amount || '0') : null,
           creditor_document: creditorSettings?.creditor_document || null,
           creditor_name: creditorSettings?.creditor_name || null,
-          message_template_id: data.message_template_id === "none" ? null : data.message_template_id,
-          message_template_snapshot: messageTemplateSnapshot,
-          recurrence_type: data.recurrence_type,
-          recurrence_interval: interval,
-          recurrence_end_date: data.recurrence_end_date ? new Date(data.recurrence_end_date).toISOString() : null,
-          next_charge_date: nextChargeDate?.toISOString() || null,
+          message_template_id: null,
+          message_template_snapshot: null,
+          recurrence_type: 'pontual',
+          recurrence_interval: 1,
+          recurrence_end_date: null,
+          next_charge_date: null,
           fee_amount: feeAmount,
           fee_percentage: feePercentage,
           metadata: {
@@ -405,28 +323,10 @@ export default function NewCharge() {
         return;
       }
 
-      if (data.message_template_id && data.message_template_id !== "none" && messageTemplateSnapshot) {
-        try {
-          await supabase.functions.invoke('send-mock-message', {
-            body: {
-              chargeId: charge.id,
-              templateContent: messageTemplateSnapshot.content,
-              phoneNumber: data.payer_phone,
-              payerName: data.payer_name,
-              amount: amountInCents
-            }
-          });
-        } catch (messageError) {
-          console.error('Error sending mock message:', messageError);
-        }
-      }
-
-      if (data.recurrence_type !== 'pontual' || data.has_boleto) {
+      if (data.has_boleto) {
         toast({
           title: "Cobrança criada com sucesso!",
-          description: data.recurrence_type === 'pontual' 
-            ? "Cobrança com boleto criada. O processamento será realizado quando a integração estiver ativa."
-            : `Cobrança recorrente configurada (${data.recurrence_type}). O agendamento será processado quando a integração estiver ativa.`,
+          description: "Cobrança com boleto criada. O processamento será realizado quando a integração estiver ativa.",
         });
         navigate('/charges');
         return;
@@ -444,7 +344,7 @@ export default function NewCharge() {
       }
 
       console.log('[NewCharge] Gerando link de checkout para cobrança pontual...');
-      if (data.recurrence_type === 'pontual' && !data.has_boleto) {
+      if (!data.has_boleto) {
         try {
           console.log('[NewCharge] Gerando link de checkout via charge-links...');
           
@@ -773,117 +673,11 @@ export default function NewCharge() {
                   </CardContent>
                 </Card>
               )}
-
-              {/* Recorrência */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Wallet className="h-5 w-5 text-primary" />
-                    Recorrência
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Tipo de Recorrência</Label>
-                      <Controller
-                        name="recurrence_type"
-                        control={control}
-                        render={({ field }) => (
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pontual">Pontual (única)</SelectItem>
-                              <SelectItem value="diaria">Diária</SelectItem>
-                              <SelectItem value="semanal">Semanal</SelectItem>
-                              <SelectItem value="quinzenal">Quinzenal</SelectItem>
-                              <SelectItem value="mensal">Mensal</SelectItem>
-                              <SelectItem value="semestral">Semestral</SelectItem>
-                              <SelectItem value="anual">Anual</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                      />
-                    </div>
-
-                    {watchRecurrenceType !== "pontual" && (
-                      <>
-                        <div className="space-y-2">
-                          <Label>Intervalo</Label>
-                          <Controller
-                            name="recurrence_interval"
-                            control={control}
-                            render={({ field }) => (
-                              <Select value={field.value} onValueChange={field.onChange}>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {[1,2,3,4,5,6].map((i) => (
-                                    <SelectItem key={i} value={i.toString()}>
-                                      A cada {i} {i === 1 ? 'período' : 'períodos'}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="recurrence_end_date">Data Final (opcional)</Label>
-                          <Input
-                            id="recurrence_end_date"
-                            type="date"
-                            {...register("recurrence_end_date")}
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Template de Mensagem */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Template de Mensagem</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <Label>Selecionar Template</Label>
-                    <Controller
-                      name="message_template_id"
-                      control={control}
-                      render={({ field }) => (
-                        <Select value={field.value || "none"} onValueChange={field.onChange}>
-                          <SelectTrigger>
-                            <SelectValue placeholder={loadingTemplates ? "Carregando..." : "Selecione um template"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Nenhum template</SelectItem>
-                            {messageTemplates.map((template) => (
-                              <SelectItem key={template.id} value={template.id}>
-                                {template.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                    {templatesError && (
-                      <p className="text-xs text-destructive">Erro ao carregar templates</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
-            {/* Summary Sidebar */}
-            <div className="lg:col-span-1">
-              <Card className="sticky top-6">
+            {/* Sidebar - Summary */}
+            <div className="space-y-6">
+              <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg">
                     <Calculator className="h-5 w-5 text-primary" />
@@ -891,65 +685,61 @@ export default function NewCharge() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-ds-text-muted">Pagador:</span>
-                      <span className="font-medium text-ds-text-strong truncate max-w-[150px]">
-                        {watchPayerName || '-'}
-                      </span>
+                      <span className="text-ds-text-muted">Valor</span>
+                      <span className="font-medium">{watchAmount || 'R$ 0,00'}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-ds-text-muted">Valor:</span>
-                      <span className="font-medium text-ds-text-strong">
-                        {watchAmount ? formatCurrency(formatAmount(watchAmount)) : '-'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-ds-text-muted">Método:</span>
-                      <span className="font-medium text-ds-text-strong">
-                        {watchPaymentMethod === 'pix' ? 'PIX' : 'Cartão'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-ds-text-muted">Tipo:</span>
-                      <span className="font-medium text-ds-text-strong capitalize">
-                        {watchRecurrenceType}
-                      </span>
-                    </div>
-                    {(watchPaymentMethod === 'cartao' || watchPaymentMethod === 'cartao_pix') && watchBoletoLinhaDigitavel && (
+                    {watchPayerName && (
                       <div className="flex justify-between text-sm">
-                        <span className="text-ds-text-muted">Boleto:</span>
-                        <span className="font-medium text-primary">Será vinculado</span>
+                        <span className="text-ds-text-muted">Pagador</span>
+                        <span className="font-medium truncate ml-2">{watchPayerName}</span>
                       </div>
                     )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-ds-text-muted">Método</span>
+                      <span className="font-medium">
+                        {watchPaymentMethod === 'pix' ? 'PIX' : 
+                         watchPaymentMethod === 'cartao_pix' ? 'Cartão + PIX' : 'Cartão'}
+                      </span>
+                    </div>
+                    {watchPaymentMethod === 'cartao_pix' && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-ds-text-muted">Valor PIX</span>
+                          <span className="font-medium">{watchPixAmount || 'R$ 0,00'}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-ds-text-muted">Valor Cartão</span>
+                          <span className="font-medium">{watchCardAmount || 'R$ 0,00'}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-ds-text-muted">Tipo</span>
+                      <span className="font-medium">Pontual</span>
+                    </div>
                   </div>
 
-                  <div className="pt-4 border-t border-ds-border-subtle">
+                  <div className="pt-4 border-t space-y-2">
                     <Button
                       type="submit"
                       className="w-full"
                       disabled={isLoading || settingsLoading}
                     >
-                      {isLoading ? (
-                        <>
-                          <span className="animate-spin mr-2">⏳</span>
-                          Criando...
-                        </>
-                      ) : (
-                        'Criar Cobrança'
-                      )}
+                      {isLoading ? "Criando..." : "Criar Cobrança"}
+                    </Button>
+                    
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => setShowSimulatorModal(true)}
+                    >
+                      <Calculator className="h-4 w-4 mr-2" />
+                      Simular Pagamento
                     </Button>
                   </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setShowSimulatorModal(true)}
-                  >
-                    <Calculator className="h-4 w-4 mr-2" />
-                    Simular Pagamento
-                  </Button>
                 </CardContent>
               </Card>
             </div>
@@ -966,8 +756,10 @@ export default function NewCharge() {
           <CheckoutSuccessModal
             open={showCheckoutModal}
             onOpenChange={(open) => {
-              setShowCheckoutModal(open);
-              if (!open) setCheckoutData(null);
+              if (!open) {
+                setShowCheckoutModal(false);
+                navigate('/charges');
+              }
             }}
             checkoutData={{
               chargeId: checkoutData.chargeId,
