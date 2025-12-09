@@ -169,22 +169,17 @@ export default function Checkout() {
     if (!charge) return;
 
     try {
-      // Salvar splits no banco de dados
+      // Salvar splits no banco de dados (via Edge Function para bypass RLS)
       const chargeId = charge.charge_id || charge.id;
+      const paymentLinkId = charge.id;
       
-      // Primeiro, deletar splits existentes (se houver)
-      await supabase
-        .from('payment_splits')
-        .delete()
-        .eq('charge_id', chargeId);
-
-      // Criar novos splits
+      // Criar array de splits
       const splits = [];
       
       if (pixTotalCents > 0) {
         splits.push({
           charge_id: chargeId,
-          payment_link_id: charge.id,
+          payment_link_id: paymentLinkId,
           method: 'pix',
           amount_cents: pixTotalCents,
           order_index: 1,
@@ -195,7 +190,7 @@ export default function Checkout() {
       if (cardTotalCents > 0) {
         splits.push({
           charge_id: chargeId,
-          payment_link_id: charge.id,
+          payment_link_id: paymentLinkId,
           method: 'credit_card',
           amount_cents: cardTotalCents, // Valor TOTAL com juros
           installments: cardInstallments,
@@ -205,14 +200,25 @@ export default function Checkout() {
       }
 
       if (splits.length > 0) {
-        const { error: insertError } = await supabase
-          .from('payment_splits')
-          .insert(splits);
+        // Usar Edge Function para criar splits (deleta antigos automaticamente)
+        const response = await fetch('https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-splits', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            id: paymentLinkId,
+            action: 'create_splits',
+            splits 
+          })
+        });
 
-        if (insertError) {
-          console.error('[Checkout] Error inserting splits:', insertError);
+        if (!response.ok) {
+          const error = await response.json();
+          console.error('[Checkout] Error creating splits:', error);
           throw new Error('Falha ao salvar configuração de pagamento');
         }
+        
+        const result = await response.json();
+        console.log('[Checkout] ✅ Splits criados via Edge Function:', result);
       }
 
       console.log('[Checkout] ✅ Splits salvos com sucesso:', {
