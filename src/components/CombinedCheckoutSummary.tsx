@@ -94,11 +94,6 @@ export function CombinedCheckoutSummary({
           <p className="text-ds-text-muted">{title}</p>
         </div>
 
-        {/* Valor Total Original */}
-        <div className="bg-ds-bg-surface rounded-lg p-4 mb-6 text-center border border-ds-border">
-          <p className="text-sm text-ds-text-muted mb-1">Valor Total da Cobrança</p>
-          <p className="text-3xl font-bold text-ds-text-strong">{formatCurrency(totalOriginalCents)}</p>
-        </div>
 
         {/* Cards de Valores */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
