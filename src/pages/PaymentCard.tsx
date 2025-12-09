@@ -73,15 +73,27 @@ export default function PaymentCard() {
         }
 
         setCharge({ ...paymentLink, payment_splits: splitData });
-        setCardAmount(cardSplit.amount_cents);
-        setCardInstallments(cardSplit.installments || 1);
         
-        // Usar dados SALVOS do split - ir direto para o formulário
+        // O amount_cents já inclui os juros (foi salvo no CombinedCheckoutSummary)
+        const cardTotalWithInterest = cardSplit.amount_cents;
+        const installments = cardSplit.installments || 1;
+        const installmentValue = Math.ceil(cardTotalWithInterest / installments);
+        
+        setCardAmount(cardTotalWithInterest);
+        setCardInstallments(installments);
+        
+        // Usar dados SALVOS do split - valor já inclui juros
         setSelectedOption({
           id: 'saved',
-          totalCents: cardSplit.amount_cents,
-          installments: cardSplit.installments || 1,
-          installmentValueCents: Math.ceil(cardSplit.amount_cents / (cardSplit.installments || 1))
+          totalCents: cardTotalWithInterest, // Valor total COM juros
+          installments: installments,
+          installmentValueCents: installmentValue
+        });
+        
+        console.log('[PaymentCard] ✅ Dados carregados:', {
+          cardTotalWithInterest,
+          installments,
+          installmentValue
         });
         
         setLoading(false);
@@ -159,9 +171,9 @@ export default function PaymentCard() {
         <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4 mb-6 text-center border border-blue-200 dark:border-blue-800">
           <p className="text-sm text-blue-700 dark:text-blue-300 mb-1">Valor a pagar no cartão</p>
           <p className="text-3xl font-bold text-blue-600">{formatCurrency(cardAmount)}</p>
-          {cardInstallments > 1 && (
+          {cardInstallments > 1 && selectedOption && (
             <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-              {cardInstallments}x de {formatCurrency(Math.ceil(cardAmount / cardInstallments))}
+              {cardInstallments}x de {formatCurrency(selectedOption.installmentValueCents)}
             </p>
           )}
         </div>

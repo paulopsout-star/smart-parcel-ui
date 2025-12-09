@@ -108,7 +108,13 @@ export default function Checkout() {
   }, [id, toast, navigate, mode]);
 
   // Handler para confirmação do checkout combinado
-  const handleCombinedConfirm = async (pixTotalCents: number, cardCents: number, cardInstallments: number) => {
+  // cardTotalCents = valor TOTAL com juros, installmentValueCents = valor de cada parcela
+  const handleCombinedConfirm = async (
+    pixTotalCents: number, 
+    cardTotalCents: number, 
+    cardInstallments: number,
+    installmentValueCents: number
+  ) => {
     if (!charge) return;
 
     try {
@@ -135,12 +141,12 @@ export default function Checkout() {
         });
       }
       
-      if (cardCents > 0) {
+      if (cardTotalCents > 0) {
         splits.push({
           charge_id: chargeId,
           payment_link_id: charge.id,
           method: 'credit_card',
-          amount_cents: cardCents,
+          amount_cents: cardTotalCents, // Valor TOTAL com juros
           installments: cardInstallments,
           order_index: pixTotalCents > 0 ? 2 : 1,
           status: 'pending',
@@ -158,11 +164,18 @@ export default function Checkout() {
         }
       }
 
+      console.log('[Checkout] ✅ Splits salvos com sucesso:', {
+        pixTotalCents,
+        cardTotalCents,
+        cardInstallments,
+        installmentValueCents
+      });
+
       // Redirecionar para o primeiro método de pagamento
       if (pixTotalCents > 0) {
         // Se há PIX, ir para tela de PIX primeiro
         navigate(`/payment-pix/${id}?next=card`);
-      } else if (cardCents > 0) {
+      } else if (cardTotalCents > 0) {
         // Se só há cartão, ir direto para cartão
         navigate(`/payment-card/${id}`);
       }
