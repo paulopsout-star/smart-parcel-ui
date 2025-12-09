@@ -143,3 +143,6 @@ verify_jwt = false
 
 [functions.abacatepay-check-status]
 verify_jwt = false
+
+[functions.quitaplus-prepayment-status]
+verify_jwt = false
