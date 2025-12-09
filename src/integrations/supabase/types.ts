@@ -148,9 +148,12 @@ export type Database = {
           amount: number
           boleto_barcode: string | null
           boleto_linha_digitavel: string | null
+          boleto_linked_at: string | null
+          card_amount: number | null
           checkout_link_id: string | null
           checkout_url: string | null
           company_id: string
+          completed_at: string | null
           created_at: string
           created_by: string
           creditor_document: string | null
@@ -172,7 +175,10 @@ export type Database = {
           payer_email: string
           payer_name: string
           payer_phone: string
+          payment_authorized_at: string | null
           payment_method: string | null
+          pix_amount: number | null
+          pre_payment_key: string | null
           recurrence_end_date: string | null
           recurrence_interval: number | null
           recurrence_type: Database["public"]["Enums"]["recurrence_type"]
@@ -183,9 +189,12 @@ export type Database = {
           amount: number
           boleto_barcode?: string | null
           boleto_linha_digitavel?: string | null
+          boleto_linked_at?: string | null
+          card_amount?: number | null
           checkout_link_id?: string | null
           checkout_url?: string | null
           company_id: string
+          completed_at?: string | null
           created_at?: string
           created_by: string
           creditor_document?: string | null
@@ -207,7 +216,10 @@ export type Database = {
           payer_email: string
           payer_name: string
           payer_phone: string
+          payment_authorized_at?: string | null
           payment_method?: string | null
+          pix_amount?: number | null
+          pre_payment_key?: string | null
           recurrence_end_date?: string | null
           recurrence_interval?: number | null
           recurrence_type?: Database["public"]["Enums"]["recurrence_type"]
@@ -218,9 +230,12 @@ export type Database = {
           amount?: number
           boleto_barcode?: string | null
           boleto_linha_digitavel?: string | null
+          boleto_linked_at?: string | null
+          card_amount?: number | null
           checkout_link_id?: string | null
           checkout_url?: string | null
           company_id?: string
+          completed_at?: string | null
           created_at?: string
           created_by?: string
           creditor_document?: string | null
@@ -242,7 +257,10 @@ export type Database = {
           payer_email?: string
           payer_name?: string
           payer_phone?: string
+          payment_authorized_at?: string | null
           payment_method?: string | null
+          pix_amount?: number | null
+          pre_payment_key?: string | null
           recurrence_end_date?: string | null
           recurrence_interval?: number | null
           recurrence_type?: Database["public"]["Enums"]["recurrence_type"]
@@ -964,6 +982,8 @@ export type Database = {
         | "completed"
         | "failed"
         | "cancelled"
+        | "pre_authorized"
+        | "boleto_linked"
       payment_method: "PIX" | "CARD" | "QUITA"
       recurrence_type:
         | "pontual"
@@ -1108,6 +1128,8 @@ export const Constants = {
         "completed",
         "failed",
         "cancelled",
+        "pre_authorized",
+        "boleto_linked",
       ],
       payment_method: ["PIX", "CARD", "QUITA"],
       recurrence_type: [
