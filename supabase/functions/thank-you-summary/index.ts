@@ -131,6 +131,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Buscar dados da empresa cobradora
+    let company = null
+    const companyId = charge?.company_id || paymentLink.company_id
+    if (companyId) {
+      const { data: companyData, error: companyError } = await supabase
+        .from('companies')
+        .select('name, email, phone')
+        .eq('id', companyId)
+        .single()
+
+      if (!companyError && companyData) {
+        company = companyData
+        console.log('[thank-you-summary] Company found:', company?.name)
+      }
+    }
+
     // Verificar se está PAID - considera múltiplos indicadores para cartão
     // Um split de cartão com pre_payment_key indica pagamento aprovado (mesmo se vínculo de boleto falhou)
     const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => {
@@ -183,6 +199,10 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Calcular valor total realmente pago (soma dos splits)
+    const totalPaidCents = finalSplits?.reduce((sum, s) => sum + (s.amount_cents || 0), 0) || 0
+    console.log('[thank-you-summary] Total paid cents:', totalPaidCents)
+
     // Montar resposta
     const response = {
       paid: true,
@@ -190,10 +210,10 @@ Deno.serve(async (req) => {
         id: charge?.id || paymentLink.id,
         type: charge?.recurrence_type || 'pontual',
         total_amount_cents: charge?.amount || paymentLink.amount,
+        total_paid_cents: totalPaidCents,
         currency: 'BRL',
         paid: true,
-        paid_at: finalSplits[0]?.processed_at || new Date().toISOString(),
-        has_boleto_link: charge?.has_boleto_link || false
+        paid_at: finalSplits[0]?.processed_at || new Date().toISOString()
       },
       splits: (finalSplits || []).map(split => ({
         id: split.id,
@@ -212,9 +232,14 @@ Deno.serve(async (req) => {
       recurrence: {
         next_dates: nextDates
       },
+      company: {
+        name: company?.name || null,
+        email: company?.email || null,
+        phone: company?.phone || null
+      },
       ui: {
         return_url: paymentLink.ui_snapshot?.return_url || null,
-        support_hint: "Suporte: suporte@empresa.com (mock)"
+        support_email: "faleconosco@autonegocie.com"
       }
     }
 
