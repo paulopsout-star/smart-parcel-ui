@@ -68,6 +68,85 @@ serve(async (req) => {
       );
     }
 
+    // ========================================
+    // VERIFICAR PIX EXISTENTES ANTES DE CRIAR
+    // ========================================
+    const allPixIds = charge.metadata?.all_pix_ids || [];
+    
+    if (allPixIds.length > 0) {
+      console.log('[abacatepay-pix-create] 🔍 Verificando', allPixIds.length, 'PIX existentes antes de criar novo...');
+      
+      for (const existingPixId of allPixIds) {
+        try {
+          const checkResponse = await fetch(`https://api.abacatepay.com/v1/pixQrCode/check?id=${existingPixId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${abacateApiKey}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (checkResponse.ok) {
+            const checkData = await checkResponse.json();
+            const pixStatus = checkData.data?.status;
+            const expiresAt = checkData.data?.expiresAt ? new Date(checkData.data.expiresAt) : null;
+            
+            console.log('[abacatepay-pix-create] 📋 Status do PIX', existingPixId, ':', {
+              status: pixStatus,
+              expiresAt: expiresAt?.toISOString()
+            });
+            
+            // CENÁRIO 1: PIX JÁ FOI PAGO
+            if (pixStatus === 'PAID' || pixStatus === 'COMPLETED') {
+              console.log('[abacatepay-pix-create] ✅ PIX', existingPixId, 'já foi PAGO! Retornando sem criar novo.');
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  alreadyPaid: true,
+                  pixId: existingPixId,
+                  status: 'PAID',
+                  message: 'PIX já foi pago anteriormente'
+                }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+            
+            // CENÁRIO 2: PIX PENDENTE E NÃO EXPIRADO - REUTILIZAR
+            if (pixStatus === 'PENDING' && expiresAt && expiresAt > new Date()) {
+              console.log('[abacatepay-pix-create] ♻️ PIX', existingPixId, 'ainda válido. Reutilizando...');
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  reused: true,
+                  pixId: existingPixId,
+                  brCode: checkData.data.brCode,
+                  brCodeBase64: checkData.data.brCodeBase64,
+                  expiresAt: checkData.data.expiresAt,
+                  status: 'PENDING',
+                  message: 'QR Code PIX válido já existe, reutilizando'
+                }),
+                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+            
+            // PIX expirado ou outro status - continuar verificando os outros
+            console.log('[abacatepay-pix-create] ⏰ PIX', existingPixId, 'expirado ou status inválido, continuando...');
+          } else {
+            console.log('[abacatepay-pix-create] ⚠️ Não foi possível verificar PIX', existingPixId, '- status:', checkResponse.status);
+          }
+        } catch (err) {
+          console.error('[abacatepay-pix-create] Erro ao verificar PIX existente:', existingPixId, err);
+          // Continuar para o próximo PIX
+        }
+      }
+      
+      console.log('[abacatepay-pix-create] 📋 Nenhum PIX válido encontrado. Criando novo...');
+    }
+
+    // ========================================
+    // CRIAR NOVO PIX (nenhum válido encontrado)
+    // ========================================
+    
     // Preparar dados limpos para envio
     const cleanPhone = payerPhone.replace(/\D/g, '');
     const cleanDocument = payerDocument.replace(/\D/g, '');
@@ -145,12 +224,12 @@ serve(async (req) => {
     // Atualizar cobrança no DB com dados do Abacate Pay
     // Manter histórico de todos os PIX IDs gerados
     const existingPixIds = charge.metadata?.all_pix_ids || [];
-    const allPixIds = [...existingPixIds, abacateData.data.id];
+    const newAllPixIds = [...existingPixIds, abacateData.data.id];
     
     console.log('[abacatepay-pix-create] 📝 Atualizando histórico de PIX IDs:', {
       previous: existingPixIds,
       new: abacateData.data.id,
-      total: allPixIds.length
+      total: newAllPixIds.length
     });
     
     const { error: updateError } = await supabase
@@ -160,7 +239,7 @@ serve(async (req) => {
         metadata: {
           ...charge.metadata,
           pix_id: abacateData.data.id,
-          all_pix_ids: allPixIds, // ARRAY com TODOS os PIX IDs gerados
+          all_pix_ids: newAllPixIds, // ARRAY com TODOS os PIX IDs gerados
           abacate_pay_data: {
             created_at: new Date().toISOString(),
             pix_id: abacateData.data.id,
