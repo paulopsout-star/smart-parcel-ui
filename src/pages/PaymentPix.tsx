@@ -22,7 +22,6 @@ export default function PaymentPix() {
   const [hasCardPayment, setHasCardPayment] = useState(false);
   const [cardAmount, setCardAmount] = useState(0);
   
-  // Dados do QR Code do AbacatePay
   const [pixData, setPixData] = useState<{
     brCode: string;
     brCodeBase64: string;
@@ -31,14 +30,13 @@ export default function PaymentPix() {
   } | null>(null);
   const [pixError, setPixError] = useState<string | null>(null);
   
-  const nextStep = searchParams.get('next'); // 'card' se houver cartão depois
+  const nextStep = searchParams.get('next');
 
   useEffect(() => {
     const fetchData = async () => {
       if (!id) return;
 
       try {
-        // Usar Edge Function pública para buscar dados
         const { data, error } = await supabase.functions.invoke('public-payment-splits', {
           body: { id },
         });
@@ -86,7 +84,6 @@ export default function PaymentPix() {
         
         setLoading(false);
         
-        // Gerar QR Code automaticamente após carregar os dados
         if (pixSplit?.amount_cents > 0) {
           generatePixQrCode(chargeInfo, pixSplit.amount_cents);
         }
@@ -109,11 +106,7 @@ export default function PaymentPix() {
     setPixError(null);
     
     try {
-      console.log('[PaymentPix] Gerando QR Code PIX via AbacatePay...', {
-        chargeId: chargeInfo.charge_id,
-        amountCents,
-        payerEmail: chargeInfo.payer_email
-      });
+      console.log('[PaymentPix] Gerando QR Code PIX via AbacatePay...');
 
       const { data, error } = await supabase.functions.invoke('abacatepay-pix-create', {
         body: {
@@ -133,7 +126,6 @@ export default function PaymentPix() {
         return;
       }
 
-      // CENÁRIO 1: PIX JÁ FOI PAGO ANTERIORMENTE
       if (data?.alreadyPaid) {
         console.log('[PaymentPix] ✅ PIX já foi pago! Confirmando e redirecionando...');
         toast({
@@ -141,7 +133,6 @@ export default function PaymentPix() {
           description: 'Detectamos que o pagamento PIX já foi realizado.',
         });
         
-        // Atualizar split e redirecionar
         const pixSplit = chargeInfo.payment_splits?.find((s: any) => s.method === 'pix');
         if (pixSplit) {
           await supabase
@@ -154,39 +145,26 @@ export default function PaymentPix() {
             .eq('id', pixSplit.id);
         }
         
-        // Redirecionar - usar chargeInfo diretamente (estado hasCardPayment pode não estar atualizado)
         const cardSplit = chargeInfo.payment_splits?.find((s: any) => s.method === 'credit_card');
         if (cardSplit && cardSplit.amount_cents > 0) {
-          console.log('[PaymentPix] Redirecionando para pagamento de cartão...');
           navigate(`/payment-card/${id}`);
         } else {
-          console.log('[PaymentPix] Sem cartão pendente, indo para thank-you...');
           navigate(`/thank-you?pl=${id}`);
         }
         return;
       }
 
-      // CENÁRIO 2: PIX REUTILIZADO (QR Code válido existente)
       if (data?.reused) {
-        console.log('[PaymentPix] ♻️ QR Code reutilizado:', data.pixId);
         toast({
           title: 'QR Code recuperado',
           description: 'Exibindo seu QR Code PIX válido.',
         });
       }
 
-      // Validar resposta (novo ou reutilizado)
       if (!data?.success || !data?.brCode || !data?.brCodeBase64) {
-        console.error('[PaymentPix] Resposta inválida:', data);
         setPixError(data?.error || 'Erro ao gerar QR Code PIX.');
         return;
       }
-
-      console.log('[PaymentPix] ✅ QR Code pronto:', {
-        pixId: data.pixId,
-        expiresAt: data.expiresAt,
-        reused: data.reused || false
-      });
 
       setPixData({
         brCode: data.brCode,
@@ -229,8 +207,6 @@ export default function PaymentPix() {
     setPaying(true);
     
     try {
-      // Verificar status do pagamento via AbacatePay usando chargeId
-      // para verificar TODOS os PIX IDs históricos
       const { data: statusData } = await supabase.functions.invoke('abacatepay-check-status', {
         body: { chargeId: charge.charge_id }
       });
@@ -238,7 +214,6 @@ export default function PaymentPix() {
       console.log('[PaymentPix] Status do pagamento:', statusData);
       
       if (statusData?.status === 'COMPLETED' || statusData?.status === 'PAID') {
-        // Pagamento confirmado pela API
         const pixSplit = charge.payment_splits?.find((s: any) => s.method === 'pix');
         if (pixSplit) {
           await supabase
@@ -256,19 +231,15 @@ export default function PaymentPix() {
           description: 'Pagamento via PIX realizado com sucesso.',
         });
         
-        // Redirecionar - usar charge.payment_splits diretamente (estado hasCardPayment pode não estar atualizado)
         const cardSplit = charge?.payment_splits?.find((s: any) => s.method === 'credit_card');
         if (cardSplit && cardSplit.amount_cents > 0) {
-          console.log('[PaymentPix] Redirecionando para pagamento de cartão...');
           navigate(`/payment-card/${id}`);
         } else {
-          console.log('[PaymentPix] Sem cartão pendente, indo para thank-you...');
           navigate(`/thank-you?pl=${id}`);
         }
         return;
       }
       
-      // Se não confirmado, mostrar mensagem
       toast({
         title: 'Aguardando pagamento',
         description: 'O pagamento ainda não foi identificado. Verifique se o PIX foi realizado.',
@@ -288,41 +259,44 @@ export default function PaymentPix() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-2xl w-full p-8">
-          <Skeleton className="h-8 w-3/4 mb-4" />
-          <Skeleton className="h-64 w-full mb-4" />
-          <Skeleton className="h-12 w-full" />
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+        <Card className="max-w-2xl w-full p-8 rounded-2xl">
+          <Skeleton className="h-16 w-16 rounded-full mx-auto mb-4" />
+          <Skeleton className="h-8 w-3/4 mx-auto mb-4" />
+          <Skeleton className="h-64 w-full mb-4 rounded-2xl" />
+          <Skeleton className="h-12 w-full rounded-full" />
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <Card className="max-w-2xl w-full p-8">
+    <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+      <Card className="max-w-2xl w-full p-6 lg:p-8 rounded-2xl shadow-md">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-            <QrCode className="w-8 h-8 text-primary" />
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-4">
+            <QrCode className="w-7 h-7 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold text-ink mb-2">Pagamento via PIX</h1>
-          <p className="text-ink-secondary">
+          <h1 className="text-2xl font-semibold text-foreground mb-2">Pagamento via PIX</h1>
+          <p className="text-sm text-muted-foreground">
             Escaneie o QR Code ou copie o código PIX abaixo
           </p>
         </div>
 
-        {/* Valor */}
-        <div className="bg-primary/5 rounded-lg p-6 mb-6 text-center">
-          <p className="text-sm text-ink-secondary mb-2">Valor a pagar via PIX</p>
-          <p className="text-4xl font-bold text-primary">{formatCurrency(pixAmount)}</p>
+        {/* Amount */}
+        <div className="bg-primary/5 rounded-2xl p-5 mb-6 text-center border border-primary/10">
+          <p className="text-sm text-muted-foreground mb-1">Valor a pagar via PIX</p>
+          <p className="text-3xl font-bold text-primary">{formatCurrency(pixAmount)}</p>
         </div>
 
-        {/* Próximo pagamento (se houver) */}
+        {/* Next Payment Info */}
         {hasCardPayment && cardAmount > 0 && (
-          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
+          <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 mb-6">
             <div className="flex items-center gap-3">
-              <CreditCard className="w-5 h-5 text-blue-600 flex-shrink-0" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600 flex-shrink-0">
+                <CreditCard className="w-4 h-4" />
+              </div>
               <div className="text-sm">
                 <p className="font-medium text-blue-800 dark:text-blue-200">
                   Próximo passo: Pagamento via Cartão
@@ -336,11 +310,11 @@ export default function PaymentPix() {
         )}
 
         {/* QR Code */}
-        <div className="bg-white p-6 rounded-lg mb-6 flex items-center justify-center border border-gray-200">
+        <div className="bg-card p-6 rounded-2xl mb-6 flex items-center justify-center border border-border">
           {generatingPix ? (
             <div className="text-center py-8">
               <RefreshCw className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
-              <p className="text-ink-secondary">Gerando QR Code PIX...</p>
+              <p className="text-muted-foreground">Gerando QR Code PIX...</p>
             </div>
           ) : pixError ? (
             <div className="text-center py-8">
@@ -349,7 +323,7 @@ export default function PaymentPix() {
               <Button 
                 variant="outline" 
                 onClick={handleRegenerateQrCode}
-                className="gap-2"
+                className="gap-2 rounded-full"
               >
                 <RefreshCw className="w-4 h-4" />
                 Tentar novamente
@@ -365,35 +339,35 @@ export default function PaymentPix() {
                 className="w-64 h-64 mx-auto"
               />
               {pixData.expiresAt && (
-                <p className="text-xs text-ink-muted mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   Expira em: {new Date(pixData.expiresAt).toLocaleString('pt-BR')}
                 </p>
               )}
             </div>
           ) : (
             <div className="text-center py-8">
-              <QrCode className="w-24 h-24 text-gray-300 mx-auto mb-4" />
-              <p className="text-ink-muted">Aguardando geração do QR Code...</p>
+              <QrCode className="w-24 h-24 text-muted-foreground/30 mx-auto mb-4" />
+              <p className="text-muted-foreground">Aguardando geração do QR Code...</p>
             </div>
           )}
         </div>
 
-        {/* Botão Copiar */}
+        {/* Copy Button */}
         <Button
           onClick={handleCopyPixCode}
           variant="outline"
-          className="w-full mb-6"
+          className="w-full mb-6 rounded-full h-11"
           disabled={!pixData?.brCode || generatingPix}
         >
-          <Copy className="mr-2" />
+          <Copy className="mr-2 h-4 w-4" />
           Copiar código PIX
         </Button>
 
-        {/* Instruções */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+        {/* Instructions */}
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-4 mb-6">
           <div className="flex items-start gap-3">
-            <Clock className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-yellow-800">
+            <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-200">
               <p className="font-medium mb-1">Instruções:</p>
               <ol className="list-decimal list-inside space-y-1">
                 <li>Abra o app do seu banco</li>
@@ -406,41 +380,41 @@ export default function PaymentPix() {
           </div>
         </div>
 
-        {/* Botão Confirmar */}
+        {/* Confirm Button */}
         <Button
           onClick={handleConfirmPayment}
           disabled={paying || !pixData?.pixId || generatingPix}
-          className="w-full"
+          className="w-full h-11 rounded-full text-sm font-semibold"
           size="lg"
         >
           {paying ? (
             <>
-              <Clock className="mr-2 animate-spin" />
+              <Clock className="mr-2 h-4 w-4 animate-spin" />
               Verificando pagamento...
             </>
           ) : (
             <>
-              <CheckCircle2 className="mr-2" />
+              <CheckCircle2 className="mr-2 h-4 w-4" />
               Confirmar Pagamento PIX
             </>
           )}
         </Button>
 
-        {/* Botão para regenerar */}
+        {/* Regenerate Button */}
         {pixData && !generatingPix && (
           <Button
             onClick={handleRegenerateQrCode}
             variant="ghost"
-            className="w-full mt-3 text-ink-muted"
+            className="w-full mt-3 text-muted-foreground"
           >
             <RefreshCw className="mr-2 w-4 h-4" />
             Gerar novo QR Code
           </Button>
         )}
 
-        {/* Info adicional */}
+        {/* Additional Info */}
         {hasCardPayment && (
-          <div className="mt-6 text-center text-sm text-ink-muted">
+          <div className="mt-6 text-center text-sm text-muted-foreground">
             Após confirmar o PIX, você será direcionado para o pagamento do valor restante no cartão.
           </div>
         )}

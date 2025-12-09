@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { PaymentOption } from '@/types/payment-options';
 import { formatCurrency } from '@/lib/utils';
 import { Clock, Zap, TrendingUp, DollarSign } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface CheckoutOptionCardProps {
   option: PaymentOption;
@@ -29,20 +30,17 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
   const [isSearching, setIsSearching] = useState(false);
 
   const handleAmountChange = (value: string) => {
-    // Aceitar apenas números, vírgula e ponto
     const cleanValue = value.replace(/[^\d,]/g, '');
     setLocalAmount(cleanValue);
     
-    // Se o campo foi limpo, resetar o estado de busca
     if (!cleanValue) {
       setIsSearching(false);
       if (onCustomValueChange) {
-        onCustomValueChange(0); // Notificar pai para limpar resultado
+        onCustomValueChange(0);
       }
       return;
     }
     
-    // Converter para centavos
     let cents = 0;
     if (cleanValue.includes(',')) {
       const parts = cleanValue.split(',');
@@ -55,7 +53,6 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
     
     if (onCustomValueChange && cents > 0) {
       setIsSearching(true);
-      // Simular um pequeno delay para mostrar "buscando"
       setTimeout(() => {
         onCustomValueChange(cents);
         setIsSearching(false);
@@ -69,33 +66,36 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
         <div className="space-y-3">
           {customResult ? (
             <>
-              <div className="text-3xl font-bold text-primary animate-in fade-in duration-300">
-                {formatCurrency(customResult.installmentValueCents)}
+              <div className="flex flex-wrap items-baseline gap-1">
+                <span className="text-xl font-semibold tracking-tight text-foreground">
+                  {formatCurrency(customResult.installmentValueCents)}
+                </span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  em {customResult.installments}x
+                </span>
               </div>
-              <div className="text-sm text-ink font-medium">
-                <strong>{customResult.installments}x</strong> de{' '}
-                <strong>{formatCurrency(customResult.installmentValueCents)}</strong>
-                {' '}= Total <strong>{formatCurrency(customResult.totalCents)}</strong>
-              </div>
-              <div className="mt-3 p-3 bg-primary/10 rounded-lg border border-primary/30 animate-in slide-in-from-top duration-300">
-                <p className="text-sm text-primary font-medium flex items-center gap-2">
-                  <span className="text-lg">✓</span>
+              <p className="text-xs text-muted-foreground">
+                Total: {formatCurrency(customResult.totalCents)}
+              </p>
+              <div className="p-2.5 bg-primary/10 rounded-lg border border-primary/20">
+                <p className="text-xs text-primary font-medium flex items-center gap-1.5">
+                  <span>✓</span>
                   <span>Parcela mais próxima ao valor desejado</span>
                 </p>
               </div>
             </>
           ) : (
             <>
-              <div className="text-2xl font-bold text-muted-foreground">R$ --,--</div>
-              <div className="text-sm text-ink-secondary">
+              <div className="text-xl font-semibold text-muted-foreground">R$ --,--</div>
+              <p className="text-xs text-muted-foreground">
                 Digite o valor da parcela desejada
-              </div>
+              </p>
             </>
           )}
           
-          <div className="space-y-2 mt-4">
+          <div className="space-y-2 mt-3">
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">
                 R$
               </span>
               <Input
@@ -103,11 +103,11 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
                 placeholder="0,00"
                 value={localAmount}
                 onChange={(e) => handleAmountChange(e.target.value)}
-                className="text-base pl-10 bg-background border-border focus:border-primary font-medium"
+                className="h-10 text-sm pl-10 bg-background border-border focus:border-primary rounded-xl"
               />
             </div>
             {isSearching && (
-              <p className="text-xs text-primary animate-pulse flex items-center gap-1">
+              <p className="text-xs text-primary animate-pulse flex items-center gap-1.5">
                 <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
                 Buscando parcela mais próxima...
               </p>
@@ -118,49 +118,50 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
     }
 
     return (
-      <div className="space-y-2">
-        <div className="flex flex-col">
-          <div className="text-2xl font-bold text-ink mb-1">
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-baseline gap-1">
+          <span className="text-xl font-semibold tracking-tight text-foreground">
             {option.installments === 1 ? (
               formatCurrency(option.totalCents)
             ) : (
-              <>
-                {formatCurrency(option.installmentValueCents)}{' '}
-                <span className="text-base font-normal text-ink-secondary">
-                  em {option.installments}x
-                </span>
-              </>
+              formatCurrency(option.installmentValueCents)
             )}
-          </div>
-          
+          </span>
           {option.installments > 1 && (
-            <div className="text-sm text-ink-secondary">
-              Total: {formatCurrency(option.totalCents)}
-            </div>
-          )}
-          
-          {option.discountCents && option.discountCents > 0 && (
-            <div className="text-sm text-primary font-medium mt-1">
-              Economize {formatCurrency(option.discountCents)}
-            </div>
+            <span className="text-xs font-medium text-muted-foreground">
+              em {option.installments}x
+            </span>
           )}
         </div>
+        
+        {option.installments > 1 && (
+          <p className="text-xs text-muted-foreground">
+            Total: {formatCurrency(option.totalCents)}
+          </p>
+        )}
+        
+        {option.discountCents && option.discountCents > 0 && (
+          <p className="text-xs text-primary font-medium mt-1">
+            Economize {formatCurrency(option.discountCents)}
+          </p>
+        )}
       </div>
     );
   };
 
   const getOptionIcon = () => {
+    const iconClass = "w-4 h-4";
     switch (option.type) {
       case 'minimum':
-        return <Clock className="w-5 h-5 text-white" />;
+        return <Clock className={iconClass} />;
       case 'single':
-        return <Zap className="w-5 h-5 text-white" />;
+        return <Zap className={iconClass} />;
       case 'popular':
-        return <TrendingUp className="w-5 h-5 text-white" />;
+        return <TrendingUp className={iconClass} />;
       case 'custom':
-        return <DollarSign className="w-5 h-5 text-white" />;
+        return <DollarSign className={iconClass} />;
       default:
-        return <DollarSign className="w-5 h-5 text-white" />;
+        return <DollarSign className={iconClass} />;
     }
   };
 
@@ -180,42 +181,43 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
   };
 
   return (
-    <Card
-      className={`p-6 cursor-pointer transition-all duration-200 border ${
-        isSelected
-          ? 'border-primary bg-white shadow-lg ring-2 ring-primary/20'
-          : 'border-gray-200 hover:border-primary/50 hover:shadow-md bg-white'
-      } ${option.type === 'popular' ? 'relative' : ''}`}
-      onClick={onSelect}
-    >
+    <div className="relative">
       {option.type === 'popular' && (
-        <div className="absolute -top-3 left-6">
-          <Badge className="bg-orange-500 text-white px-3 py-1 text-xs font-medium">
-            Mais Escolhido
-          </Badge>
-        </div>
+        <Badge className="absolute -top-3 left-4 z-10 bg-emerald-50 text-emerald-700 hover:bg-emerald-50 px-2.5 py-0.5 text-[11px] font-medium border-0">
+          Mais escolhido
+        </Badge>
       )}
       
-      <div className="flex items-start gap-4">
-        <div className="flex-shrink-0 mt-1">
-          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-            {getOptionIcon()}
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "w-full text-left transition-all duration-200",
+          "rounded-2xl border bg-card px-5 py-4",
+          "flex flex-col gap-3",
+          "hover:bg-muted/60 hover:shadow-md",
+          isSelected && "border-2 border-primary bg-background shadow-md",
+          !isSelected && "border-border"
+        )}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary flex-shrink-0">
+              {getOptionIcon()}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {option.title}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {getOptionDescription()}
+              </p>
+            </div>
           </div>
         </div>
         
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-col">
-            <h3 className="font-semibold text-lg text-ink mb-1">
-              {option.title}
-            </h3>
-            <p className="text-sm text-ink-secondary mb-4">
-              {getOptionDescription()}
-            </p>
-            
-            {renderOptionContent()}
-          </div>
-        </div>
-      </div>
-    </Card>
+        {renderOptionContent()}
+      </button>
+    </div>
   );
 };

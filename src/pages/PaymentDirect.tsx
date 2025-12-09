@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { PaymentForm } from '@/components/PaymentForm';
 import { CheckoutOptionCard } from '@/components/CheckoutOptionCard';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { mapSimulationToPaymentOptions, findClosestInstallment } from '@/lib/checkout-utils';
 import { PaymentOption } from '@/types/payment-options';
-import { ArrowLeft, AlertCircle, CreditCard } from 'lucide-react';
+import { AlertCircle, CreditCard } from 'lucide-react';
 import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -29,7 +28,6 @@ export default function PaymentDirect() {
     installmentValueCents: number;
   } | null>(null);
 
-  // Hook de simulação em tempo real
   const { 
     data: simulation, 
     isLoading: isSimulating, 
@@ -51,7 +49,6 @@ export default function PaymentDirect() {
       try {
         setLoading(true);
 
-        // Buscar dados do link de pagamento via edge function
         const response = await fetch(
           `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/public-payment-link?id=${id}`
         );
@@ -91,7 +88,6 @@ export default function PaymentDirect() {
   const handlePaymentSuccess = async (transactionId: string, paymentStatus: 'approved' | 'pending' | 'failed' = 'approved') => {
     console.log('[PaymentDirect] Payment result:', { transactionId, paymentStatus, chargeId: charge?.id });
 
-    // Status APROVADO: chamar edge function e redirecionar
     if (paymentStatus === 'approved') {
       if (!charge?.id) {
         console.error('[PaymentDirect] No charge ID available');
@@ -127,7 +123,6 @@ export default function PaymentDirect() {
           description: "Seu pagamento foi processado com sucesso.",
         });
 
-        // Redirecionar para página de comprovante
         setTimeout(() => {
           navigate(`/thank-you?pl=${id}`);
         }, 1500);
@@ -139,36 +134,34 @@ export default function PaymentDirect() {
           variant: "destructive",
         });
       }
-    }
-    // Status PENDENTE: informar usuário
-    else if (paymentStatus === 'pending') {
+    } else if (paymentStatus === 'pending') {
       toast({
         title: "Pagamento pendente",
         description: "Seu pagamento está sendo processado. Aguarde a confirmação.",
         variant: "default",
       });
-      console.log('[PaymentDirect] Payment is pending, no redirect');
-    } 
-    // Status RECUSADO: informar erro
-    else if (paymentStatus === 'failed') {
+    } else if (paymentStatus === 'failed') {
       toast({
         title: "Pagamento recusado",
         description: "Não foi possível processar seu pagamento. Verifique os dados e tente novamente.",
         variant: "destructive",
       });
-      console.log('[PaymentDirect] Payment failed, no redirect');
     }
   };
 
   if (loading || isSimulating) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-2xl w-full p-8">
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+        <Card className="max-w-6xl w-full p-6 lg:p-8 rounded-2xl">
           <Skeleton className="h-8 w-48 mb-6" />
-          <Skeleton className="h-24 w-full mb-4" />
-          <Skeleton className="h-24 w-full mb-4" />
-          <Skeleton className="h-24 w-full mb-4" />
-          <Skeleton className="h-12 w-full" />
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            <div className="space-y-3">
+              <Skeleton className="h-28 w-full rounded-2xl" />
+              <Skeleton className="h-28 w-full rounded-2xl" />
+              <Skeleton className="h-28 w-full rounded-2xl" />
+            </div>
+            <Skeleton className="h-[500px] w-full rounded-2xl" />
+          </div>
         </Card>
       </div>
     );
@@ -176,15 +169,13 @@ export default function PaymentDirect() {
 
   if (!charge) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="max-w-md w-full p-8 text-center">
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+        <Card className="max-w-md w-full p-8 text-center rounded-2xl">
           <div className="text-destructive mb-4">
-            <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <AlertCircle className="w-16 h-16 mx-auto" />
           </div>
-          <h2 className="text-2xl font-bold text-ink mb-2">Link Inválido</h2>
-          <p className="text-ink-secondary">
+          <h2 className="text-2xl font-bold text-foreground mb-2">Link Inválido</h2>
+          <p className="text-muted-foreground">
             Este link de pagamento não existe ou expirou.
           </p>
         </Card>
@@ -192,12 +183,10 @@ export default function PaymentDirect() {
     );
   }
 
-  // Mapear opções de pagamento da simulação
   const paymentOptions = charge 
     ? mapSimulationToPaymentOptions(simulation, charge.amount_cents)
     : [];
 
-  // Calcular valor e parcelas finais baseado na seleção
   const finalAmount = selectedOption 
     ? (selectedOption.isCustom ? customAmount : selectedOption.totalCents)
     : charge.amount_cents;
@@ -206,7 +195,6 @@ export default function PaymentDirect() {
     : 1;
 
   const handleCustomValueChange = (desiredValueCents: number) => {
-    // Se valor for 0, limpar resultado
     if (desiredValueCents === 0) {
       setCustomAmount(0);
       setCustomInstallments(1);
@@ -240,29 +228,27 @@ export default function PaymentDirect() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-surface to-surface-light">
+    <div className="min-h-screen bg-muted">
       {/* Header */}
       <div className="border-b border-border/40 bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CreditCard className="w-6 h-6 text-primary" />
-              <h1 className="text-2xl font-bold text-foreground">
-                Escolha a melhor forma de pagamento
-              </h1>
-            </div>
+        <div className="max-w-6xl mx-auto px-4 lg:px-6 py-4">
+          <div className="flex items-center gap-3">
+            <CreditCard className="w-5 h-5 text-primary" />
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Escolha a melhor forma de pagamento
+            </h1>
           </div>
-          <p className="text-muted-foreground mt-2 text-center lg:text-left">
+          <p className="text-sm text-muted-foreground mt-1">
             {charge.description || `Pagamento para ${charge.payer_name || 'Cliente'}`}
           </p>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8 py-6 lg:py-10">
-        {/* Alerta de erro na simulação */}
+      <div className="max-w-6xl mx-auto px-4 lg:px-6 py-6 lg:py-8">
+        {/* Error Alert */}
         {simulationError && (
-          <Alert variant="destructive" className="mb-6">
+          <Alert variant="destructive" className="mb-6 rounded-xl">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               Não foi possível simular as opções de parcelamento. Por favor, tente novamente.
@@ -270,13 +256,14 @@ export default function PaymentDirect() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[45%_55%] gap-6 lg:gap-10">
-          {/* Coluna Esquerda: Opções de Pagamento */}
-          <div>
-            <h2 className="text-xl font-semibold text-foreground mb-4">
+        <div className="grid gap-6 lg:gap-8 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+          {/* Left Column: Payment Options */}
+          <section className="space-y-3">
+            <h2 className="text-sm font-medium text-muted-foreground mb-4">
               Selecione o valor e as parcelas
             </h2>
-            <div className="space-y-4">
+            
+            <div className="space-y-3">
               {paymentOptions.map((option) => (
                 <CheckoutOptionCard
                   key={option.id}
@@ -288,10 +275,10 @@ export default function PaymentDirect() {
                 />
               ))}
             </div>
-          </div>
+          </section>
 
-          {/* Coluna Direita: Formulário de Pagamento */}
-          <div>
+          {/* Right Column: Payment Form */}
+          <section>
             <PaymentForm
               amount={finalAmount / 100}
               installments={finalInstallments}
@@ -312,10 +299,10 @@ export default function PaymentDirect() {
               creditorDocument={charge.creditor_document || ''}
               creditorName={charge.creditor_name || ''}
             />
-          </div>
+          </section>
         </div>
 
-        {/* Informações de Segurança */}
+        {/* Security Info */}
         <div className="mt-8 text-center text-sm text-muted-foreground">
           <p>🔒 Pagamento 100% seguro e criptografado</p>
         </div>
