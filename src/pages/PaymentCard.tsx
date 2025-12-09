@@ -112,20 +112,37 @@ export default function PaymentCard() {
   }, [id, navigate, toast]);
 
   const handlePaymentSuccess = async (transactionId: string) => {
-    // Atualizar split do cartão como pago
-    const cardSplit = charge.payment_splits?.find((s: any) => s.method === 'credit_card');
-    if (cardSplit) {
-      await supabase
-        .from('payment_splits')
-        .update({ 
-          status: 'concluded',
-          transaction_id: transactionId,
-          processed_at: new Date().toISOString()
-        })
-        .eq('id', cardSplit.id);
+    try {
+      console.log('[PaymentCard] Finalizando pagamento via edge function...');
+      
+      // Usar Edge Function com service_role para atualizar split (bypass RLS)
+      const { data, error } = await supabase.functions.invoke('conclude-card-payment', {
+        body: {
+          payment_link_id: charge.id,
+          amount_cents: cardAmount,
+          installments: cardInstallments,
+          transaction_id: transactionId
+        }
+      });
+      
+      if (error) {
+        console.error('[PaymentCard] Erro ao concluir pagamento:', error);
+        toast({
+          title: 'Atenção',
+          description: 'Pagamento aprovado, mas houve erro ao registrar. Entre em contato com o suporte.',
+          variant: 'destructive'
+        });
+      } else {
+        console.log('[PaymentCard] ✅ Pagamento concluído com sucesso:', data);
+      }
+      
+      navigate(`/thank-you?pl=${id}`);
+      
+    } catch (err) {
+      console.error('[PaymentCard] Erro inesperado:', err);
+      // Navegar mesmo assim, pois o pagamento foi aprovado
+      navigate(`/thank-you?pl=${id}`);
     }
-    
-    navigate(`/thank-you?pl=${id}`);
   };
 
   if (loading) {
