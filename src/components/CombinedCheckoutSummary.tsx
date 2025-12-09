@@ -20,7 +20,8 @@ interface CombinedCheckoutSummaryProps {
   chargeId: string;
   paymentLinkId: string;
   title: string;
-  onConfirm: (pixTotalCents: number, cardCents: number, cardInstallments: number) => void;
+  // IMPORTANTE: cardTotalCents é o valor TOTAL COM JUROS
+  onConfirm: (pixTotalCents: number, cardTotalCents: number, cardInstallments: number, installmentValueCents: number) => void;
 }
 
 export function CombinedCheckoutSummary({
@@ -322,7 +323,12 @@ export function CombinedCheckoutSummary({
 
         {/* Botão Confirmar */}
         <Button
-          onClick={() => onConfirm(pixTotalCents, cardCents, cardInstallments)}
+          onClick={() => onConfirm(
+            pixTotalCents, 
+            cardTotalWithInterest, // Valor TOTAL com juros
+            cardInstallments,
+            selectedCondition?.installmentAmount || Math.ceil(cardTotalWithInterest / cardInstallments)
+          )}
           disabled={!isValid || (pixBaseCents === 0 && cardCents === 0) || isSimulating}
           className="w-full"
           size="lg"
