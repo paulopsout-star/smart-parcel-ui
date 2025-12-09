@@ -154,10 +154,13 @@ export default function PaymentPix() {
             .eq('id', pixSplit.id);
         }
         
-        // Redirecionar
-        if (hasCardPayment) {
+        // Redirecionar - usar chargeInfo diretamente (estado hasCardPayment pode não estar atualizado)
+        const cardSplit = chargeInfo.payment_splits?.find((s: any) => s.method === 'credit_card');
+        if (cardSplit && cardSplit.amount_cents > 0) {
+          console.log('[PaymentPix] Redirecionando para pagamento de cartão...');
           navigate(`/payment-card/${id}`);
         } else {
+          console.log('[PaymentPix] Sem cartão pendente, indo para thank-you...');
           navigate(`/thank-you?pl=${id}`);
         }
         return;
@@ -253,10 +256,13 @@ export default function PaymentPix() {
           description: 'Pagamento via PIX realizado com sucesso.',
         });
         
-        // Redirecionar para cartão (se houver) ou thank-you
-        if (hasCardPayment) {
+        // Redirecionar - usar charge.payment_splits diretamente (estado hasCardPayment pode não estar atualizado)
+        const cardSplit = charge?.payment_splits?.find((s: any) => s.method === 'credit_card');
+        if (cardSplit && cardSplit.amount_cents > 0) {
+          console.log('[PaymentPix] Redirecionando para pagamento de cartão...');
           navigate(`/payment-card/${id}`);
         } else {
+          console.log('[PaymentPix] Sem cartão pendente, indo para thank-you...');
           navigate(`/thank-you?pl=${id}`);
         }
         return;
