@@ -984,6 +984,10 @@ export type Database = {
         | "cancelled"
         | "pre_authorized"
         | "boleto_linked"
+        | "approved"
+        | "awaiting_validation"
+        | "validating"
+        | "payment_denied"
       payment_method: "PIX" | "CARD" | "QUITA"
       recurrence_type:
         | "pontual"
@@ -1130,6 +1134,10 @@ export const Constants = {
         "cancelled",
         "pre_authorized",
         "boleto_linked",
+        "approved",
+        "awaiting_validation",
+        "validating",
+        "payment_denied",
       ],
       payment_method: ["PIX", "CARD", "QUITA"],
       recurrence_type: [

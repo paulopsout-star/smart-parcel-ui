@@ -97,6 +97,7 @@ const formatCurrency = (cents: number) => {
 
 const getModernStatusBadge = (status: string) => {
   const configs = {
+    // Status básicos
     pending: { 
       label: 'Pendente', 
       variant: 'warning' as const
@@ -106,7 +107,7 @@ const getModernStatusBadge = (status: string) => {
       variant: 'info' as const
     },
     completed: { 
-      label: 'Concluída', 
+      label: 'Pago', 
       variant: 'success' as const
     },
     failed: { 
@@ -117,6 +118,7 @@ const getModernStatusBadge = (status: string) => {
       label: 'Cancelada', 
       variant: 'secondary' as const
     },
+    // Status do fluxo Quita+ (StatusCode 1-9)
     pre_authorized: { 
       label: 'Pré-autorizado', 
       variant: 'info' as const
@@ -124,6 +126,22 @@ const getModernStatusBadge = (status: string) => {
     boleto_linked: { 
       label: 'Boleto Vinculado', 
       variant: 'success' as const
+    },
+    approved: { 
+      label: 'Aprovado', 
+      variant: 'success' as const
+    },
+    awaiting_validation: { 
+      label: 'Aguardando PIN', 
+      variant: 'warning' as const
+    },
+    validating: { 
+      label: 'Em Análise de Risco', 
+      variant: 'info' as const
+    },
+    payment_denied: { 
+      label: 'Negado pelo Risco', 
+      variant: 'destructive' as const
     },
   };
   

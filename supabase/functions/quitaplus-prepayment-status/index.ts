@@ -100,17 +100,41 @@ serve(async (req) => {
     }
 
     // Normalizar campos (API pode retornar camelCase ou PascalCase)
-    const status = data.status || data.Status || null;
+    const statusCode = data.statusCode || data.StatusCode || null;
+    const statusName = data.status || data.Status || null;
     const transactionId = data.transactionId || data.TransactionId || null;
     const authorizationCode = data.authorizationCode || data.AuthorizationCode || null;
 
-    console.log('[quitaplus-prepayment-status] Status obtido:', { status, transactionId, authorizationCode });
+    // Mapeamento statusCode → status interno do sistema
+    const statusCodeMap: Record<number, string> = {
+      1: 'pre_authorized',      // Received - pré-pagamento foi criado
+      2: 'cancelled',           // Canceled - prazo expirou ou valor diferente
+      3: 'boleto_linked',       // BarcodeAssigned - boleto anexado
+      4: 'validating',          // Settled - analisado pelo robô
+      5: 'payment_denied',      // PaymentDenied - risco não aprovou
+      6: 'approved',            // PaymentValidated - risco aprovou
+      7: 'awaiting_validation', // AwaitingPayerValidation - aguardando PIN
+      8: 'validating',          // ValidatingPayment - risco analisando
+      9: 'completed',           // Paid - boleto foi pago
+    };
+
+    const internalStatus = statusCode ? statusCodeMap[statusCode] || 'pending' : null;
+
+    console.log('[quitaplus-prepayment-status] Status obtido:', { 
+      statusCode, 
+      statusName, 
+      internalStatus,
+      transactionId, 
+      authorizationCode 
+    });
 
     return new Response(
       JSON.stringify({
         success: true,
         prePaymentKey,
-        status,
+        statusCode,
+        statusName,
+        internalStatus,
         transactionId,
         authorizationCode,
         apiRawResponse: responseText
