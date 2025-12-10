@@ -87,7 +87,7 @@ interface Charge {
 
 interface ChargeFilters {
   status: string;
-  recurrence_type: string;
+  payment_method: string;
   date_from: Date | undefined;
   date_to: Date | undefined;
   payer_document: string;
@@ -489,7 +489,7 @@ export default function ChargeHistory() {
   // Filter state
   const [filters, setFilters] = useState<ChargeFilters>({
     status: 'all',
-    recurrence_type: 'all',
+    payment_method: 'all',
     date_from: undefined,
     date_to: undefined,
     payer_document: '',
@@ -590,8 +590,8 @@ export default function ChargeHistory() {
       filtered = filtered.filter(charge => charge.status === filters.status);
     }
 
-    if (filters.recurrence_type !== 'all') {
-      filtered = filtered.filter(charge => charge.recurrence_type === filters.recurrence_type);
+    if (filters.payment_method !== 'all') {
+      filtered = filtered.filter(charge => charge.payment_method === filters.payment_method);
     }
 
     if (filters.date_from) {
@@ -628,7 +628,7 @@ export default function ChargeHistory() {
   const clearFilters = () => {
     setFilters({
       status: 'all',
-      recurrence_type: 'all',
+      payment_method: 'all',
       date_from: undefined,
       date_to: undefined,
       payer_document: '',
@@ -639,7 +639,7 @@ export default function ChargeHistory() {
 
   const hasActiveFilters = () => {
     return filters.status !== 'all' || 
-           filters.recurrence_type !== 'all' || 
+           filters.payment_method !== 'all' || 
            filters.date_from !== undefined || 
            filters.date_to !== undefined || 
            filters.payer_document !== '' ||
@@ -969,16 +969,16 @@ export default function ChargeHistory() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium text-ds-text-muted">Recorrência</label>
-                  <Select value={filters.recurrence_type} onValueChange={(value) => setFilters(prev => ({ ...prev, recurrence_type: value }))}>
+                  <label className="text-sm font-medium text-ds-text-muted">Tipo de Pagamento</label>
+                  <Select value={filters.payment_method} onValueChange={(value) => setFilters(prev => ({ ...prev, payment_method: value }))}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todas</SelectItem>
-                      <SelectItem value="pontual">Pontual</SelectItem>
-                      <SelectItem value="mensal">Mensal</SelectItem>
-                      <SelectItem value="semanal">Semanal</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="cartao">Cartão</SelectItem>
+                      <SelectItem value="pix">PIX</SelectItem>
+                      <SelectItem value="cartao_pix">PIX + Cartão</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
