@@ -18,7 +18,7 @@ import { z } from "zod";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
-import { formatPhone, formatDocument, unformatPhone, unformatDocument } from '@/lib/input-masks';
+import { formatPhone, formatDocument, formatCurrencyInput, unformatPhone, unformatDocument } from '@/lib/input-masks';
 import { cn } from '@/lib/utils';
 import { SimulatorModal } from '@/components/SimulatorModal';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
@@ -533,11 +533,18 @@ export default function NewCharge() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="amount">Valor *</Label>
-                      <Input
-                        id="amount"
-                        {...register("amount")}
-                        placeholder="R$ 0,00"
-                        className={errors.amount ? "border-destructive" : ""}
+                      <Controller
+                        name="amount"
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            id="amount"
+                            {...field}
+                            onChange={(e) => field.onChange(formatCurrencyInput(e.target.value))}
+                            placeholder="0,00"
+                            className={errors.amount ? "border-destructive" : ""}
+                          />
+                        )}
                       />
                       {errors.amount && (
                         <p className="text-sm text-destructive">{errors.amount.message}</p>
@@ -618,11 +625,18 @@ export default function NewCharge() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                       <div className="space-y-2">
                         <Label htmlFor="pix_amount">Valor PIX *</Label>
-                        <Input
-                          id="pix_amount"
-                          {...register("pix_amount")}
-                          placeholder="R$ 0,00"
-                          className={errors.pix_amount ? "border-destructive" : ""}
+                        <Controller
+                          name="pix_amount"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              id="pix_amount"
+                              {...field}
+                              onChange={(e) => field.onChange(formatCurrencyInput(e.target.value))}
+                              placeholder="0,00"
+                              className={errors.pix_amount ? "border-destructive" : ""}
+                            />
+                          )}
                         />
                         {errors.pix_amount && (
                           <p className="text-sm text-destructive">{errors.pix_amount.message}</p>
@@ -630,11 +644,18 @@ export default function NewCharge() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="card_amount">Valor Cartão *</Label>
-                        <Input
-                          id="card_amount"
-                          {...register("card_amount")}
-                          placeholder="R$ 0,00"
-                          className={errors.card_amount ? "border-destructive" : ""}
+                        <Controller
+                          name="card_amount"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              id="card_amount"
+                              {...field}
+                              onChange={(e) => field.onChange(formatCurrencyInput(e.target.value))}
+                              placeholder="0,00"
+                              className={errors.card_amount ? "border-destructive" : ""}
+                            />
+                          )}
                         />
                         {errors.card_amount && (
                           <p className="text-sm text-destructive">{errors.card_amount.message}</p>
