@@ -76,14 +76,21 @@ serve(async (req) => {
     if (createError) {
       console.error('Erro ao criar usuário:', createError)
       
-      // Tratamento específico de erros
+      // Tratamento específico de erros - ordem importa!
+      // Verificar "already registered" PRIMEIRO (contém "email" na mensagem)
       if (createError.message?.includes('already registered') || createError.message?.includes('duplicate')) {
         throw new Error('Este email já está cadastrado no sistema')
       }
+      
+      // Verificar problemas de senha
       if (createError.message?.includes('password')) {
         throw new Error('A senha deve ter no mínimo 6 caracteres e incluir letras e números')
       }
-      if (createError.message?.includes('email')) {
+      
+      // Verificar formato de email APENAS com padrões específicos
+      if (createError.message?.includes('invalid email') || 
+          createError.message?.includes('email format') ||
+          createError.message?.includes('valid email')) {
         throw new Error('Formato de email inválido')
       }
       
