@@ -189,7 +189,7 @@ const getPaymentMethodBadge = (method: string) => {
 };
 
 // Componente para exibir os métodos de pagamento (splits) com breakdown de taxas
-const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
+const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: boolean }) => {
   const splits = charge.splits || [];
   
   const pixSplit = splits.find(s => s.method === 'pix');
@@ -255,10 +255,12 @@ const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
                 <span>Valor original:</span>
                 <span>{formatCurrency(pixBase)}</span>
               </div>
-              <div className="flex justify-between text-green-600">
-                <span>Taxa PIX ({pixFeePercent}%):</span>
-                <span>{pixFee > 0 ? `+ ${formatCurrency(pixFee)}` : 'R$ 0,00'}</span>
-              </div>
+              {isAdmin && (
+                <div className="flex justify-between text-green-600">
+                  <span>Taxa PIX ({pixFeePercent}%):</span>
+                  <span>{pixFee > 0 ? `+ ${formatCurrency(pixFee)}` : 'R$ 0,00'}</span>
+                </div>
+              )}
               <div className="border-t border-green-500/10 pt-1.5 mt-1.5">
                 <div className="flex justify-between font-semibold text-green-700">
                   <span>Total pago:</span>
@@ -288,10 +290,12 @@ const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
                 <span>Valor original:</span>
                 <span>{formatCurrency(cardBase)}</span>
               </div>
-              <div className="flex justify-between text-blue-600">
-                <span>Juros {cardSplit?.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''} ({cardFeePercent}%):</span>
-                <span>{cardFee > 0 ? `+ ${formatCurrency(cardFee)}` : 'R$ 0,00'}</span>
-              </div>
+              {isAdmin && (
+                <div className="flex justify-between text-blue-600">
+                  <span>Juros {cardSplit?.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''} ({cardFeePercent}%):</span>
+                  <span>{cardFee > 0 ? `+ ${formatCurrency(cardFee)}` : 'R$ 0,00'}</span>
+                </div>
+              )}
               <div className="border-t border-blue-500/10 pt-1.5 mt-1.5">
                 <div className="flex justify-between font-semibold text-blue-700">
                   <span>Total pago:</span>
@@ -1232,7 +1236,7 @@ export default function ChargeHistory() {
                       <p className="text-xs font-medium text-ds-text-muted uppercase tracking-wider mb-2">
                         Métodos de Pagamento
                       </p>
-                      <PaymentMethodsSummary charge={charge} />
+                      <PaymentMethodsSummary charge={charge} isAdmin={isAdmin} />
                     </div>
                   )}
                   
@@ -1323,7 +1327,7 @@ export default function ChargeHistory() {
                   {(selectedCharge.payment_method === 'cartao_pix' || (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
                     <div className="space-y-2">
                       <h4 className="font-medium text-ds-text-strong">Métodos de Pagamento</h4>
-                      <PaymentMethodsSummary charge={selectedCharge} />
+                      <PaymentMethodsSummary charge={selectedCharge} isAdmin={isAdmin} />
                       
                       {/* Detalhes individuais dos splits */}
                       {selectedCharge.splits && selectedCharge.splits.length > 0 && (
