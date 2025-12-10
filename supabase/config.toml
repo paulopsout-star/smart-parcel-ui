@@ -146,3 +146,6 @@ verify_jwt = false
 
 [functions.quitaplus-prepayment-status]
 verify_jwt = false
+
+[functions.sync-payment-status]
+verify_jwt = false
