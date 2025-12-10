@@ -195,16 +195,16 @@ const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
   const pixSplit = splits.find(s => s.method === 'pix');
   const cardSplit = splits.find(s => s.method === 'credit_card');
 
-  // Cálculos para PIX - sempre calcular 3% de taxa
+  // Cálculos para PIX - sempre calcular 5% de taxa
   const pixBase = charge.pix_amount || 0;
-  const PIX_FEE_RATE = 0.03; // 3%
+  const PIX_FEE_RATE = 0.05; // 5%
   const pixFeeCalculated = Math.round(pixBase * PIX_FEE_RATE);
-  // Se há split, usar o valor real; senão, calcular com taxa de 3%
+  // Se há split, usar o valor real; senão, calcular com taxa de 5%
   const pixTotal = pixSplit?.amount_cents || (pixBase + pixFeeCalculated);
   const pixFee = pixTotal - pixBase;
   const pixFeePercent = pixBase > 0 
     ? ((pixFee / pixBase) * 100).toFixed(1) 
-    : '3.0';
+    : '5.0';
 
   // Cálculos para Cartão - usar valor do split se disponível
   const cardBase = charge.card_amount || 0;
