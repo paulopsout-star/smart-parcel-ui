@@ -134,7 +134,7 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
           )}
         </div>
         
-        {option.installments > 1 && (
+        {option.installments > 1 && option.totalCents > 0 && (
           <p className="text-xs text-muted-foreground">
             Total: {formatCurrency(option.totalCents)}
           </p>
@@ -202,7 +202,12 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary flex-shrink-0">
+            <div className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-full flex-shrink-0",
+              option.type === 'popular' 
+                ? "bg-primary text-primary-foreground shadow-md" 
+                : "bg-primary/10 text-primary"
+            )}>
               {getOptionIcon()}
             </div>
             <div>
