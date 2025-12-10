@@ -19,60 +19,64 @@ interface Filters {
 async function calculateKPIs(filters: Filters) {
   const { from, to } = filters
   
-  // Total Recebido Bruto
+  console.log('[admin-reports] Calculating KPIs with filters:', { from, to })
+  
+  // Total Recebido Bruto - from payment_splits with status concluded
   let brutaQuery = supabase
-    .from('transactions')
-    .select('amount_in_cents')
-    .gt('amount_in_cents', 0)
-    .like('status', '%concluded%')
+    .from('payment_splits')
+    .select('amount_cents')
+    .eq('status', 'concluded')
   
   if (from) brutaQuery = brutaQuery.gte('created_at', from)
-  if (to) brutaQuery = brutaQuery.lte('created_at', to)
+  if (to) brutaQuery = brutaQuery.lte('created_at', to + 'T23:59:59.999Z')
   
-  const { data: brutaData } = await brutaQuery
-  const totalBruto = (brutaData || []).reduce((sum, t) => sum + t.amount_in_cents, 0) / 100
+  const { data: brutaData, error: brutaError } = await brutaQuery
+  if (brutaError) console.error('[admin-reports] Error fetching bruta:', brutaError)
   
-  // Estornos
+  const totalBruto = (brutaData || []).reduce((sum, t) => sum + (t.amount_cents || 0), 0) / 100
+  console.log('[admin-reports] Total Bruto:', totalBruto, 'from', brutaData?.length, 'splits')
+  
+  // Estornos - from refund_jobs with status completed
   let estornosQuery = supabase
-    .from('transactions')
-    .select('amount_in_cents')
-    .lt('amount_in_cents', 0)
-    .like('status', '%refund%')
+    .from('refund_jobs')
+    .select('refund_amount_cents')
+    .eq('status', 'completed')
   
   if (from) estornosQuery = estornosQuery.gte('created_at', from)
-  if (to) estornosQuery = estornosQuery.lte('created_at', to)
+  if (to) estornosQuery = estornosQuery.lte('created_at', to + 'T23:59:59.999Z')
   
   const { data: estornosData } = await estornosQuery
-  const totalEstornos = Math.abs((estornosData || []).reduce((sum, t) => sum + t.amount_in_cents, 0)) / 100
+  const totalEstornos = (estornosData || []).reduce((sum, t) => sum + (t.refund_amount_cents || 0), 0) / 100
   
-  // Taxas de Estorno
+  // Taxas de Estorno - from refund_jobs
   let taxasQuery = supabase
-    .from('transactions')
-    .select('amount_in_cents')
-    .gt('amount_in_cents', 0)
-    .like('status', '%fee%')
+    .from('refund_jobs')
+    .select('fee_amount_cents')
+    .eq('status', 'completed')
   
   if (from) taxasQuery = taxasQuery.gte('created_at', from)
-  if (to) taxasQuery = taxasQuery.lte('created_at', to)
+  if (to) taxasQuery = taxasQuery.lte('created_at', to + 'T23:59:59.999Z')
   
   const { data: taxasData } = await taxasQuery
-  const totalTaxas = (taxasData || []).reduce((sum, t) => sum + t.amount_in_cents, 0) / 100
+  const totalTaxas = (taxasData || []).reduce((sum, t) => sum + (t.fee_amount_cents || 0), 0) / 100
   
-  // Conversão
+  // Conversão - charges completed vs total charges
   let chargesCreatedQuery = supabase.from('charges').select('id', { count: 'exact' })
-  let chargesPaidQuery = supabase.from('charges').select('id', { count: 'exact' }).eq('status', 'paid')
+  let chargesPaidQuery = supabase.from('charges').select('id', { count: 'exact' }).eq('status', 'completed')
   
   if (from) {
     chargesCreatedQuery = chargesCreatedQuery.gte('created_at', from)
     chargesPaidQuery = chargesPaidQuery.gte('created_at', from)
   }
   if (to) {
-    chargesCreatedQuery = chargesCreatedQuery.lte('created_at', to)
-    chargesPaidQuery = chargesPaidQuery.lte('created_at', to)
+    chargesCreatedQuery = chargesCreatedQuery.lte('created_at', to + 'T23:59:59.999Z')
+    chargesPaidQuery = chargesPaidQuery.lte('created_at', to + 'T23:59:59.999Z')
   }
   
   const { count: chargesCreated } = await chargesCreatedQuery
   const { count: chargesPaid } = await chargesPaidQuery
+  
+  console.log('[admin-reports] Charges:', { created: chargesCreated, paid: chargesPaid })
   
   const conversao = chargesCreated ? ((chargesPaid || 0) / chargesCreated) * 100 : 0
   
@@ -84,13 +88,13 @@ async function calculateKPIs(filters: Filters) {
   const { count: executionsReadyOld } = await supabase
     .from('charge_executions')
     .select('id', { count: 'exact' })
-    .eq('status', 'READY')
+    .eq('status', 'pending')
     .lte('scheduled_for', graceDate.toISOString())
   
   const { count: executionsReadyTotal } = await supabase
     .from('charge_executions')
     .select('id', { count: 'exact' })
-    .eq('status', 'READY')
+    .eq('status', 'pending')
   
   const inadimplencia = executionsReadyTotal ? ((executionsReadyOld || 0) / executionsReadyTotal) * 100 : 0
   
@@ -136,21 +140,31 @@ async function getTableData(entity: string, filters: Filters, page = 1, pageSize
 }
 
 async function getChartData(filters: Filters) {
-  // Receita diária
+  const fromDate = filters.from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const toDate = filters.to ? filters.to + 'T23:59:59.999Z' : new Date().toISOString()
+  
+  // Receita diária - from payment_splits concluded
   const { data: dailyRevenue } = await supabase
-    .from('transactions')
-    .select('created_at, amount_in_cents')
-    .gt('amount_in_cents', 0)
-    .like('status', '%concluded%')
-    .gte('created_at', filters.from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-    .lte('created_at', filters.to || new Date().toISOString())
+    .from('payment_splits')
+    .select('created_at, amount_cents, method')
+    .eq('status', 'concluded')
+    .gte('created_at', fromDate)
+    .lte('created_at', toDate)
     .order('created_at')
+  
+  console.log('[admin-reports] Daily revenue splits:', dailyRevenue?.length)
   
   // Agrupar por dia
   const dailyMap = new Map()
+  const methodTotals = new Map<string, number>()
+  
   dailyRevenue?.forEach(t => {
     const date = new Date(t.created_at).toISOString().split('T')[0]
-    dailyMap.set(date, (dailyMap.get(date) || 0) + t.amount_in_cents / 100)
+    dailyMap.set(date, (dailyMap.get(date) || 0) + (t.amount_cents || 0) / 100)
+    
+    // Agrupar por método
+    const method = t.method === 'credit_card' ? 'CARD' : t.method?.toUpperCase() || 'OTHER'
+    methodTotals.set(method, (methodTotals.get(method) || 0) + (t.amount_cents || 0) / 100)
   })
   
   const dailyData = Array.from(dailyMap.entries()).map(([date, value]) => ({
@@ -158,19 +172,29 @@ async function getChartData(filters: Filters) {
     value
   }))
   
-  // Receita por método (simulado - em produção seria join com payment_splits)
-  const methodData = [
-    { method: 'PIX', value: dailyData.reduce((sum, d) => sum + d.value, 0) * 0.6 },
-    { method: 'CARD', value: dailyData.reduce((sum, d) => sum + d.value, 0) * 0.3 },
-    { method: 'QUITA', value: dailyData.reduce((sum, d) => sum + d.value, 0) * 0.1 }
-  ]
+  // Receita por método - dados reais
+  const methodData = Array.from(methodTotals.entries()).map(([method, value]) => ({
+    method,
+    value
+  }))
   
-  // Status distribution (simulado)
-  const statusData = [
-    { status: 'PAID', value: 70 },
-    { status: 'PENDING', value: 20 },
-    { status: 'FAILED', value: 10 }
-  ]
+  // Status distribution - from charges real data
+  const { data: statusCounts } = await supabase
+    .from('charges')
+    .select('status')
+    .gte('created_at', fromDate)
+    .lte('created_at', toDate)
+  
+  const statusMap = new Map<string, number>()
+  statusCounts?.forEach(c => {
+    const status = c.status?.toUpperCase() || 'UNKNOWN'
+    statusMap.set(status, (statusMap.get(status) || 0) + 1)
+  })
+  
+  const statusData = Array.from(statusMap.entries()).map(([status, value]) => ({
+    status,
+    value
+  }))
   
   return {
     daily: dailyData,
