@@ -236,8 +236,8 @@ export default function NewCharge() {
       let feePercentage = 0;
       
       if (data.payment_method === 'pix') {
-        feeAmount = Math.round(amountInCents * 0.03);
-        feePercentage = 3.00;
+        feeAmount = Math.round(amountInCents * 0.05);
+        feePercentage = 5.00;
         amountInCents = amountInCents + feeAmount;
       }
 

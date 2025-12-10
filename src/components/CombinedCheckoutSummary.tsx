@@ -8,7 +8,7 @@ import { formatCurrency } from '@/lib/utils';
 import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const PIX_FEE_PERCENT = 0.03;
+const PIX_FEE_PERCENT = 0.05;
 const MIN_INSTALLMENT_CENTS = 1000;
 
 interface CombinedCheckoutSummaryProps {
