@@ -88,11 +88,26 @@ export default function ThankYou() {
   const timeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const token = searchParams.get('pl');
+  const chargeIdParam = searchParams.get('chargeId');
+  const methodParam = searchParams.get('method');
+  const amountParam = searchParams.get('amount');
+  const payerNameParam = searchParams.get('payerName');
+  const paidAtParam = searchParams.get('paidAt');
 
   useDocumentTitle('Pagamento Confirmado - Sistema de Cobrança');
 
   const loadData = async () => {
-    if (!token) {
+    // Montar query params para a edge function
+    const queryParams = new URLSearchParams();
+    if (token) queryParams.set('pl', token);
+    if (chargeIdParam) queryParams.set('chargeId', chargeIdParam);
+    if (methodParam) queryParams.set('method', methodParam);
+    if (amountParam) queryParams.set('amount', amountParam);
+    if (payerNameParam) queryParams.set('payerName', payerNameParam);
+    if (paidAtParam) queryParams.set('paidAt', paidAtParam);
+    
+    // Se não tem nenhum parâmetro útil, exibir mensagem genérica
+    if (!token && !chargeIdParam && !amountParam) {
       setData({
         paid: true,
         message: 'Pagamento confirmado com sucesso!'
@@ -104,7 +119,7 @@ export default function ThankYou() {
     try {
       setLoading(true);
       
-      const functionUrl = `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/thank-you-summary?pl=${token}`;
+      const functionUrl = `https://gsbbrkbeyxsqqjqhptrn.supabase.co/functions/v1/thank-you-summary?${queryParams.toString()}`;
       const response = await fetch(functionUrl, {
         method: 'GET',
         headers: {

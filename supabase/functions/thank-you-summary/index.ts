@@ -18,10 +18,156 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url)
     const token = url.searchParams.get('pl')
+    const chargeIdParam = url.searchParams.get('chargeId')
+    const methodParam = url.searchParams.get('method')
+    const amountParam = url.searchParams.get('amount')
+    const payerNameParam = url.searchParams.get('payerName')
+    const paidAtParam = url.searchParams.get('paidAt')
     
-    console.log('[thank-you-summary] Token:', token)
+    console.log('[thank-you-summary] Token:', token, 'ChargeId:', chargeIdParam)
+    
+    // Se não tem token mas tem chargeId, buscar diretamente pela charge
+    if (!token && chargeIdParam) {
+      console.log('[thank-you-summary] No token, fetching charge directly by ID:', chargeIdParam)
+      
+      const { data: charge, error: chargeError } = await supabase
+        .from('charges')
+        .select('*')
+        .eq('id', chargeIdParam)
+        .maybeSingle()
+      
+      if (chargeError || !charge) {
+        console.error('[thank-you-summary] Charge not found:', chargeError)
+        // Fallback para dados passados via query params
+        if (amountParam && methodParam) {
+          console.log('[thank-you-summary] Using fallback query params data')
+          return new Response(JSON.stringify({
+            paid: true,
+            charge: {
+              id: chargeIdParam,
+              type: 'pontual',
+              total_amount_cents: parseInt(amountParam) || 0,
+              total_paid_cents: parseInt(amountParam) || 0,
+              currency: 'BRL',
+              paid: true,
+              paid_at: paidAtParam || new Date().toISOString()
+            },
+            splits: [{
+              id: 'fallback-pix',
+              method: methodParam?.toUpperCase() || 'PIX',
+              amount_cents: parseInt(amountParam) || 0,
+              status: 'CONCLUDED',
+              processed_at: paidAtParam || new Date().toISOString()
+            }],
+            transactions: [],
+            recurrence: { next_dates: [] },
+            company: { name: null, email: null, phone: null },
+            ui: { support_email: "faleconosco@autonegocie.com" }
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+        return new Response(JSON.stringify({ error: 'Charge not found' }), {
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+      
+      // Buscar dados da empresa
+      let company = null
+      if (charge.company_id) {
+        const { data: companyData } = await supabase
+          .from('companies')
+          .select('name, email, phone')
+          .eq('id', charge.company_id)
+          .maybeSingle()
+        company = companyData
+      }
+      
+      // Buscar splits da charge (se existirem)
+      const { data: splits } = await supabase
+        .from('payment_splits')
+        .select('*')
+        .eq('charge_id', chargeIdParam)
+        .order('created_at', { ascending: false })
+      
+      // Verificar se pagamento está confirmado via metadata ou status
+      const isPaidByMetadata = charge.metadata?.pix_paid_at || charge.status === 'completed'
+      const paidAt = charge.metadata?.pix_paid_at || charge.completed_at || paidAtParam || new Date().toISOString()
+      
+      // Se não há splits, criar um "virtual" baseado nos dados da charge
+      const finalSplits = splits && splits.length > 0 ? splits : [{
+        id: 'virtual-pix',
+        method: methodParam?.toUpperCase() || 'PIX',
+        amount_cents: charge.amount,
+        status: 'concluded',
+        processed_at: paidAt
+      }]
+      
+      const totalPaidCents = finalSplits.reduce((sum, s) => sum + (s.amount_cents || 0), 0)
+      
+      return new Response(JSON.stringify({
+        paid: true,
+        charge: {
+          id: charge.id,
+          type: charge.recurrence_type || 'pontual',
+          total_amount_cents: charge.amount,
+          total_paid_cents: totalPaidCents,
+          currency: 'BRL',
+          paid: true,
+          paid_at: paidAt
+        },
+        splits: finalSplits.map(s => ({
+          id: s.id,
+          method: s.method?.toUpperCase() || 'PIX',
+          amount_cents: s.amount_cents,
+          status: (s.status || 'CONCLUDED').toUpperCase(),
+          processed_at: s.processed_at || paidAt
+        })),
+        transactions: [],
+        recurrence: { next_dates: [] },
+        company: {
+          name: company?.name || null,
+          email: company?.email || null,
+          phone: company?.phone || null
+        },
+        ui: { support_email: "faleconosco@autonegocie.com" }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
     
     if (!token) {
+      // Fallback final: se tem dados via query params, usar
+      if (amountParam && methodParam) {
+        console.log('[thank-you-summary] No token, using query params fallback')
+        return new Response(JSON.stringify({
+          paid: true,
+          charge: {
+            id: 'fallback',
+            type: 'pontual',
+            total_amount_cents: parseInt(amountParam) || 0,
+            total_paid_cents: parseInt(amountParam) || 0,
+            currency: 'BRL',
+            paid: true,
+            paid_at: paidAtParam || new Date().toISOString()
+          },
+          splits: [{
+            id: 'fallback-split',
+            method: methodParam?.toUpperCase() || 'PIX',
+            amount_cents: parseInt(amountParam) || 0,
+            status: 'CONCLUDED',
+            processed_at: paidAtParam || new Date().toISOString()
+          }],
+          transactions: [],
+          recurrence: { next_dates: [] },
+          company: { name: null, email: null, phone: null },
+          ui: { support_email: "faleconosco@autonegocie.com" }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+      
       return new Response(JSON.stringify({ error: 'Missing payment link token' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }

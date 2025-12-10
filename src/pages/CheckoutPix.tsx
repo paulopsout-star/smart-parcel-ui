@@ -196,8 +196,17 @@ export default function CheckoutPix() {
             className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
           });
           
+          // Navegar para thank-you com dados da cobrança via query params
+          const thankYouParams = new URLSearchParams({
+            chargeId: charge?.id || '',
+            method: 'pix',
+            amount: String(charge?.amount || 0),
+            payerName: charge?.payer_name || '',
+            paidAt: new Date().toISOString()
+          });
+          
           setTimeout(() => {
-            navigate('/thank-you');
+            navigate(`/thank-you?${thankYouParams.toString()}`);
           }, 2000);
         }
       } catch (err) {
@@ -265,8 +274,17 @@ export default function CheckoutPix() {
           className: 'bg-feedback-success-bg border-feedback-success text-feedback-success'
         });
         
+        // Navegar para thank-you com dados da cobrança via query params
+        const thankYouParams = new URLSearchParams({
+          chargeId: charge?.id || '',
+          method: 'pix',
+          amount: String(charge?.amount || 0),
+          payerName: charge?.payer_name || '',
+          paidAt: new Date().toISOString()
+        });
+        
         setTimeout(() => {
-          navigate('/thank-you');
+          navigate(`/thank-you?${thankYouParams.toString()}`);
         }, 2000);
       } else {
         toast({
