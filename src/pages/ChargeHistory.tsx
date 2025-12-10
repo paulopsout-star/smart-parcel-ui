@@ -195,21 +195,24 @@ const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
   const pixSplit = splits.find(s => s.method === 'pix');
   const cardSplit = splits.find(s => s.method === 'credit_card');
 
-  // Cálculos para PIX
+  // Cálculos para PIX - sempre calcular 3% de taxa
   const pixBase = charge.pix_amount || 0;
-  const pixTotal = pixSplit?.amount_cents || pixBase;
-  const pixFee = pixTotal > pixBase ? pixTotal - pixBase : 0;
-  const pixFeePercent = pixBase > 0 && pixFee > 0 
+  const PIX_FEE_RATE = 0.03; // 3%
+  const pixFeeCalculated = Math.round(pixBase * PIX_FEE_RATE);
+  // Se há split, usar o valor real; senão, calcular com taxa de 3%
+  const pixTotal = pixSplit?.amount_cents || (pixBase + pixFeeCalculated);
+  const pixFee = pixTotal - pixBase;
+  const pixFeePercent = pixBase > 0 
     ? ((pixFee / pixBase) * 100).toFixed(1) 
-    : null;
+    : '3.0';
 
-  // Cálculos para Cartão
+  // Cálculos para Cartão - usar valor do split se disponível
   const cardBase = charge.card_amount || 0;
   const cardTotal = cardSplit?.amount_cents || cardBase;
-  const cardFee = cardTotal > cardBase ? cardTotal - cardBase : 0;
+  const cardFee = cardTotal - cardBase;
   const cardFeePercent = cardBase > 0 && cardFee > 0 
     ? ((cardFee / cardBase) * 100).toFixed(1) 
-    : null;
+    : '0';
 
   const getSplitStatusBadge = (split: PaymentSplitInfo | undefined, isPix: boolean) => {
     if (!split) return null;
@@ -249,15 +252,13 @@ const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
             </div>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between text-ds-text-muted">
-                <span>Valor base:</span>
+                <span>Valor original:</span>
                 <span>{formatCurrency(pixBase)}</span>
               </div>
-              {pixFee > 0 && (
-                <div className="flex justify-between text-green-600">
-                  <span>Taxa ({pixFeePercent}%):</span>
-                  <span>+ {formatCurrency(pixFee)}</span>
-                </div>
-              )}
+              <div className="flex justify-between text-green-600">
+                <span>Taxa PIX ({pixFeePercent}%):</span>
+                <span>{pixFee > 0 ? `+ ${formatCurrency(pixFee)}` : 'R$ 0,00'}</span>
+              </div>
               <div className="border-t border-green-500/10 pt-1.5 mt-1.5">
                 <div className="flex justify-between font-semibold text-green-700">
                   <span>Total pago:</span>
@@ -284,15 +285,13 @@ const PaymentMethodsSummary = ({ charge }: { charge: Charge }) => {
             </div>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between text-ds-text-muted">
-                <span>Valor base:</span>
+                <span>Valor original:</span>
                 <span>{formatCurrency(cardBase)}</span>
               </div>
-              {cardFee > 0 && (
-                <div className="flex justify-between text-blue-600">
-                  <span>Juros ({cardFeePercent}%):</span>
-                  <span>+ {formatCurrency(cardFee)}</span>
-                </div>
-              )}
+              <div className="flex justify-between text-blue-600">
+                <span>Juros {cardSplit?.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''} ({cardFeePercent}%):</span>
+                <span>{cardFee > 0 ? `+ ${formatCurrency(cardFee)}` : 'R$ 0,00'}</span>
+              </div>
               <div className="border-t border-blue-500/10 pt-1.5 mt-1.5">
                 <div className="flex justify-between font-semibold text-blue-700">
                   <span>Total pago:</span>
