@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2 } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2, Download, FileSpreadsheet } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -892,6 +892,90 @@ export default function ChargeHistory() {
     applyFilters();
   }, [filters, charges]);
 
+  // Export helper functions
+  const getPaymentMethodLabel = (method: string | undefined) => {
+    switch (method) {
+      case 'cartao': return 'Cartão';
+      case 'pix': return 'PIX';
+      case 'cartao_pix': return 'PIX + Cartão';
+      default: return method || '-';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      pending: 'Pendente',
+      processing: 'Processando',
+      completed: 'Concluído',
+      failed: 'Falhou',
+      cancelled: 'Cancelado',
+      pre_authorized: 'Pré-autorizado',
+      boleto_linked: 'Boleto Vinculado',
+      approved: 'Aprovado',
+      awaiting_validation: 'Aguardando Validação',
+      validating: 'Validando',
+      payment_denied: 'Pagamento Negado'
+    };
+    return labels[status] || status;
+  };
+
+  const downloadFile = (content: string, filename: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const generateExportData = () => {
+    const headers = [
+      'ID', 'Data Criação', 'Pagador', 'Email', 'Telefone', 'CPF/CNPJ',
+      'Valor (R$)', 'Descrição', 'Método Pagamento', 'Status', 'Empresa'
+    ];
+
+    const rows = filteredCharges.map(charge => [
+      charge.id,
+      format(new Date(charge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }),
+      charge.payer_name,
+      charge.payer_email,
+      formatPhone(charge.payer_phone),
+      charge.payer_document,
+      (charge.amount / 100).toFixed(2).replace('.', ','),
+      charge.description || '',
+      getPaymentMethodLabel(charge.payment_method),
+      getStatusLabel(charge.status),
+      charge.company?.name || ''
+    ]);
+
+    return { headers, rows };
+  };
+
+  const exportToCSV = () => {
+    const { headers, rows } = generateExportData();
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+      .join('\n');
+    
+    const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm');
+    downloadFile('\uFEFF' + csvContent, `cobrancas_${timestamp}.csv`, 'text/csv;charset=utf-8');
+    toast({ title: 'Exportação concluída', description: `${filteredCharges.length} cobranças exportadas para CSV` });
+  };
+
+  const exportToExcel = () => {
+    const { headers, rows } = generateExportData();
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join('\t'))
+      .join('\n');
+    
+    const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm');
+    downloadFile('\uFEFF' + csvContent, `cobrancas_${timestamp}.xls`, 'application/vnd.ms-excel;charset=utf-8');
+    toast({ title: 'Exportação concluída', description: `${filteredCharges.length} cobranças exportadas para Excel` });
+  };
+
   return (
     <DashboardShell>
       <div className="space-y-6">
@@ -909,13 +993,29 @@ export default function ChargeHistory() {
               </Badge>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setShowFilters(!showFilters)}>
               <Filter className="w-4 h-4 mr-2" />
               Filtros
               {hasActiveFilters() && (
                 <Badge variant="default" className="ml-2">!</Badge>
               )}
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={exportToCSV}
+              disabled={filteredCharges.length === 0}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              CSV
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={exportToExcel}
+              disabled={filteredCharges.length === 0}
+            >
+              <FileSpreadsheet className="w-4 h-4 mr-2" />
+              Excel
             </Button>
             <Button onClick={fetchCharges} variant="outline" disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
