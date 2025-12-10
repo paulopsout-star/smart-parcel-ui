@@ -100,14 +100,14 @@ export default function Reports() {
         if (value) params.append(key, value);
       });
 
-      const { data, error } = await supabase.functions.invoke('admin-reports/summary', {
+      const { data, error } = await supabase.functions.invoke(`admin-reports/summary?${params.toString()}`, {
         method: 'GET',
       });
 
       if (error) throw error;
 
-      setKpis(data.kpis);
-      setChartData(data.charts);
+      if (data?.kpis) setKpis(data.kpis);
+      if (data?.charts) setChartData(data.charts);
     } catch (error) {
       console.error('Error loading summary:', error);
       toast({
@@ -128,13 +128,13 @@ export default function Reports() {
         if (value) params.append(key, value);
       });
 
-      const { data, error } = await supabase.functions.invoke('admin-reports/table', {
+      const { data, error } = await supabase.functions.invoke(`admin-reports/table?${params.toString()}`, {
         method: 'GET',
       });
 
       if (error) throw error;
 
-      setTableData(data.data || []);
+      setTableData(data?.data || []);
     } catch (error) {
       console.error('Error loading table data:', error);
       toast({
