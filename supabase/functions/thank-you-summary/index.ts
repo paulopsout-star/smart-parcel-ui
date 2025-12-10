@@ -147,12 +147,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Verificar se está PAID - considera múltiplos indicadores para cartão
+    // Verificar se está PAID - considera múltiplos indicadores para cada método
     // Um split de cartão com pre_payment_key indica pagamento aprovado (mesmo se vínculo de boleto falhou)
+    // Um split de PIX com pix_paid_at indica pagamento aprovado
     const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => {
       if (s.method === 'credit_card') {
         // Cartão: considerar pago se concluded OU tem pre_payment_key/transaction_id
         return s.status === 'concluded' || s.pre_payment_key || s.transaction_id;
+      }
+      if (s.method === 'pix') {
+        // PIX: considerar pago se concluded OU tem pix_paid_at
+        return s.status === 'concluded' || s.pix_paid_at;
       }
       // Outros métodos: apenas status concluded
       return s.status === 'concluded';
