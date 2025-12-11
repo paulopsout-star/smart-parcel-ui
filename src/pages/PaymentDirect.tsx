@@ -100,7 +100,7 @@ export default function PaymentDirect() {
         const { data, error } = await supabase.functions.invoke('conclude-card-payment', {
           body: {
             payment_link_id: charge.id,
-            amount_cents: finalAmount,
+            amount_cents: charge.amount_cents, // ✅ Usar valor original
             installments: finalInstallments,
             transaction_id: transactionId,
           },
@@ -187,7 +187,11 @@ export default function PaymentDirect() {
     ? mapSimulationToPaymentOptions(simulation, charge.amount_cents)
     : [];
 
-  const finalAmount = selectedOption 
+  // ✅ CORREÇÃO: Separar valor original (para API) do valor com juros (para exibição)
+  // originalAmount = valor base da cobrança (enviado à API Quita+)
+  // displayAmount = valor com juros simulados (exibido ao cliente)
+  const originalAmount = charge.amount_cents; // SEMPRE o valor original da cobrança
+  const displayAmount = selectedOption 
     ? (selectedOption.isCustom ? customAmount : selectedOption.totalCents)
     : charge.amount_cents;
   const finalInstallments = selectedOption
@@ -280,7 +284,8 @@ export default function PaymentDirect() {
           {/* Right Column: Payment Form */}
           <section>
             <PaymentForm
-              amount={finalAmount / 100}
+              amount={originalAmount / 100}       // ✅ Valor ORIGINAL para API Quita+
+              amountDisplay={displayAmount / 100} // Valor COM JUROS para exibição
               installments={finalInstallments}
               productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
               onSuccess={handlePaymentSuccess}
