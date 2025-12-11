@@ -351,7 +351,10 @@ Deno.serve(async (req) => {
     }
 
     // Calcular valor total realmente pago (soma dos splits)
-    const totalPaidCents = finalSplits?.reduce((sum, s) => sum + (s.amount_cents || 0), 0) || 0
+    // ✅ Usar display_amount_cents se disponível (valor COM JUROS), senão amount_cents
+    const totalPaidCents = finalSplits?.reduce((sum, s) => {
+      return sum + (s.display_amount_cents || s.amount_cents || 0);
+    }, 0) || 0
     console.log('[thank-you-summary] Total paid cents:', totalPaidCents)
 
     // Montar resposta
@@ -369,7 +372,9 @@ Deno.serve(async (req) => {
       splits: (finalSplits || []).map(split => ({
         id: split.id,
         method: split.method,
-        amount_cents: split.amount_cents,
+        // ✅ Usar display_amount_cents para exibição no comprovante (valor COM JUROS)
+        amount_cents: split.display_amount_cents || split.amount_cents,
+        original_amount_cents: split.amount_cents, // Valor ORIGINAL (para referência)
         status: split.status.toUpperCase(),
         processed_at: split.processed_at
       })),

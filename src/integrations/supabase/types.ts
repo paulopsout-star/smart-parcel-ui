@@ -577,6 +577,7 @@ export type Database = {
           authorization_code: string | null
           charge_id: string | null
           created_at: string
+          display_amount_cents: number | null
           id: string
           installments: number | null
           link_id: string | null
@@ -596,6 +597,7 @@ export type Database = {
           authorization_code?: string | null
           charge_id?: string | null
           created_at?: string
+          display_amount_cents?: number | null
           id?: string
           installments?: number | null
           link_id?: string | null
@@ -615,6 +617,7 @@ export type Database = {
           authorization_code?: string | null
           charge_id?: string | null
           created_at?: string
+          display_amount_cents?: number | null
           id?: string
           installments?: number | null
           link_id?: string | null
