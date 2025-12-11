@@ -214,16 +214,33 @@ export default function PaymentPix() {
       console.log('[PaymentPix] Status do pagamento:', statusData);
       
       if (statusData?.status === 'COMPLETED' || statusData?.status === 'PAID') {
-        const pixSplit = charge.payment_splits?.find((s: any) => s.method === 'pix');
-        if (pixSplit) {
-          await supabase
+        // ✅ Buscar split PIX DIRETO DO BANCO para garantir ID correto
+        const { data: currentPixSplit, error: fetchError } = await supabase
+          .from('payment_splits')
+          .select('id')
+          .eq('charge_id', charge.charge_id)
+          .eq('method', 'pix')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (currentPixSplit && !fetchError) {
+          const { error: updateError } = await supabase
             .from('payment_splits')
             .update({ 
               status: 'concluded', 
               pix_paid_at: new Date().toISOString(),
               processed_at: new Date().toISOString()
             })
-            .eq('id', pixSplit.id);
+            .eq('id', currentPixSplit.id);
+          
+          if (updateError) {
+            console.error('[PaymentPix] Erro ao atualizar split PIX:', updateError);
+          } else {
+            console.log('[PaymentPix] ✅ Split PIX atualizado com sucesso:', currentPixSplit.id);
+          }
+        } else {
+          console.error('[PaymentPix] Split PIX não encontrado no banco:', fetchError);
         }
         
         toast({
@@ -231,8 +248,15 @@ export default function PaymentPix() {
           description: 'Pagamento via PIX realizado com sucesso.',
         });
         
-        const cardSplit = charge?.payment_splits?.find((s: any) => s.method === 'credit_card');
-        if (cardSplit && cardSplit.amount_cents > 0) {
+        // Buscar split de cartão do banco também
+        const { data: currentCardSplit } = await supabase
+          .from('payment_splits')
+          .select('id, amount_cents')
+          .eq('charge_id', charge.charge_id)
+          .eq('method', 'credit_card')
+          .maybeSingle();
+        
+        if (currentCardSplit && currentCardSplit.amount_cents > 0) {
           navigate(`/payment-card/${id}`);
         } else {
           navigate(`/thank-you?pl=${id}`);
