@@ -29,6 +29,7 @@ interface PaymentSplitInfo {
   id: string;
   method: string;
   amount_cents: number;
+  display_amount_cents?: number;
   status: string;
   pix_paid_at?: string;
   pre_payment_key?: string;
@@ -241,7 +242,7 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
 
   // Cálculos para Cartão - usar valor do split se disponível
   const cardBase = charge.card_amount || 0;
-  const cardTotal = cardSplit?.amount_cents || cardBase;
+  const cardTotal = cardSplit?.display_amount_cents || cardSplit?.amount_cents || cardBase;
   const cardFee = cardTotal - cardBase;
   const cardFeePercent = cardBase > 0 && cardFee > 0 
     ? ((cardFee / cardBase) * 100).toFixed(1) 
