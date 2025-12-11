@@ -250,17 +250,12 @@ export default function PaymentPix() {
           description: 'Pagamento via PIX realizado com sucesso.',
         });
         
-        // Buscar split de cartão do banco também
-        const { data: currentCardSplit } = await supabase
-          .from('payment_splits')
-          .select('id, amount_cents')
-          .eq('charge_id', charge.charge_id)
-          .eq('method', 'credit_card')
-          .maybeSingle();
-        
-        if (currentCardSplit && currentCardSplit.amount_cents > 0) {
+        // Usar dados já carregados (evita RLS bloqueando query anônima)
+        if (hasCardPayment && cardAmount > 0) {
+          console.log('[PaymentPix] Redirecionando para pagamento de cartão...');
           navigate(`/payment-card/${id}`);
         } else {
+          console.log('[PaymentPix] Sem cartão pendente, redirecionando para thank-you...');
           navigate(`/thank-you?pl=${id}`);
         }
         return;
