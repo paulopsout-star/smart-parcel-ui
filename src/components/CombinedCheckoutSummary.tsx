@@ -18,7 +18,9 @@ interface CombinedCheckoutSummaryProps {
   chargeId: string;
   paymentLinkId: string;
   title: string;
-  onConfirm: (pixTotalCents: number, cardTotalCents: number, cardInstallments: number, installmentValueCents: number) => void;
+  // cardOriginalCents = valor ORIGINAL (para salvar no DB e enviar à API)
+  // cardTotalWithInterestCents = valor COM JUROS (apenas para exibição ao cliente)
+  onConfirm: (pixTotalCents: number, cardOriginalCents: number, cardTotalWithInterestCents: number, cardInstallments: number, installmentValueCents: number) => void;
 }
 
 export function CombinedCheckoutSummary({
@@ -198,8 +200,9 @@ export function CombinedCheckoutSummary({
         {/* Confirm Button */}
         <Button
           onClick={() => onConfirm(
-            pixTotalCents, 
-            cardTotalWithInterest,
+            pixTotalCents,
+            cardCents,              // Valor ORIGINAL (para salvar no DB e enviar à API)
+            cardTotalWithInterest,  // Valor COM JUROS (para exibição)
             cardInstallments,
             selectedCondition?.installmentAmount || Math.ceil(cardTotalWithInterest / cardInstallments)
           )}

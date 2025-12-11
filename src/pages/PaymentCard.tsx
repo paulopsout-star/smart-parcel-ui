@@ -108,22 +108,24 @@ export default function PaymentCard() {
 
         setCharge({ ...paymentLink, payment_splits: splitData });
         
-        const cardTotalWithInterest = cardSplit.amount_cents;
+        // ✅ CORREÇÃO: amount_cents agora é o valor ORIGINAL (sem juros)
+        // Este valor será enviado à API Quita+ que calcula os juros internamente
+        const cardOriginalCents = cardSplit.amount_cents;
         const installments = cardSplit.installments || 1;
-        const installmentValue = Math.ceil(cardTotalWithInterest / installments);
+        const installmentValue = Math.ceil(cardOriginalCents / installments);
         
-        setCardAmount(cardTotalWithInterest);
+        setCardAmount(cardOriginalCents);
         setCardInstallments(installments);
         
         setSelectedOption({
           id: 'saved',
-          totalCents: cardTotalWithInterest,
+          totalCents: cardOriginalCents, // Valor ORIGINAL para enviar à API
           installments: installments,
           installmentValueCents: installmentValue
         });
         
         console.log('[PaymentCard] ✅ Dados carregados:', {
-          cardTotalWithInterest,
+          cardOriginalCents,
           installments,
           installmentValue
         });
