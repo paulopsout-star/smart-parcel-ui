@@ -21,6 +21,7 @@ export default function PaymentPix() {
   const [pixAmount, setPixAmount] = useState(0);
   const [hasCardPayment, setHasCardPayment] = useState(false);
   const [cardAmount, setCardAmount] = useState(0);
+  const [cardDisplayAmount, setCardDisplayAmount] = useState(0);
   
   const [pixData, setPixData] = useState<{
     brCode: string;
@@ -81,6 +82,7 @@ export default function PaymentPix() {
         setPixAmount(pixSplit?.amount_cents || 0);
         setHasCardPayment(!!cardSplit);
         setCardAmount(cardSplit?.amount_cents || 0);
+        setCardDisplayAmount(cardSplit?.display_amount_cents || cardSplit?.amount_cents || 0);
         
         setLoading(false);
         
@@ -326,7 +328,7 @@ export default function PaymentPix() {
                   Próximo passo: Pagamento via Cartão
                 </p>
                 <p className="text-blue-600 dark:text-blue-300">
-                  Após confirmar o PIX, você pagará <strong>{formatCurrency(cardAmount)}</strong> no cartão.
+                  Após confirmar o PIX, você pagará <strong>{formatCurrency(cardDisplayAmount || cardAmount)}</strong> no cartão.
                 </p>
               </div>
             </div>
