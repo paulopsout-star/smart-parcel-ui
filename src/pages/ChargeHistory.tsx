@@ -656,7 +656,8 @@ export default function ChargeHistory() {
             transaction_id,
             processed_at,
             order_index,
-            installments
+            installments,
+            created_at
           )
         `)
         .order('created_at', { ascending: false });
