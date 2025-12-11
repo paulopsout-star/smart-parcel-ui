@@ -26,7 +26,7 @@ serve(async (req) => {
     
     // Verificar autenticação
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const authHeader = req.headers.get('Authorization');
 
     if (!authHeader) {
@@ -37,18 +37,19 @@ serve(async (req) => {
       });
     }
 
-    console.log('[company-settings] 🔍 Verificando usuário...');
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
-    });
-
-    // Verificar se o usuário está autenticado
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    // Extrair o token JWT do header
+    const token = authHeader.replace('Bearer ', '');
+    
+    console.log('[company-settings] 🔍 Verificando usuário com token...');
+    
+    // Usar service role client para validar o token
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Validar o token e obter o usuário
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !user) {
-      console.error('[company-settings] ❌ Usuário não autenticado:', userError);
+      console.error('[company-settings] ❌ Token inválido ou expirado:', userError?.message || 'User not found');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
