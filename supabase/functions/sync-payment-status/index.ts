@@ -19,14 +19,8 @@ const statusCodeMap: Record<number, string> = {
   9: "completed",           // Paid
 };
 
-// Status que indicam pendência e devem ser verificados
-const pendingStatuses = [
-  "pending",
-  "processing",
-  "pre_authorized",
-  "awaiting_validation",
-  "validating",
-];
+// Período de verificação: últimos 90 dias
+const SYNC_DAYS_WINDOW = 90;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -41,14 +35,21 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Buscar cobranças com pre_payment_key e status pendente
+    // Calcular data limite (últimos 90 dias)
+    const dateLimit = new Date();
+    dateLimit.setDate(dateLimit.getDate() - SYNC_DAYS_WINDOW);
+    const dateLimitISO = dateLimit.toISOString();
+
+    console.log(`[sync-payment-status] Buscando cobranças com pre_payment_key dos últimos ${SYNC_DAYS_WINDOW} dias (desde ${dateLimitISO})`);
+
+    // Buscar TODAS as cobranças com pre_payment_key (sem filtro de status)
     const { data: charges, error: chargesError } = await supabase
       .from("charges")
       .select("id, pre_payment_key, status, company_id, payer_name, amount")
       .not("pre_payment_key", "is", null)
-      .in("status", pendingStatuses)
-      .order("created_at", { ascending: true })
-      .limit(50); // Limitar para evitar timeout
+      .gte("created_at", dateLimitISO)
+      .order("created_at", { ascending: false })
+      .limit(100);
 
     if (chargesError) {
       console.error("[sync-payment-status] Erro ao buscar cobranças:", chargesError);
@@ -56,11 +57,11 @@ serve(async (req) => {
     }
 
     if (!charges || charges.length === 0) {
-      console.log("[sync-payment-status] Nenhuma cobrança pendente encontrada");
+      console.log("[sync-payment-status] Nenhuma cobrança com pre_payment_key encontrada no período");
       return new Response(
         JSON.stringify({ 
           success: true, 
-          message: "Nenhuma cobrança pendente para sincronizar",
+          message: "Nenhuma cobrança com cartão para sincronizar no período",
           processed: 0,
           updated: 0,
           duration_ms: Date.now() - startTime
