@@ -194,7 +194,7 @@ export default function Checkout() {
           charge_id: chargeId,
           payment_link_id: paymentLinkId,
           method: 'credit_card',
-          amount_cents: cardOriginalCents, // ✅ Valor ORIGINAL (para enviar à API Quita+)
+          amount_cents: cardTotalWithInterestCents, // ✅ Valor COM JUROS (para exibição no comprovante)
           installments: cardInstallments,
           order_index: pixTotalCents > 0 ? 2 : 1,
           status: 'pending',
