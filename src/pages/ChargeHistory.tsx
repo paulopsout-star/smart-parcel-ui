@@ -119,6 +119,34 @@ const formatCurrency = (cents: number) => {
   }).format(cents / 100);
 };
 
+// Função para calcular status computado baseado nos splits (para pagamentos combinados)
+const getComputedStatus = (charge: Charge): string => {
+  // Se não for pagamento combinado ou não tem splits, usar status do charge
+  if (charge.payment_method !== 'cartao_pix' || !charge.splits || charge.splits.length === 0) {
+    return charge.status;
+  }
+
+  const pixSplit = charge.splits.find(s => s.method === 'pix');
+  const cardSplit = charge.splits.find(s => s.method === 'credit_card');
+
+  // Verificar se cada split está pago
+  const pixPaid = pixSplit && (pixSplit.status === 'concluded' || pixSplit.pix_paid_at);
+  const cardPaid = cardSplit && (cardSplit.status === 'concluded' || cardSplit.pre_payment_key || cardSplit.transaction_id);
+
+  // Ambos pagos → completed
+  if (pixPaid && cardPaid) {
+    return 'completed';
+  }
+
+  // Apenas um pago → partial
+  if (pixPaid || cardPaid) {
+    return 'partial';
+  }
+
+  // Nenhum pago → manter status original
+  return charge.status;
+};
+
 const getModernStatusBadge = (status: string) => {
   const configs = {
     // Status básicos
@@ -167,6 +195,11 @@ const getModernStatusBadge = (status: string) => {
       label: 'Negado pelo Risco', 
       variant: 'destructive' as const
     },
+    // NOVO: Status parcial para pagamentos combinados
+    partial: {
+      label: 'Parcialmente Pago',
+      variant: 'warning' as const
+    },
   };
   
   const config = configs[status as keyof typeof configs] || configs.pending;
@@ -214,10 +247,18 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     ? ((cardFee / cardBase) * 100).toFixed(1) 
     : '0';
 
+  // Verificar se o split está pago
+  const isSplitPaid = (split: PaymentSplitInfo | undefined, isPix: boolean): boolean => {
+    if (!split) return false;
+    if (isPix) {
+      return split.status === 'concluded' || !!split.pix_paid_at;
+    }
+    return split.status === 'concluded' || !!split.pre_payment_key || !!split.transaction_id;
+  };
+
   const getSplitStatusBadge = (split: PaymentSplitInfo | undefined, isPix: boolean) => {
     if (!split) return null;
-    const isPaid = split.status === 'concluded' || split.pix_paid_at || split.pre_payment_key || split.transaction_id;
-    if (isPaid) {
+    if (isSplitPaid(split, isPix)) {
       return <Badge variant="success" className="text-xs">✓ Pago</Badge>;
     }
     return <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>;
@@ -307,18 +348,40 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
         )}
       </div>
 
-      {/* Total Geral */}
-      {hasPix && hasCard && (
-        <div className="p-3 bg-ds-bg-surface-alt rounded-card border border-ds-border-subtle flex justify-between items-center">
-          <div className="flex items-center gap-2 text-ds-text-muted">
-            <TrendingUp className="h-4 w-4" />
-            <span className="text-sm font-medium">Total pago pelo cliente:</span>
+      {/* Total Geral - só somar o que foi efetivamente pago */}
+      {hasPix && hasCard && (() => {
+        const pixPaid = isSplitPaid(pixSplit, true);
+        const cardPaid = isSplitPaid(cardSplit, false);
+        const totalPaid = (pixPaid ? pixTotal : 0) + (cardPaid ? cardTotal : 0);
+        const totalPending = (!pixPaid ? pixTotal : 0) + (!cardPaid ? cardTotal : 0);
+        
+        return (
+          <div className="space-y-2">
+            {totalPaid > 0 && (
+              <div className="p-3 bg-green-500/5 rounded-card border border-green-500/20 flex justify-between items-center">
+                <div className="flex items-center gap-2 text-green-700">
+                  <TrendingUp className="h-4 w-4" />
+                  <span className="text-sm font-medium">Total pago pelo cliente:</span>
+                </div>
+                <span className="text-lg font-bold text-green-700">
+                  {formatCurrency(totalPaid)}
+                </span>
+              </div>
+            )}
+            {totalPending > 0 && (
+              <div className="p-3 bg-amber-500/5 rounded-card border border-amber-500/20 flex justify-between items-center">
+                <div className="flex items-center gap-2 text-amber-700">
+                  <TrendingUp className="h-4 w-4" />
+                  <span className="text-sm font-medium">Valor pendente:</span>
+                </div>
+                <span className="text-lg font-bold text-amber-700">
+                  {formatCurrency(totalPending)}
+                </span>
+              </div>
+            )}
           </div>
-          <span className="text-lg font-bold text-ds-text-strong">
-            {formatCurrency(pixTotal + cardTotal)}
-          </span>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
@@ -1241,7 +1304,7 @@ export default function ChargeHistory() {
                           {charge.company.name}
                         </Badge>
                       )}
-                      {getModernStatusBadge(charge.status)}
+                      {getModernStatusBadge(getComputedStatus(charge))}
                       {charge.payment_method && getPaymentMethodBadge(charge.payment_method)}
                     </div>
                   </div>

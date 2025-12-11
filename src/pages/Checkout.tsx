@@ -89,39 +89,68 @@ export default function Checkout() {
         
         // Se for pagamento combinado (cartão + PIX), verificar splits existentes
         if (paymentMethod === 'cartao_pix') {
-          const pixSplit = splits.find(s => s.method === 'pix');
-          const cardSplit = splits.find(s => s.method === 'credit_card');
+          const pixSplit = splits.find(s => s.method === 'pix') as any;
+          const cardSplit = splits.find(s => s.method === 'credit_card') as any;
           
           console.log('[Checkout] Estado dos splits:', {
-            pixSplit: pixSplit ? { status: pixSplit.status, amount: pixSplit.amount_cents } : null,
-            cardSplit: cardSplit ? { status: cardSplit.status, amount: cardSplit.amount_cents } : null
+            pixSplit: pixSplit ? { 
+              status: pixSplit.status, 
+              amount: pixSplit.amount_cents,
+              pix_paid_at: pixSplit.pix_paid_at 
+            } : null,
+            cardSplit: cardSplit ? { 
+              status: cardSplit.status, 
+              amount: cardSplit.amount_cents,
+              pre_payment_key: cardSplit.pre_payment_key,
+              transaction_id: cardSplit.transaction_id
+            } : null
           });
 
+          // Helper para verificar se PIX foi pago (status OU pix_paid_at)
+          const isPixPaid = pixSplit && (
+            pixSplit.status === 'concluded' || 
+            !!pixSplit.pix_paid_at
+          );
+
+          // Helper para verificar se Cartão foi pago
+          const isCardPaid = cardSplit && (
+            cardSplit.status === 'concluded' || 
+            !!cardSplit.pre_payment_key || 
+            !!cardSplit.transaction_id
+          );
+
           // CENÁRIO 1: PIX já pago, cartão pendente → ir direto para cartão
-          if (pixSplit?.status === 'concluded' && cardSplit?.status === 'pending') {
+          if (isPixPaid && cardSplit && !isCardPaid) {
             console.log('[Checkout] PIX já pago, redirecionando para cartão');
             navigate(`/payment-card/${id}`, { replace: true });
             return;
           }
 
           // CENÁRIO 2: PIX pendente, cartão pendente (split já definido) → ir para PIX
-          if (pixSplit?.status === 'pending' && cardSplit?.status === 'pending') {
+          if (pixSplit && !isPixPaid && cardSplit && !isCardPaid) {
             console.log('[Checkout] Splits existentes pendentes, redirecionando para PIX');
             navigate(`/payment-pix/${id}?next=card`, { replace: true });
             return;
           }
 
           // CENÁRIO 3: Ambos concluídos → ir para thank-you
-          if (pixSplit?.status === 'concluded' && cardSplit?.status === 'concluded') {
+          if (isPixPaid && isCardPaid) {
             console.log('[Checkout] Ambos pagamentos concluídos');
             navigate(`/thank-you?pl=${id}`, { replace: true });
             return;
           }
 
           // CENÁRIO 4: Só cartão existe e está pendente → ir para cartão
-          if (!pixSplit && cardSplit?.status === 'pending') {
+          if (!pixSplit && cardSplit && !isCardPaid) {
             console.log('[Checkout] Só cartão pendente, redirecionando para cartão');
             navigate(`/payment-card/${id}`, { replace: true });
+            return;
+          }
+
+          // CENÁRIO 5: Só PIX existe e ainda não pago → ir para PIX
+          if (pixSplit && !isPixPaid && !cardSplit) {
+            console.log('[Checkout] Só PIX pendente, redirecionando para PIX');
+            navigate(`/payment-pix/${id}`, { replace: true });
             return;
           }
 

@@ -99,9 +99,44 @@ serve(async (req) => {
     switch (event) {
       case 'pixQrCode.paid':
       case 'pixQrCode.completed':
-        newStatus = 'completed';
-        updateData.status = 'completed';
-        console.log('[abacatepay-webhook] ✅ Pagamento PIX confirmado para cobrança:', charge.id);
+        // Para pagamentos combinados (cartao_pix), não marcar como completed ainda
+        // pois só o PIX foi pago, falta o cartão
+        if (charge.payment_method === 'cartao_pix') {
+          newStatus = 'processing'; // Manter como processing até cartão ser pago
+          updateData.status = 'processing';
+          console.log('[abacatepay-webhook] ✅ PIX confirmado (pagamento combinado), aguardando cartão:', charge.id);
+        } else {
+          newStatus = 'completed';
+          updateData.status = 'completed';
+          console.log('[abacatepay-webhook] ✅ Pagamento PIX confirmado para cobrança:', charge.id);
+        }
+        
+        // IMPORTANTE: Atualizar o payment_split do PIX para 'concluded'
+        const { data: pixSplits, error: pixSplitsError } = await supabase
+          .from('payment_splits')
+          .select('id')
+          .eq('charge_id', charge.id)
+          .eq('method', 'pix')
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (!pixSplitsError && pixSplits && pixSplits.length > 0) {
+          const pixSplitId = pixSplits[0].id;
+          const { error: splitUpdateError } = await supabase
+            .from('payment_splits')
+            .update({ 
+              status: 'concluded',
+              pix_paid_at: new Date().toISOString(),
+              processed_at: new Date().toISOString()
+            })
+            .eq('id', pixSplitId);
+          
+          if (splitUpdateError) {
+            console.error('[abacatepay-webhook] ⚠️ Erro ao atualizar split PIX:', splitUpdateError);
+          } else {
+            console.log('[abacatepay-webhook] ✅ Split PIX atualizado para concluded:', pixSplitId);
+          }
+        }
         break;
       
       case 'pixQrCode.pending':
