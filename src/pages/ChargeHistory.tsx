@@ -1422,7 +1422,7 @@ export default function ChargeHistory() {
                   <div className="space-y-2">
                     <h4 className="font-medium text-ds-text-strong">Status</h4>
                     <div className="flex gap-2">
-                      {getModernStatusBadge(selectedCharge.status)}
+                      {getModernStatusBadge(getComputedStatus(selectedCharge))}
                       <Badge variant="outline">{selectedCharge.recurrence_type}</Badge>
                       {selectedCharge.payment_method && getPaymentMethodBadge(selectedCharge.payment_method)}
                     </div>

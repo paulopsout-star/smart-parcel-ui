@@ -95,14 +95,25 @@ serve(async (req) => {
       }
     }
 
-    // Se encontrou pagamento confirmado, atualizar a cobrança
+    // Se encontrou pagamento confirmado, atualizar a cobrança E o payment_split
     if (foundPaidPix && chargeId) {
-      console.log('[abacatepay-check-status] 💰 Atualizando cobrança para completed:', chargeId);
+      console.log('[abacatepay-check-status] 💰 Atualizando cobrança e split para PIX PAID:', chargeId);
+      
+      // Verificar se é pagamento combinado (tem card split também)
+      const { data: cardSplit } = await supabase
+        .from('payment_splits')
+        .select('id')
+        .eq('charge_id', chargeId)
+        .eq('method', 'credit_card')
+        .maybeSingle();
+      
+      // Se tem cartão pendente, status fica 'processing', senão 'completed'
+      const newChargeStatus = cardSplit ? 'processing' : 'completed';
       
       const { error: updateError } = await supabase
         .from('charges')
         .update({
-          status: 'completed',
+          status: newChargeStatus,
           metadata: {
             pix_paid_at: new Date().toISOString(),
             pix_status: 'PAID',
@@ -115,7 +126,35 @@ serve(async (req) => {
       if (updateError) {
         console.error('[abacatepay-check-status] ❌ Erro ao atualizar cobrança:', updateError);
       } else {
-        console.log('[abacatepay-check-status] ✅ Cobrança atualizada para completed');
+        console.log('[abacatepay-check-status] ✅ Cobrança atualizada para', newChargeStatus);
+      }
+      
+      // ✅ CRÍTICO: Também atualizar o payment_split do PIX para 'concluded'
+      const { data: pixSplits, error: pixSplitError } = await supabase
+        .from('payment_splits')
+        .select('id')
+        .eq('charge_id', chargeId)
+        .eq('method', 'pix')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      if (pixSplits && pixSplits.length > 0) {
+        const { error: splitUpdateError } = await supabase
+          .from('payment_splits')
+          .update({ 
+            status: 'concluded', 
+            pix_paid_at: new Date().toISOString(),
+            processed_at: new Date().toISOString()
+          })
+          .eq('id', pixSplits[0].id);
+        
+        if (splitUpdateError) {
+          console.error('[abacatepay-check-status] ❌ Erro ao atualizar split PIX:', splitUpdateError);
+        } else {
+          console.log('[abacatepay-check-status] ✅ Split PIX atualizado para concluded:', pixSplits[0].id);
+        }
+      } else {
+        console.warn('[abacatepay-check-status] ⚠️ Nenhum split PIX encontrado para charge:', chargeId, pixSplitError);
       }
     }
 
