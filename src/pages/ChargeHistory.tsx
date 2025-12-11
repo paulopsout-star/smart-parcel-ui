@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -479,6 +479,7 @@ export default function ChargeHistory() {
   const [charges, setCharges] = useState<Charge[]>([]);
   const [filteredCharges, setFilteredCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
   const [executionsDialog, setExecutionsDialog] = useState<{ open: boolean; chargeId: string; chargeName: string }>({
     open: false,
@@ -526,6 +527,47 @@ export default function ChargeHistory() {
       console.error('Error loading companies:', error);
     }
   };
+
+  // Função de sincronização manual com API Cappta
+  const syncPaymentStatuses = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-payment-status');
+      
+      if (error) {
+        console.error('Erro na sincronização:', error);
+        toast({
+          title: "Erro na sincronização",
+          description: "Não foi possível sincronizar com o gateway. Os dados locais serão exibidos.",
+          variant: "destructive",
+        });
+      } else {
+        const updated = data?.updated || 0;
+        const processed = data?.processed || 0;
+        if (updated > 0) {
+          toast({
+            title: "Sincronização concluída",
+            description: `${updated} de ${processed} cobrança(s) atualizada(s).`,
+          });
+        } else {
+          toast({
+            title: "Sincronização concluída",
+            description: `${processed} cobrança(s) verificada(s). Nenhuma atualização necessária.`,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar:', err);
+      toast({
+        title: "Erro",
+        description: "Falha na comunicação com o servidor.",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
+      await fetchCharges();
+    }
+  }, []);
 
   const fetchCharges = async () => {
     try {
@@ -1020,9 +1062,9 @@ export default function ChargeHistory() {
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Excel
             </Button>
-            <Button onClick={fetchCharges} variant="outline" disabled={loading}>
-              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              Atualizar
+            <Button onClick={syncPaymentStatuses} variant="outline" disabled={loading || syncing}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${(loading || syncing) ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando...' : 'Atualizar'}
             </Button>
             <Button asChild>
               <Link to="/new-charge">
