@@ -303,8 +303,8 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                 </div>
               )}
               <div className="border-t border-green-500/10 pt-1.5 mt-1.5">
-                <div className="flex justify-between font-semibold text-green-700">
-                  <span>Total pago:</span>
+                <div className={`flex justify-between font-semibold ${isSplitPaid(pixSplit, true) ? 'text-green-700' : 'text-amber-600'}`}>
+                  <span>{isSplitPaid(pixSplit, true) ? 'Total pago:' : 'Valor:'}</span>
                   <span>{formatCurrency(pixTotal)}</span>
                 </div>
               </div>
@@ -338,8 +338,8 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                 </div>
               )}
               <div className="border-t border-blue-500/10 pt-1.5 mt-1.5">
-                <div className="flex justify-between font-semibold text-blue-700">
-                  <span>Total pago:</span>
+                <div className={`flex justify-between font-semibold ${isSplitPaid(cardSplit, false) ? 'text-blue-700' : 'text-amber-600'}`}>
+                  <span>{isSplitPaid(cardSplit, false) ? 'Total pago:' : 'Valor:'}</span>
                   <span>{formatCurrency(cardTotal)}</span>
                 </div>
               </div>
