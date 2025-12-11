@@ -159,10 +159,12 @@ export default function Checkout() {
   }, [id, toast, navigate, mode]);
 
   // Handler para confirmação do checkout combinado
-  // cardTotalCents = valor TOTAL com juros, installmentValueCents = valor de cada parcela
+  // cardOriginalCents = valor ORIGINAL (para salvar no DB e enviar à API Quita+)
+  // cardTotalWithInterestCents = valor COM JUROS (apenas para exibição ao cliente)
   const handleCombinedConfirm = async (
-    pixTotalCents: number, 
-    cardTotalCents: number, 
+    pixTotalCents: number,
+    cardOriginalCents: number,
+    cardTotalWithInterestCents: number,
     cardInstallments: number,
     installmentValueCents: number
   ) => {
@@ -187,12 +189,12 @@ export default function Checkout() {
         });
       }
       
-      if (cardTotalCents > 0) {
+      if (cardOriginalCents > 0) {
         splits.push({
           charge_id: chargeId,
           payment_link_id: paymentLinkId,
           method: 'credit_card',
-          amount_cents: cardTotalCents, // Valor TOTAL com juros
+          amount_cents: cardOriginalCents, // ✅ Valor ORIGINAL (para enviar à API Quita+)
           installments: cardInstallments,
           order_index: pixTotalCents > 0 ? 2 : 1,
           status: 'pending',
@@ -223,7 +225,8 @@ export default function Checkout() {
 
       console.log('[Checkout] ✅ Splits salvos com sucesso:', {
         pixTotalCents,
-        cardTotalCents,
+        cardOriginalCents,
+        cardTotalWithInterestCents,
         cardInstallments,
         installmentValueCents
       });
@@ -232,7 +235,7 @@ export default function Checkout() {
       if (pixTotalCents > 0) {
         // Se há PIX, ir para tela de PIX primeiro
         navigate(`/payment-pix/${id}?next=card`);
-      } else if (cardTotalCents > 0) {
+      } else if (cardOriginalCents > 0) {
         // Se só há cartão, ir direto para cartão
         navigate(`/payment-card/${id}`);
       }
