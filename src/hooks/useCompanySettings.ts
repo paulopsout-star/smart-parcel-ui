@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useRef, useEffect, useCallback } from 'react';
@@ -11,6 +11,7 @@ export interface CompanySettings {
 
 export function useCompanySettings() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const lastGoodSettings = useRef<CompanySettings | null>(null);
   const hasLoggedOnce = useRef(false);
   const retryCount = useRef(0);
@@ -18,25 +19,36 @@ export function useCompanySettings() {
   const fetchSettings = useCallback(async (): Promise<CompanySettings> => {
     if (!user) throw new Error('User not authenticated');
 
-    // Ensure we have a fresh session before calling the edge function
-    let { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    // SEMPRE buscar sessão fresca - ignorar qualquer cache
+    const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
     
-    if (sessionError || !sessionData.session) {
-      console.warn('[useCompanySettings] Session invalid, attempting refresh...');
+    if (sessionError || !currentSession) {
+      console.warn('[useCompanySettings] ⚠️ Sessão inválida, tentando refresh...');
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      
       if (refreshError || !refreshData.session) {
-        console.error('[useCompanySettings] Failed to refresh session:', refreshError);
-        throw new Error('Session expired - please login again');
+        console.error('[useCompanySettings] ❌ Falha ao renovar sessão:', refreshError);
+        // Limpar cache e forçar re-login
+        queryClient.invalidateQueries({ queryKey: ['company-settings'] });
+        throw new Error('Sessão expirada - faça login novamente');
       }
-      sessionData = { session: refreshData.session };
+      
+      console.log('[useCompanySettings] ✅ Sessão renovada com sucesso');
     }
-
-    const accessToken = sessionData.session?.access_token;
+    
+    // Buscar sessão novamente após possível refresh
+    const { data: { session: freshSession } } = await supabase.auth.getSession();
+    const accessToken = freshSession?.access_token;
+    
     if (!accessToken) {
-      throw new Error('No access token available');
+      console.error('[useCompanySettings] ❌ Sem access token disponível');
+      queryClient.invalidateQueries({ queryKey: ['company-settings'] });
+      throw new Error('Token de acesso indisponível');
     }
 
-    // Invoke with explicit headers to ensure token is fresh
+    console.log('[useCompanySettings] 🔑 Usando token:', accessToken.substring(0, 20) + '...');
+
+    // Invoke com headers explícitos para garantir token fresco
     const { data, error } = await supabase.functions.invoke<CompanySettings>('company-settings', {
       body: {},
       headers: {
@@ -45,18 +57,24 @@ export function useCompanySettings() {
     });
 
     if (error) {
-      // If 401, try to refresh session once
+      // Se 401, invalidar cache e tentar refresh uma vez
       if (error.message?.includes('401') && retryCount.current < 1) {
         retryCount.current++;
-        console.warn('[useCompanySettings] Got 401, refreshing session...');
-        const { data: newSession } = await supabase.auth.refreshSession();
-        const newToken = newSession.session?.access_token;
+        console.warn('[useCompanySettings] ⚠️ 401 recebido, renovando sessão...');
+        
+        // Invalidar cache
+        queryClient.invalidateQueries({ queryKey: ['company-settings'] });
+        
+        const { data: newSessionData } = await supabase.auth.refreshSession();
+        const newToken = newSessionData.session?.access_token;
         
         if (!newToken) {
-          throw new Error('Failed to get new access token');
+          throw new Error('Falha ao obter novo token');
         }
         
-        // Retry after refresh with new token
+        console.log('[useCompanySettings] 🔄 Retry com novo token');
+        
+        // Retry com novo token
         const retryResult = await supabase.functions.invoke<CompanySettings>('company-settings', {
           body: {},
           headers: {
@@ -64,17 +82,17 @@ export function useCompanySettings() {
           },
         });
         if (retryResult.error) throw retryResult.error;
-        if (!retryResult.data) throw new Error('No data returned from company-settings');
+        if (!retryResult.data) throw new Error('Nenhum dado retornado');
         retryCount.current = 0;
         return retryResult.data;
       }
       throw error;
     }
     
-    if (!data) throw new Error('No data returned from company-settings');
+    if (!data) throw new Error('Nenhum dado retornado');
     retryCount.current = 0;
     return data;
-  }, [user]);
+  }, [user, queryClient]);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['company-settings', user?.id],
