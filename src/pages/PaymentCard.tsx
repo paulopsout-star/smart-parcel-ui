@@ -7,6 +7,7 @@ import { PaymentForm } from '@/components/PaymentForm';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { CreditCard, CheckCircle2 } from 'lucide-react';
+import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
 
 export default function PaymentCard() {
   const { id } = useParams<{ id: string }>();
@@ -14,11 +15,14 @@ export default function PaymentCard() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [charge, setCharge] = useState<any>(null);
-  const [cardAmount, setCardAmount] = useState(0);
+  const [cardAmount, setCardAmount] = useState(0); // Valor ORIGINAL em centavos
   const [cardInstallments, setCardInstallments] = useState(1);
   const [selectedOption, setSelectedOption] = useState<any>(null);
   const [pixPaid, setPixPaid] = useState(false);
   const [pixAmount, setPixAmount] = useState(0);
+  
+  // Buscar simulação para calcular valor com juros (para exibição)
+  const { data: simulation } = usePaymentSimulation(cardAmount > 0 ? cardAmount : null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -225,29 +229,50 @@ export default function PaymentCard() {
         )}
 
         {/* Amount Summary */}
-        <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-4 mb-6 text-center border border-blue-200 dark:border-blue-800">
-          <p className="text-sm text-blue-700 dark:text-blue-300 mb-1">Valor a pagar no cartão</p>
-          <p className="text-3xl font-bold text-blue-600">{formatCurrency(cardAmount)}</p>
-          {cardInstallments > 1 && selectedOption && (
-            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-              {cardInstallments}x de {formatCurrency(selectedOption.installmentValueCents)}
-            </p>
-          )}
-        </div>
+        {(() => {
+          // Calcular valor com juros baseado na simulação
+          const condition = simulation?.simulation?.conditions?.find(
+            (c: any) => c.installments === cardInstallments
+          );
+          const displayAmountCents = condition?.totalAmount || cardAmount;
+          const installmentValueCents = condition?.installmentAmount || Math.ceil(cardAmount / cardInstallments);
+          
+          return (
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-4 mb-6 text-center border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-blue-700 dark:text-blue-300 mb-1">Valor a pagar no cartão</p>
+              <p className="text-3xl font-bold text-blue-600">{formatCurrency(displayAmountCents)}</p>
+              {cardInstallments > 1 && (
+                <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                  {cardInstallments}x de {formatCurrency(installmentValueCents)}
+                </p>
+              )}
+            </div>
+          );
+        })()}
 
-        {/* Payment Form */}
-        <PaymentForm
-          amount={selectedOption.totalCents / 100}
-          installments={selectedOption.installments}
-          productName={charge?.description || 'Pagamento'}
-          onSuccess={handlePaymentSuccess}
-          chargeId={charge?.charge_id || charge?.id || ''}
-          paymentLinkId={id || ''}
-          hasBoleto={charge?.has_boleto_link || false}
-          boletoLinhaDigitavel={charge?.boleto_linha_digitavel || ''}
-          creditorDocument={charge?.creditor_document || ''}
-          creditorName={charge?.creditor_name || ''}
-        />
+        {/* Payment Form - ENVIA valor ORIGINAL para API, exibe valor COM JUROS */}
+        {(() => {
+          const condition = simulation?.simulation?.conditions?.find(
+            (c: any) => c.installments === cardInstallments
+          );
+          const displayAmountCents = condition?.totalAmount || cardAmount;
+          
+          return (
+            <PaymentForm
+              amount={cardAmount / 100}           // ✅ Valor ORIGINAL para API Quita+
+              amountDisplay={displayAmountCents / 100} // Valor COM JUROS para exibição
+              installments={cardInstallments}
+              productName={charge?.description || 'Pagamento'}
+              onSuccess={handlePaymentSuccess}
+              chargeId={charge?.charge_id || charge?.id || ''}
+              paymentLinkId={id || ''}
+              hasBoleto={charge?.has_boleto_link || false}
+              boletoLinhaDigitavel={charge?.boleto_linha_digitavel || ''}
+              creditorDocument={charge?.creditor_document || ''}
+              creditorName={charge?.creditor_name || ''}
+            />
+          );
+        })()}
       </Card>
     </div>
   );

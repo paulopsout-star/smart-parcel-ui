@@ -10,7 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { PaymentFormData, PaymentState } from "@/types/payment";
 
 interface PaymentFormProps {
-  amount: number;
+  amount: number;            // Valor ORIGINAL em reais (será enviado à API Quita+)
+  amountDisplay?: number;    // Valor COM JUROS em reais (para exibição ao cliente, se diferente de amount)
   installments: number;
   productName: string;
   chargeId?: string;
@@ -33,6 +34,7 @@ interface PaymentFormProps {
 
 export function PaymentForm({
   amount,
+  amountDisplay,
   installments,
   productName,
   chargeId,
@@ -47,6 +49,8 @@ export function PaymentForm({
   disableSubmit = false,
   initialPayerData,
 }: PaymentFormProps) {
+  // Valor para enviar à API = amount (original)
+  // Valor para exibir ao cliente = amountDisplay || amount
   const { toast } = useToast();
   
   const [paymentState, setPaymentState] = useState<PaymentState>({
