@@ -8,6 +8,7 @@ export interface PaymentSplit {
   payment_link_id?: string;
   method: string;
   amount_cents: number;
+  display_amount_cents?: number; // Valor COM JUROS para exibição ao cliente
   status: 'pending' | 'concluded' | 'failed' | 'refunded';
   transaction_id?: string;
   processed_at?: string;
@@ -19,6 +20,7 @@ export interface PaymentSplitInsert {
   payment_link_id?: string;
   method: string;
   amount_cents: number;
+  display_amount_cents?: number; // Valor COM JUROS para exibição ao cliente
   status?: 'pending' | 'concluded' | 'failed' | 'refunded';
   transaction_id?: string;
   processed_at?: string;
