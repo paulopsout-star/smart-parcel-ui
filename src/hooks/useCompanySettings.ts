@@ -19,19 +19,29 @@ export function useCompanySettings() {
     if (!user) throw new Error('User not authenticated');
 
     // Ensure we have a fresh session before calling the edge function
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    let { data: sessionData, error: sessionError } = await supabase.auth.getSession();
     
     if (sessionError || !sessionData.session) {
       console.warn('[useCompanySettings] Session invalid, attempting refresh...');
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) {
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshData.session) {
         console.error('[useCompanySettings] Failed to refresh session:', refreshError);
         throw new Error('Session expired - please login again');
       }
+      sessionData = { session: refreshData.session };
     }
 
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      throw new Error('No access token available');
+    }
+
+    // Invoke with explicit headers to ensure token is fresh
     const { data, error } = await supabase.functions.invoke<CompanySettings>('company-settings', {
       body: {},
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
 
     if (error) {
@@ -39,10 +49,19 @@ export function useCompanySettings() {
       if (error.message?.includes('401') && retryCount.current < 1) {
         retryCount.current++;
         console.warn('[useCompanySettings] Got 401, refreshing session...');
-        await supabase.auth.refreshSession();
-        // Retry after refresh
+        const { data: newSession } = await supabase.auth.refreshSession();
+        const newToken = newSession.session?.access_token;
+        
+        if (!newToken) {
+          throw new Error('Failed to get new access token');
+        }
+        
+        // Retry after refresh with new token
         const retryResult = await supabase.functions.invoke<CompanySettings>('company-settings', {
           body: {},
+          headers: {
+            Authorization: `Bearer ${newToken}`,
+          },
         });
         if (retryResult.error) throw retryResult.error;
         if (!retryResult.data) throw new Error('No data returned from company-settings');
