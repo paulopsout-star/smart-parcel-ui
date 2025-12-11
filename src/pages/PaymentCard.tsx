@@ -234,7 +234,7 @@ export default function PaymentCard() {
                   PIX confirmado: {formatCurrency(pixAmount)}
                 </p>
                 <p className="text-emerald-600 dark:text-emerald-300">
-                  Agora complete o pagamento de {formatCurrency(cardAmount)} no cartão.
+                  Agora complete o pagamento de {formatCurrency(selectedOption?.displayCents || cardAmount)} no cartão.
                 </p>
               </div>
             </div>
