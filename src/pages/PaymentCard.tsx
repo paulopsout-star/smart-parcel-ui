@@ -112,27 +112,37 @@ export default function PaymentCard() {
 
         setCharge({ ...paymentLink, payment_splits: splitData });
         
-        // ✅ CORREÇÃO: amount_cents = valor ORIGINAL (para API)
-        // display_amount_cents = valor COM JUROS (para exibição, se disponível)
-        const cardOriginalCents = cardSplit.amount_cents;
-        const cardDisplayCents = cardSplit.display_amount_cents || null; // Novo campo
+        // ✅ CORREÇÃO CRÍTICA: Evitar double-simulation
+        // Para splits antigos (display_amount_cents = NULL), amount_cents JÁ CONTÉM o valor com juros
+        // Não devemos simular novamente!
+        const cardAmountCents = cardSplit.amount_cents;
+        const cardDisplayCents = cardSplit.display_amount_cents;
         const installments = cardSplit.installments || 1;
-        const installmentValue = Math.ceil(cardOriginalCents / installments);
         
-        setCardAmount(cardOriginalCents);
+        // Se display_amount_cents existe, usá-lo para exibição e amount_cents para API
+        // Se display_amount_cents é NULL, amount_cents É o valor final (já tem juros) - NÃO SIMULAR
+        const displayAmountToUse = cardDisplayCents ?? cardAmountCents;
+        const originalAmountForApi = cardDisplayCents ? cardAmountCents : cardAmountCents; // Para splits antigos, enviar o mesmo valor
+        
+        const installmentValue = Math.ceil(displayAmountToUse / installments);
+        
+        setCardAmount(originalAmountForApi);
         setCardInstallments(installments);
         
-        // Salvar display_amount_cents se disponível (para evitar re-simulação)
+        // Salvar o valor final para exibição (evita re-simulação)
         setSelectedOption({
           id: 'saved',
-          totalCents: cardOriginalCents,         // Valor ORIGINAL para enviar à API
-          displayCents: cardDisplayCents,        // Valor COM JUROS (já calculado)
+          totalCents: originalAmountForApi,       // Valor para enviar à API
+          displayCents: displayAmountToUse,       // Valor FINAL para exibição (já calculado)
           installments: installments,
           installmentValueCents: installmentValue
         });
         
         console.log('[PaymentCard] ✅ Dados carregados:', {
-          cardOriginalCents,
+          cardAmountCents,
+          cardDisplayCents,
+          displayAmountToUse,
+          originalAmountForApi,
           installments,
           installmentValue
         });
@@ -233,16 +243,10 @@ export default function PaymentCard() {
 
         {/* Amount Summary */}
         {(() => {
-          // ✅ Priorizar display_amount_cents salvo no DB (evita re-simulação)
-          // Se não existir (splits antigos), usar simulação como fallback
-          const savedDisplayCents = selectedOption?.displayCents;
-          const condition = simulation?.simulation?.conditions?.find(
-            (c: any) => c.installments === cardInstallments
-          );
-          const displayAmountCents = savedDisplayCents || condition?.totalAmount || cardAmount;
-          const installmentValueCents = savedDisplayCents 
-            ? Math.ceil(savedDisplayCents / cardInstallments)
-            : (condition?.installmentAmount || Math.ceil(cardAmount / cardInstallments));
+          // ✅ CORREÇÃO: Usar SEMPRE o displayCents salvo - NÃO re-simular
+          // displayCents já contém o valor final (com juros) calculado no checkout
+          const displayAmountCents = selectedOption?.displayCents || cardAmount;
+          const installmentValueCents = Math.ceil(displayAmountCents / cardInstallments);
           
           return (
             <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-4 mb-6 text-center border border-blue-200 dark:border-blue-800">
@@ -258,30 +262,20 @@ export default function PaymentCard() {
         })()}
 
         {/* Payment Form - ENVIA valor ORIGINAL para API, exibe valor COM JUROS */}
-        {(() => {
-          // ✅ Priorizar display_amount_cents salvo no DB
-          const savedDisplayCents = selectedOption?.displayCents;
-          const condition = simulation?.simulation?.conditions?.find(
-            (c: any) => c.installments === cardInstallments
-          );
-          const displayAmountCents = savedDisplayCents || condition?.totalAmount || cardAmount;
-          
-          return (
-            <PaymentForm
-              amount={cardAmount / 100}           // ✅ Valor ORIGINAL para API Quita+
-              amountDisplay={displayAmountCents / 100} // Valor COM JUROS para exibição
-              installments={cardInstallments}
-              productName={charge?.description || 'Pagamento'}
-              onSuccess={handlePaymentSuccess}
-              chargeId={charge?.charge_id || charge?.id || ''}
-              paymentLinkId={id || ''}
-              hasBoleto={charge?.has_boleto_link || false}
-              boletoLinhaDigitavel={charge?.boleto_linha_digitavel || ''}
-              creditorDocument={charge?.creditor_document || ''}
-              creditorName={charge?.creditor_name || ''}
-            />
-          );
-        })()}
+        {/* ✅ CORREÇÃO: Usar displayCents salvo - NÃO re-simular */}
+        <PaymentForm
+          amount={cardAmount / 100}           // Valor para API
+          amountDisplay={(selectedOption?.displayCents || cardAmount) / 100} // Valor FINAL com juros
+          installments={cardInstallments}
+          productName={charge?.description || 'Pagamento'}
+          onSuccess={handlePaymentSuccess}
+          chargeId={charge?.charge_id || charge?.id || ''}
+          paymentLinkId={id || ''}
+          hasBoleto={charge?.has_boleto_link || false}
+          boletoLinhaDigitavel={charge?.boleto_linha_digitavel || ''}
+          creditorDocument={charge?.creditor_document || ''}
+          creditorName={charge?.creditor_name || ''}
+        />
       </Card>
     </div>
   );
