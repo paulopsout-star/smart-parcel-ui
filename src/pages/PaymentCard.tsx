@@ -105,38 +105,35 @@ export default function PaymentCard() {
           return;
         }
 
-        if (pixSplit) {
-          setPixPaid(pixSplit.status === 'concluded');
-          setPixAmount(pixSplit.amount_cents);
-        }
-
-        setCharge({ ...paymentLink, payment_splits: splitData });
-        
-        // ✅ CORREÇÃO CRÍTICA: Evitar double-simulation
-        // Para splits antigos (display_amount_cents = NULL), amount_cents JÁ CONTÉM o valor com juros
-        // Não devemos simular novamente!
+        // ✅ CORREÇÃO: Calcular e definir selectedOption ANTES de pixPaid
+        // para evitar race condition no render do banner
         const cardAmountCents = cardSplit.amount_cents;
         const cardDisplayCents = cardSplit.display_amount_cents;
         const installments = cardSplit.installments || 1;
         
-        // Se display_amount_cents existe, usá-lo para exibição e amount_cents para API
-        // Se display_amount_cents é NULL, amount_cents É o valor final (já tem juros) - NÃO SIMULAR
         const displayAmountToUse = cardDisplayCents ?? cardAmountCents;
-        const originalAmountForApi = cardDisplayCents ? cardAmountCents : cardAmountCents; // Para splits antigos, enviar o mesmo valor
-        
+        const originalAmountForApi = cardDisplayCents ? cardAmountCents : cardAmountCents;
         const installmentValue = Math.ceil(displayAmountToUse / installments);
         
-        setCardAmount(originalAmountForApi);
-        setCardInstallments(installments);
-        
-        // Salvar o valor final para exibição (evita re-simulação)
+        // 1. PRIMEIRO: Definir selectedOption (valor para exibição)
         setSelectedOption({
           id: 'saved',
-          totalCents: originalAmountForApi,       // Valor para enviar à API
-          displayCents: displayAmountToUse,       // Valor FINAL para exibição (já calculado)
+          totalCents: originalAmountForApi,
+          displayCents: displayAmountToUse,
           installments: installments,
           installmentValueCents: installmentValue
         });
+        
+        // 2. Definir outros estados
+        setCardAmount(originalAmountForApi);
+        setCardInstallments(installments);
+        setCharge({ ...paymentLink, payment_splits: splitData });
+        
+        // 3. POR ÚLTIMO: Definir pixPaid (trigger do banner verde)
+        if (pixSplit) {
+          setPixAmount(pixSplit.amount_cents);
+          setPixPaid(pixSplit.status === 'concluded');
+        }
         
         console.log('[PaymentCard] ✅ Dados carregados:', {
           cardAmountCents,
