@@ -16,6 +16,7 @@ export default function PaymentCard() {
   const [loading, setLoading] = useState(true);
   const [charge, setCharge] = useState<any>(null);
   const [cardAmount, setCardAmount] = useState(0); // Valor ORIGINAL em centavos
+  const [cardDisplayAmount, setCardDisplayAmount] = useState<number>(0); // Valor COM JUROS para exibição
   const [cardInstallments, setCardInstallments] = useState(1);
   const [selectedOption, setSelectedOption] = useState<any>(null);
   const [pixPaid, setPixPaid] = useState(false);
@@ -115,7 +116,13 @@ export default function PaymentCard() {
         const originalAmountForApi = cardDisplayCents ? cardAmountCents : cardAmountCents;
         const installmentValue = Math.ceil(displayAmountToUse / installments);
         
-        // 1. PRIMEIRO: Definir selectedOption (valor para exibição)
+        // ✅ CORREÇÃO DEFINITIVA: Definir cardDisplayAmount PRIMEIRO
+        // Este é o valor que será exibido no banner verde (R$ 23,72)
+        setCardDisplayAmount(displayAmountToUse);
+        
+        // Definir outros estados
+        setCardAmount(originalAmountForApi);
+        setCardInstallments(installments);
         setSelectedOption({
           id: 'saved',
           totalCents: originalAmountForApi,
@@ -123,10 +130,6 @@ export default function PaymentCard() {
           installments: installments,
           installmentValueCents: installmentValue
         });
-        
-        // 2. Definir outros estados
-        setCardAmount(originalAmountForApi);
-        setCardInstallments(installments);
         setCharge({ ...paymentLink, payment_splits: splitData });
         
         // 3. POR ÚLTIMO: Definir pixPaid (trigger do banner verde)
@@ -231,7 +234,7 @@ export default function PaymentCard() {
                   PIX confirmado: {formatCurrency(pixAmount)}
                 </p>
                 <p className="text-emerald-600 dark:text-emerald-300">
-                  Agora complete o pagamento de {formatCurrency(selectedOption?.displayCents || cardAmount)} no cartão.
+                  Agora complete o pagamento de {formatCurrency(cardDisplayAmount || cardAmount)} no cartão.
                 </p>
               </div>
             </div>
@@ -240,9 +243,8 @@ export default function PaymentCard() {
 
         {/* Amount Summary */}
         {(() => {
-          // ✅ CORREÇÃO: Usar SEMPRE o displayCents salvo - NÃO re-simular
-          // displayCents já contém o valor final (com juros) calculado no checkout
-          const displayAmountCents = selectedOption?.displayCents || cardAmount;
+          // ✅ CORREÇÃO: Usar cardDisplayAmount diretamente
+          const displayAmountCents = cardDisplayAmount || cardAmount;
           const installmentValueCents = Math.ceil(displayAmountCents / cardInstallments);
           
           return (
@@ -258,11 +260,10 @@ export default function PaymentCard() {
           );
         })()}
 
-        {/* Payment Form - ENVIA valor ORIGINAL para API, exibe valor COM JUROS */}
-        {/* ✅ CORREÇÃO: Usar displayCents salvo - NÃO re-simular */}
+        {/* ✅ CORREÇÃO: Usar cardDisplayAmount - valor COM JUROS */}
         <PaymentForm
           amount={cardAmount / 100}           // Valor para API
-          amountDisplay={(selectedOption?.displayCents || cardAmount) / 100} // Valor FINAL com juros
+          amountDisplay={(cardDisplayAmount || cardAmount) / 100} // Valor FINAL com juros
           installments={cardInstallments}
           productName={charge?.description || 'Pagamento'}
           onSuccess={handlePaymentSuccess}
