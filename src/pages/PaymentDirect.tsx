@@ -313,6 +313,7 @@ export default function PaymentDirect() {
                   customResult={option.isCustom ? customResult : undefined}
                   onSelectInstallmentsChange={handleSelectInstallmentsChange}
                   selectResult={option.isSelectInstallments ? selectResult : undefined}
+                  installmentConditions={option.isSelectInstallments ? simulation?.simulation?.conditions : undefined}
                 />
               ))}
             </div>
