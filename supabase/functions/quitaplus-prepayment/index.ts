@@ -238,6 +238,29 @@ DETALHES TÉCNICOS:
         const quitaData = JSON.parse(responseText);
         const prePaymentKey = quitaData.prePaymentKey || quitaData.pre_payment_key;
 
+        // VALIDAÇÃO CRÍTICA: Não atualizar status se prePaymentKey não existir
+        if (!prePaymentKey) {
+          console.error('[quitaplus-prepayment] API retornou sucesso HTTP mas sem prePaymentKey:', responseText);
+          
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'API retornou resposta inválida - prePaymentKey ausente',
+              apiRawResponse: responseText,
+              apiMetadata: {
+                httpStatus: quitaResponse.status,
+                httpStatusText: quitaResponse.statusText,
+                httpHeaders: Object.fromEntries(quitaResponse.headers.entries()),
+                requestUrl: fullUrl
+              }
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
         console.log('[quitaplus-prepayment] Pré-pagamento autorizado com sucesso, prePaymentKey:', prePaymentKey);
 
         // Atualizar payment_splits com pre_payment_key
