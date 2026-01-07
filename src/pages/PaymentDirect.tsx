@@ -290,7 +290,7 @@ export default function PaymentDirect() {
               productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
               onSuccess={handlePaymentSuccess}
               skipSplitCheck={true}
-              disableSubmit={!selectedOption || isSimulating}
+              disableSubmit={!selectedOption || isSimulating || (selectedOption?.isCustom && customAmount <= 0)}
               initialPayerData={{
                 name: charge.payer_name || '',
                 email: charge.payer_email || '',
