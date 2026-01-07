@@ -113,6 +113,16 @@ const formatPhone = (phone: string) => {
   return phone;
 };
 
+const formatDocument = (doc: string) => {
+  const clean = doc.replace(/\D/g, '');
+  if (clean.length === 11) {
+    return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  } else if (clean.length === 14) {
+    return clean.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  }
+  return doc;
+};
+
 const formatCurrency = (cents: number) => {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -1299,6 +1309,7 @@ export default function ChargeHistory() {
                       <div>
                         <h3 className="font-semibold text-ds-text-strong">{charge.payer_name}</h3>
                         <p className="text-sm text-ds-text-muted">{charge.payer_email}</p>
+                        <p className="text-xs text-ds-text-muted">{formatDocument(charge.payer_document)}</p>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -1314,7 +1325,7 @@ export default function ChargeHistory() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
                     <InfoCard
                       icon={CreditCard}
                       label="Valor Total"
@@ -1331,6 +1342,11 @@ export default function ChargeHistory() {
                       icon={Phone}
                       label="Telefone"
                       value={formatPhone(charge.payer_phone)}
+                    />
+                    <InfoCard
+                      icon={User}
+                      label="CPF/CNPJ"
+                      value={formatDocument(charge.payer_document)}
                     />
                     <InfoCard
                       icon={FileText}
@@ -1420,6 +1436,7 @@ export default function ChargeHistory() {
                     <InfoCard icon={User} label="Pagador" value={selectedCharge.payer_name} />
                     <InfoCard icon={Mail} label="Email" value={selectedCharge.payer_email} />
                     <InfoCard icon={Phone} label="Telefone" value={formatPhone(selectedCharge.payer_phone)} />
+                    <InfoCard icon={FileText} label="CPF/CNPJ" value={formatDocument(selectedCharge.payer_document)} />
                     <InfoCard icon={CreditCard} label="Valor" value={formatCurrency(selectedCharge.amount)} variant="primary" />
                   </div>
                   
