@@ -4,8 +4,15 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { PaymentOption } from '@/types/payment-options';
 import { formatCurrency } from '@/lib/utils';
-import { Clock, Zap, TrendingUp, DollarSign } from 'lucide-react';
+import { Clock, Zap, TrendingUp, DollarSign, ListOrdered } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface CheckoutOptionCardProps {
   option: PaymentOption;
@@ -17,6 +24,12 @@ interface CheckoutOptionCardProps {
     totalCents: number;
     installmentValueCents: number;
   } | null;
+  onSelectInstallmentsChange?: (installments: number) => void;
+  selectResult?: {
+    installments: number;
+    totalCents: number;
+    installmentValueCents: number;
+  } | null;
 }
 
 export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
@@ -24,7 +37,9 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
   isSelected,
   onSelect,
   onCustomValueChange,
-  customResult
+  customResult,
+  onSelectInstallmentsChange,
+  selectResult
 }) => {
   const [localAmount, setLocalAmount] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -60,7 +75,58 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
     }
   };
 
+  const handleInstallmentSelect = (value: string) => {
+    const installments = parseInt(value, 10);
+    if (onSelectInstallmentsChange && installments > 0) {
+      onSelectInstallmentsChange(installments);
+    }
+  };
+
   const renderOptionContent = () => {
+    // Opção de Seleção de Parcelas
+    if (option.isSelectInstallments) {
+      return (
+        <div className="space-y-3">
+          {selectResult ? (
+            <>
+              <div className="flex flex-wrap items-baseline gap-1">
+                <span className="text-xl font-semibold tracking-tight text-foreground">
+                  {formatCurrency(selectResult.installmentValueCents)}
+                </span>
+                <span className="text-xs font-medium text-muted-foreground">
+                  em {selectResult.installments}x
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Total: {formatCurrency(selectResult.totalCents)}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="text-xl font-semibold text-muted-foreground">R$ --,--</div>
+              <p className="text-xs text-muted-foreground">
+                Selecione a quantidade de parcelas
+              </p>
+            </>
+          )}
+          
+          <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+            <Select onValueChange={handleInstallmentSelect} value={selectResult ? String(selectResult.installments) : undefined}>
+              <SelectTrigger className="h-10 bg-background border-border rounded-xl">
+                <SelectValue placeholder="Selecione as parcelas" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border-border z-50">
+                {[2, 3, 4, 5, 7, 8, 9, 10, 11].map(n => (
+                  <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      );
+    }
+
+    // Opção de Valor Personalizado
     if (option.isCustom) {
       return (
         <div className="space-y-3">
@@ -117,6 +183,7 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
       );
     }
 
+    // Opções padrão (À vista, Popular, Menor valor)
     return (
       <div className="space-y-1">
         <div className="flex flex-wrap items-baseline gap-1">
@@ -158,6 +225,8 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
         return <Zap className={iconClass} />;
       case 'popular':
         return <TrendingUp className={iconClass} />;
+      case 'select':
+        return <ListOrdered className={iconClass} />;
       case 'custom':
         return <DollarSign className={iconClass} />;
       default:
@@ -173,6 +242,8 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
         return 'Pagamento único sem parcelamento';
       case 'popular':
         return 'A opção mais escolhida pelos nossos clientes';
+      case 'select':
+        return 'Escolha quantas vezes deseja parcelar';
       case 'custom':
         return 'Escolha o valor da parcela que cabe no seu bolso';
       default:

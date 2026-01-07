@@ -27,6 +27,12 @@ export default function PaymentDirect() {
     totalCents: number;
     installmentValueCents: number;
   } | null>(null);
+  const [selectInstallments, setSelectInstallments] = useState(0);
+  const [selectResult, setSelectResult] = useState<{
+    installments: number;
+    totalCents: number;
+    installmentValueCents: number;
+  } | null>(null);
 
   const { 
     data: simulation, 
@@ -192,10 +198,18 @@ export default function PaymentDirect() {
   // displayAmount = valor com juros simulados (exibido ao cliente)
   const originalAmount = charge.amount_cents; // SEMPRE o valor original da cobrança
   const displayAmount = selectedOption 
-    ? (selectedOption.isCustom ? customAmount : selectedOption.totalCents)
+    ? (selectedOption.isCustom 
+        ? customAmount 
+        : selectedOption.isSelectInstallments 
+          ? (selectResult?.totalCents || 0)
+          : selectedOption.totalCents)
     : 0; // Zero quando nenhuma opção selecionada
   const finalInstallments = selectedOption
-    ? (selectedOption.isCustom ? customInstallments : selectedOption.installments)
+    ? (selectedOption.isCustom 
+        ? customInstallments 
+        : selectedOption.isSelectInstallments 
+          ? selectInstallments
+          : selectedOption.installments)
     : 0; // Zero quando nenhuma opção selecionada
 
   const handleCustomValueChange = (desiredValueCents: number) => {
@@ -227,6 +241,27 @@ export default function PaymentDirect() {
         installments: closest.installments,
         totalCents: closest.totalAmount,
         installmentValueCents: closest.installmentAmount
+      });
+    }
+  };
+
+  const handleSelectInstallmentsChange = (installments: number) => {
+    if (!simulation?.simulation?.conditions) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível buscar opções de parcelamento.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const condition = simulation.simulation.conditions.find(c => c.installments === installments);
+    if (condition) {
+      setSelectInstallments(installments);
+      setSelectResult({
+        installments: condition.installments,
+        totalCents: condition.totalAmount,
+        installmentValueCents: condition.installmentAmount
       });
     }
   };
@@ -276,6 +311,8 @@ export default function PaymentDirect() {
                   onSelect={() => setSelectedOption(option)}
                   onCustomValueChange={handleCustomValueChange}
                   customResult={option.isCustom ? customResult : undefined}
+                  onSelectInstallmentsChange={handleSelectInstallmentsChange}
+                  selectResult={option.isSelectInstallments ? selectResult : undefined}
                 />
               ))}
             </div>
@@ -290,7 +327,7 @@ export default function PaymentDirect() {
               productName={charge.description || `Cobrança - ${charge.payer_name || 'Cliente'}`}
               onSuccess={handlePaymentSuccess}
               skipSplitCheck={true}
-              disableSubmit={!selectedOption || isSimulating || (selectedOption?.isCustom && customAmount <= 0)}
+              disableSubmit={!selectedOption || isSimulating || (selectedOption?.isCustom && customAmount <= 0) || (selectedOption?.isSelectInstallments && selectInstallments <= 0)}
               initialPayerData={{
                 name: charge.payer_name || '',
                 email: charge.payer_email || '',
