@@ -193,10 +193,10 @@ export default function PaymentDirect() {
   const originalAmount = charge.amount_cents; // SEMPRE o valor original da cobrança
   const displayAmount = selectedOption 
     ? (selectedOption.isCustom ? customAmount : selectedOption.totalCents)
-    : charge.amount_cents;
+    : 0; // Zero quando nenhuma opção selecionada
   const finalInstallments = selectedOption
     ? (selectedOption.isCustom ? customInstallments : selectedOption.installments)
-    : 1;
+    : 0; // Zero quando nenhuma opção selecionada
 
   const handleCustomValueChange = (desiredValueCents: number) => {
     if (desiredValueCents === 0) {
