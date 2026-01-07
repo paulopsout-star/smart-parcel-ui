@@ -180,7 +180,18 @@ export const mapSimulationToPaymentOptions = (
     });
   }
 
-  // 4️⃣ Valor personalizado (placeholder - será preenchido dinamicamente)
+  // 4️⃣ Escolher Parcelas (seletor)
+  options.push({
+    id: 'select',
+    title: 'Escolher Parcelas',
+    type: 'select',
+    totalCents: originalTotalCents,
+    installments: 0,
+    installmentValueCents: 0,
+    isSelectInstallments: true
+  });
+
+  // 5️⃣ Valor personalizado (placeholder - será preenchido dinamicamente)
   options.push({
     id: 'custom',
     title: 'Valor Personalizado',
