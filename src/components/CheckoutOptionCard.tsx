@@ -30,6 +30,7 @@ interface CheckoutOptionCardProps {
     totalCents: number;
     installmentValueCents: number;
   } | null;
+  installmentConditions?: { installments: number }[];
 }
 
 export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
@@ -39,7 +40,8 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
   onCustomValueChange,
   customResult,
   onSelectInstallmentsChange,
-  selectResult
+  selectResult,
+  installmentConditions
 }) => {
   const [localAmount, setLocalAmount] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -116,8 +118,10 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
                 <SelectValue placeholder="Selecione as parcelas" />
               </SelectTrigger>
               <SelectContent className="bg-background border-border z-50">
-                {[2, 3, 4, 5, 7, 8, 9, 10, 11].map(n => (
-                  <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                {installmentConditions?.map(condition => (
+                  <SelectItem key={condition.installments} value={String(condition.installments)}>
+                    {condition.installments}x
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
