@@ -565,12 +565,14 @@ export function PaymentForm({
                       <span className="text-muted-foreground truncate pr-2">{productName}</span>
                       <span className="font-medium text-foreground">R$ {displayValue.toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Parcelamento</span>
-                      <span className="font-medium text-foreground">
-                        {installments}x de R$ {installmentValue.toFixed(2)}
-                      </span>
-                    </div>
+                    {installments > 0 && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-muted-foreground">Parcelamento</span>
+                        <span className="font-medium text-foreground">
+                          {installments}x de R$ {installmentValue.toFixed(2)}
+                        </span>
+                      </div>
+                    )}
                     <Separator className="my-2" />
                     <div className="flex justify-between items-center pt-1">
                       <span className="font-medium text-foreground">Total</span>
