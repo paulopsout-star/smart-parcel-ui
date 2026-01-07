@@ -72,6 +72,36 @@ serve(async (req) => {
 
     console.log(`[sync-payment-status] Encontradas ${charges.length} cobranças para verificar`);
 
+    // CORREÇÃO: Detectar e corrigir cobranças com status inconsistente
+    // (status = 'pre_authorized' mas pre_payment_key = NULL)
+    const { data: inconsistentCharges } = await supabase
+      .from("charges")
+      .select("id, status")
+      .eq("status", "pre_authorized")
+      .is("pre_payment_key", null)
+      .gte("created_at", dateLimitISO);
+
+    if (inconsistentCharges && inconsistentCharges.length > 0) {
+      console.log(`[sync-payment-status] ⚠️ Encontradas ${inconsistentCharges.length} cobranças com status inconsistente (pre_authorized sem pre_payment_key)`);
+      
+      for (const charge of inconsistentCharges) {
+        const { error: fixError } = await supabase
+          .from("charges")
+          .update({ 
+            status: "pending", 
+            payment_authorized_at: null,
+            updated_at: new Date().toISOString() 
+          })
+          .eq("id", charge.id);
+        
+        if (fixError) {
+          console.error(`[sync-payment-status] Erro ao corrigir ${charge.id}:`, fixError);
+        } else {
+          console.log(`[sync-payment-status] ✅ Cobrança ${charge.id} corrigida: pre_authorized → pending`);
+        }
+      }
+    }
+
     const results: Array<{
       chargeId: string;
       oldStatus: string;
