@@ -327,11 +327,6 @@ export default function PaymentCard() {
                 ))}
               </SelectContent>
             </Select>
-            {cardAmount !== cardDisplayAmount && cardDisplayAmount > cardAmount && (
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                Valor original: {formatCurrency(cardAmount)} • Com juros: {formatCurrency(cardDisplayAmount)}
-              </p>
-            )}
           </div>
         )}
 
