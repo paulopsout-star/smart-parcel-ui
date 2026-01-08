@@ -66,6 +66,7 @@ interface Charge {
   fee_percentage?: number;
   pre_payment_key?: string;
   boleto_linha_digitavel?: string;
+  boleto_admin_linha_digitavel?: string; // Nova coluna para linha digitável do admin
   creditor_document?: string;
   creditor_name?: string;
   company_id?: string;
@@ -568,6 +569,10 @@ export default function ChargeHistory() {
   // Companies list for admin filter
   const [companies, setCompanies] = useState<Company[]>([]);
   
+  // Estado para vinculação manual de boleto (admin)
+  const [adminLinhaDigitavel, setAdminLinhaDigitavel] = useState('');
+  const [linkingBoleto, setLinkingBoleto] = useState(false);
+  
   // Filter state
   const [filters, setFilters] = useState<ChargeFilters>({
     status: 'all',
@@ -895,6 +900,76 @@ export default function ChargeHistory() {
 
   const handleViewExecutions = (chargeId: string, chargeName: string) => {
     setExecutionsDialog({ open: true, chargeId, chargeName });
+  };
+
+  // Função para admin vincular boleto manualmente
+  const handleAdminLinkBoleto = async (charge: Charge) => {
+    if (!adminLinhaDigitavel.trim()) {
+      toast({
+        title: "Erro",
+        description: "Informe a linha digitável do boleto.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const sanitized = adminLinhaDigitavel.replace(/\D/g, '');
+    if (sanitized.length < 47 || sanitized.length > 48) {
+      toast({
+        title: "Linha digitável inválida",
+        description: "A linha digitável deve ter 47 ou 48 dígitos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLinkingBoleto(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Sessão expirada",
+          description: "Faça login novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('admin-link-boleto', {
+        body: {
+          chargeId: charge.id,
+          linhaDigitavel: sanitized,
+        },
+      });
+
+      if (error || !data?.success) {
+        const errorMsg = error?.message || data?.error || 'Erro desconhecido';
+        toast({
+          title: "Erro ao vincular boleto",
+          description: errorMsg,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "✓ Boleto vinculado!",
+        description: "O boleto foi vinculado com sucesso ao pagamento.",
+      });
+
+      setAdminLinhaDigitavel('');
+      setSelectedCharge(null);
+      await fetchCharges();
+    } catch (err) {
+      console.error('Erro ao vincular boleto:', err);
+      toast({
+        title: "Erro inesperado",
+        description: "Falha ao vincular boleto. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLinkingBoleto(false);
+    }
   };
 
   const CheckoutButtons = ({ charge }: { charge: Charge }) => {
@@ -1324,6 +1399,13 @@ export default function ChargeHistory() {
                       )}
                       {getModernStatusBadge(getComputedStatus(charge))}
                       {charge.payment_method && getPaymentMethodBadge(charge.payment_method)}
+                      {/* Status do vínculo de boleto para pagamentos combinados */}
+                      {charge.payment_method === 'cartao_pix' && charge.pre_payment_key && (
+                        <Badge variant={charge.boleto_admin_linha_digitavel ? 'success' : 'warning'} className="gap-1 text-xs">
+                          <Link2 className="h-3 w-3" />
+                          {charge.boleto_admin_linha_digitavel ? 'Boleto Vinculado' : 'Aguardando Vínculo'}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </CardHeader>
@@ -1497,6 +1579,74 @@ export default function ChargeHistory() {
                           ))}
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {/* ADMIN: Exibir linha digitável original (apenas para pagamentos combinados) */}
+                  {isAdmin && selectedCharge.payment_method === 'cartao_pix' && selectedCharge.boleto_linha_digitavel && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-ds-text-strong flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Linha Digitável Original (Cadastro)
+                      </h4>
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                        <code className="text-xs break-all text-amber-800 dark:text-amber-200">{selectedCharge.boleto_linha_digitavel}</code>
+                        <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
+                          ⚠️ Apenas para referência - NÃO vinculada ao pagamento
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ADMIN: Campo para vincular boleto manualmente (pagamentos combinados) */}
+                  {isAdmin && 
+                   selectedCharge.payment_method === 'cartao_pix' &&
+                   selectedCharge.pre_payment_key &&
+                   !selectedCharge.boleto_admin_linha_digitavel && (
+                    <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <h4 className="font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2">
+                        <Link2 className="h-4 w-4" />
+                        Vincular Boleto Manualmente
+                      </h4>
+                      <p className="text-xs text-blue-600 dark:text-blue-300">
+                        Informe a linha digitável do boleto que será vinculado ao pagamento do cartão.
+                      </p>
+                      <Input
+                        placeholder="Digite a linha digitável (47 ou 48 dígitos)"
+                        value={adminLinhaDigitavel}
+                        onChange={(e) => setAdminLinhaDigitavel(e.target.value)}
+                        className="font-mono text-sm"
+                      />
+                      <Button 
+                        onClick={() => handleAdminLinkBoleto(selectedCharge)}
+                        disabled={adminLinhaDigitavel.replace(/\D/g, '').length < 47 || linkingBoleto}
+                        className="w-full gap-2"
+                      >
+                        {linkingBoleto ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Link2 className="h-4 w-4" />
+                        )}
+                        {linkingBoleto ? 'Vinculando...' : 'Vincular Boleto'}
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Status do vínculo manual (visível para todos) */}
+                  {selectedCharge.payment_method === 'cartao_pix' && selectedCharge.boleto_admin_linha_digitavel && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-ds-text-strong flex items-center gap-2">
+                        <Link2 className="h-4 w-4" />
+                        Boleto Vinculado (Admin)
+                      </h4>
+                      <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge variant="success">✓ Vinculado</Badge>
+                        </div>
+                        {isAdmin && (
+                          <code className="text-xs break-all text-green-800 dark:text-green-200">{selectedCharge.boleto_admin_linha_digitavel}</code>
+                        )}
+                      </div>
                     </div>
                   )}
 

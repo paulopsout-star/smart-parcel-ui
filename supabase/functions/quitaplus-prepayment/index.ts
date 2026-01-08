@@ -291,12 +291,12 @@ DETALHES TÉCNICOS:
         // ============================================
         // FASE 2: VÍNCULO AUTOMÁTICO DE BOLETO
         // ============================================
-        console.log('[quitaplus-prepayment] Iniciando vínculo automático de boleto...');
+        console.log('[quitaplus-prepayment] Verificando se deve vincular boleto automaticamente...');
 
         // Buscar dados da cobrança para vínculo do boleto
         const { data: charge, error: chargeError } = await supabase
           .from('charges')
-          .select('id, boleto_linha_digitavel, creditor_document, creditor_name')
+          .select('id, boleto_linha_digitavel, creditor_document, creditor_name, payment_method')
           .eq('id', requestData.chargeId)
           .single();
 
@@ -307,9 +307,19 @@ DETALHES TÉCNICOS:
         let boletoLinked = false;
         let linkBoletoError: any = null;
 
-        // Vincular boleto automaticamente se existir linha digitável
-        if (charge?.boleto_linha_digitavel && prePaymentKey) {
-          console.log('[quitaplus-prepayment] Linha digitável encontrada, vinculando boleto...', {
+        // ============================================
+        // NOVA REGRA: Para pagamentos combinados (PIX + Cartão),
+        // NÃO vincular boleto automaticamente.
+        // O admin deve fornecer manualmente a linha digitável.
+        // ============================================
+        if (charge?.payment_method === 'cartao_pix') {
+          console.log('[quitaplus-prepayment] Pagamento combinado (PIX + Cartão) detectado.');
+          console.log('[quitaplus-prepayment] Vínculo automático de boleto DESABILITADO para este tipo de pagamento.');
+          console.log('[quitaplus-prepayment] O administrador deve vincular manualmente via painel.');
+          // Não faz nada - o admin vai vincular manualmente depois
+        } else if (charge?.boleto_linha_digitavel && prePaymentKey) {
+          // Fluxo original para pagamentos APENAS cartão (não combinado)
+          console.log('[quitaplus-prepayment] Pagamento apenas cartão - vinculando boleto automaticamente...', {
             chargeId: requestData.chargeId,
             linhaDigitavelLength: charge.boleto_linha_digitavel.length,
             prePaymentKey: prePaymentKey,
@@ -345,18 +355,7 @@ DETALHES TÉCNICOS:
               };
               console.error('[quitaplus-prepayment] Erro no vínculo do boleto:', linkBoletoError);
 
-              // Atualizar cobrança com erro (não falha o fluxo)
-              await supabase
-                .from('charges')
-                .update({
-                  status: 'pre_authorized', // Mantém pre_authorized pois o vínculo falhou
-                  metadata: supabase.rpc ? undefined : {
-                    link_boleto_error: linkBoletoError,
-                  },
-                })
-                .eq('id', requestData.chargeId);
-
-              // Atualizar metadata separadamente para evitar sobrescrever
+              // Atualizar metadata com erro (não falha o fluxo)
               const { data: currentCharge } = await supabase
                 .from('charges')
                 .select('metadata')

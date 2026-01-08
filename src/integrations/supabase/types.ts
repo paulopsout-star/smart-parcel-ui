@@ -146,6 +146,7 @@ export type Database = {
       charges: {
         Row: {
           amount: number
+          boleto_admin_linha_digitavel: string | null
           boleto_barcode: string | null
           boleto_linha_digitavel: string | null
           boleto_linked_at: string | null
@@ -187,6 +188,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          boleto_admin_linha_digitavel?: string | null
           boleto_barcode?: string | null
           boleto_linha_digitavel?: string | null
           boleto_linked_at?: string | null
@@ -228,6 +230,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          boleto_admin_linha_digitavel?: string | null
           boleto_barcode?: string | null
           boleto_linha_digitavel?: string | null
           boleto_linked_at?: string | null
