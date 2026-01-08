@@ -7,7 +7,15 @@ import { PaymentForm } from '@/components/PaymentForm';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { CreditCard, CheckCircle2 } from 'lucide-react';
-import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
+import { usePaymentSimulation, InstallmentCondition } from '@/hooks/usePaymentSimulation';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 export default function PaymentCard() {
   const { id } = useParams<{ id: string }>();
@@ -21,9 +29,34 @@ export default function PaymentCard() {
   const [selectedOption, setSelectedOption] = useState<any>(null);
   const [pixPaid, setPixPaid] = useState(false);
   const [pixAmount, setPixAmount] = useState(0);
+  const [isCombinedPayment, setIsCombinedPayment] = useState(false);
   
   // Buscar simulação para calcular valor com juros (para exibição)
-  const { data: simulation } = usePaymentSimulation(cardAmount > 0 ? cardAmount : null);
+  const { data: simulation, isLoading: simulationLoading } = usePaymentSimulation(cardAmount > 0 ? cardAmount : null);
+  
+  // Extrair opções de parcelas da simulação
+  const installmentOptions: InstallmentCondition[] = simulation?.simulation?.conditions || [];
+
+  // Handler para mudança de parcelas
+  const handleInstallmentsChange = (newInstallments: number) => {
+    const condition = installmentOptions.find(c => c.installments === newInstallments);
+    if (condition) {
+      setCardInstallments(newInstallments);
+      setCardDisplayAmount(condition.totalAmount);
+      setSelectedOption({
+        id: 'selected',
+        totalCents: cardAmount,
+        displayCents: condition.totalAmount,
+        installments: newInstallments,
+        installmentValueCents: condition.installmentAmount
+      });
+      console.log('[PaymentCard] Parcelas alteradas:', {
+        installments: newInstallments,
+        displayAmount: condition.totalAmount,
+        installmentValue: condition.installmentAmount
+      });
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -106,6 +139,10 @@ export default function PaymentCard() {
           return;
         }
 
+        // ✅ Detectar pagamento combinado (PIX + Cartão)
+        const hasBothMethods = pixSplit && cardSplit;
+        setIsCombinedPayment(hasBothMethods);
+
         // ✅ CORREÇÃO: Calcular e definir selectedOption ANTES de pixPaid
         // para evitar race condition no render do banner
         const cardAmountCents = cardSplit.amount_cents;
@@ -144,7 +181,8 @@ export default function PaymentCard() {
           displayAmountToUse,
           originalAmountForApi,
           installments,
-          installmentValue
+          installmentValue,
+          isCombinedPayment: hasBothMethods
         });
         
         setLoading(false);
@@ -259,6 +297,43 @@ export default function PaymentCard() {
             </div>
           );
         })()}
+
+        {/* ✅ NOVO: Seletor de Parcelas para pagamentos combinados */}
+        {isCombinedPayment && installmentOptions.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl p-4 mb-6">
+            <Label className="text-sm font-medium text-foreground mb-3 block">
+              Escolha o parcelamento
+            </Label>
+            <Select
+              value={String(cardInstallments)}
+              onValueChange={(val) => handleInstallmentsChange(Number(val))}
+              disabled={simulationLoading}
+            >
+              <SelectTrigger className="w-full h-12 rounded-xl text-sm">
+                <SelectValue placeholder={simulationLoading ? "Carregando..." : "Selecione o parcelamento"} />
+              </SelectTrigger>
+              <SelectContent>
+                {installmentOptions.map((opt) => (
+                  <SelectItem key={opt.installments} value={String(opt.installments)}>
+                    <div className="flex items-center justify-between w-full gap-4">
+                      <span className="font-medium">
+                        {opt.installments}x de {formatCurrency(opt.installmentAmount)}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        Total: {formatCurrency(opt.totalAmount)}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {cardAmount !== cardDisplayAmount && cardDisplayAmount > cardAmount && (
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                Valor original: {formatCurrency(cardAmount)} • Com juros: {formatCurrency(cardDisplayAmount)}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ✅ CORREÇÃO: Usar cardDisplayAmount - valor COM JUROS */}
         <PaymentForm
