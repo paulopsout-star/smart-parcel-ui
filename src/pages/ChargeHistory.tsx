@@ -113,7 +113,8 @@ const formatPhone = (phone: string) => {
   return phone;
 };
 
-const formatDocument = (doc: string) => {
+const formatDocument = (doc: string | null | undefined) => {
+  if (!doc) return '-';
   const clean = doc.replace(/\D/g, '');
   if (clean.length === 11) {
     return clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
@@ -251,13 +252,14 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     : '5.0';
 
   // Cálculos para Cartão - usar valor do split se disponível
-  const cardBase = charge.card_amount || 0;
-  const cardTotal = isAdmin 
-    ? (cardSplit?.display_amount_cents || cardSplit?.amount_cents || cardBase)
-    : (cardSplit?.amount_cents || cardBase);
-  const cardFee = cardTotal - cardBase;
-  const cardFeePercent = cardBase > 0 && cardFee > 0 
-    ? ((cardFee / cardBase) * 100).toFixed(1) 
+  // Para pagamentos 100% cartão, usar charge.amount como base quando card_amount for null
+  const cardBase = charge.card_amount || (charge.payment_method === 'cartao' ? charge.amount : 0);
+  const cardTotalWithInterest = cardSplit?.display_amount_cents || cardSplit?.amount_cents || cardBase;
+  const cardTotal = isAdmin ? cardTotalWithInterest : cardBase;
+  const cardFeeAmount = cardTotalWithInterest - cardBase;
+  const cardFee = isAdmin ? cardFeeAmount : 0;
+  const cardFeePercent = cardBase > 0 && cardFeeAmount > 0 
+    ? ((cardFeeAmount / cardBase) * 100).toFixed(1) 
     : '0';
 
   // Verificar se o split está pago
@@ -663,6 +665,7 @@ export default function ChargeHistory() {
             id,
             method,
             amount_cents,
+            display_amount_cents,
             status,
             pix_paid_at,
             pre_payment_key,
