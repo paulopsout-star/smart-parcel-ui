@@ -712,10 +712,6 @@ export default function NewCharge() {
                         {...register("boleto_linha_digitavel")}
                         placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
                       />
-                      <p className="text-xs text-amber-600 flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        Apenas para referência do administrador - sem função de vinculação
-                      </p>
                     </div>
                   </CardContent>
                 </Card>
