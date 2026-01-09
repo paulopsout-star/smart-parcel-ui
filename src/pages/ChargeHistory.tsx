@@ -1582,34 +1582,38 @@ export default function ChargeHistory() {
                     </div>
                   )}
 
-                  {/* ADMIN: Exibir linha digitável original (apenas para pagamentos combinados) */}
-                  {isAdmin && selectedCharge.payment_method === 'cartao_pix' && selectedCharge.boleto_linha_digitavel && (
+                  {/* ADMIN: Exibir linha digitável para TODOS os tipos de pagamento */}
+                  {isAdmin && selectedCharge.boleto_linha_digitavel && (
                     <div className="space-y-2">
                       <h4 className="font-medium text-ds-text-strong flex items-center gap-2">
                         <FileText className="h-4 w-4" />
-                        Linha Digitável Original (Cadastro)
+                        Linha Digitável {selectedCharge.payment_method === 'cartao_pix' ? '(Cadastro)' : ''}
                       </h4>
                       <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
-                        <code className="text-xs break-all text-amber-800 dark:text-amber-200">{selectedCharge.boleto_linha_digitavel}</code>
-                        <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
-                          ⚠️ Apenas para referência - NÃO vinculada ao pagamento
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ADMIN: Exibir linha digitável para transações PIX (apenas referência) */}
-                  {isAdmin && selectedCharge.payment_method === 'pix' && selectedCharge.boleto_linha_digitavel && (
-                    <div className="space-y-2">
-                      <h4 className="font-medium text-ds-text-strong flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        Linha Digitável (Referência)
-                      </h4>
-                      <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
-                        <code className="text-xs break-all text-amber-800 dark:text-amber-200">{selectedCharge.boleto_linha_digitavel}</code>
+                        <div className="flex items-center justify-between gap-2">
+                          <code className="text-xs break-all text-amber-800 dark:text-amber-200 flex-1">
+                            {selectedCharge.boleto_linha_digitavel}
+                          </code>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => copyToClipboard(selectedCharge.boleto_linha_digitavel!)}
+                            className="shrink-0"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
                         <p className="text-xs text-amber-600 dark:text-amber-300 mt-1 flex items-center gap-1">
                           <Info className="h-3 w-3" />
-                          Apenas para referência - sem função de vinculação
+                          {selectedCharge.payment_method === 'cartao_pix' 
+                            ? 'Linha do cadastro - pode diferir do boleto vinculado'
+                            : selectedCharge.payment_method === 'cartao'
+                            ? 'Boleto original utilizado para o pagamento com cartão'
+                            : selectedCharge.payment_method === 'pix'
+                            ? 'Apenas para referência - sem vinculação automática'
+                            : selectedCharge.payment_method === 'boleto'
+                            ? 'Boleto emitido para pagamento'
+                            : 'Linha digitável do boleto'}
                         </p>
                       </div>
                     </div>
