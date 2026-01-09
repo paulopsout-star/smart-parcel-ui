@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Receipt, Banknote, Calculator, CreditCard, QrCode } from "lucide-react";
+import { User, Receipt, Banknote, Calculator, CreditCard, QrCode, AlertCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -272,7 +272,7 @@ export default function NewCharge() {
           has_boleto: data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
           has_boleto_link: requiresBoleto,
-          boleto_linha_digitavel: requiresBoleto ? normalizedLinhaDigitavel : null,
+          boleto_linha_digitavel: normalizedLinhaDigitavel || null,
           pix_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.pix_amount || '0') : null,
           card_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.card_amount || '0') : null,
           creditor_document: creditorSettings?.creditor_document || null,
@@ -689,6 +689,32 @@ export default function NewCharge() {
                       )}
                       <p className="text-xs text-ds-text-muted">
                         A linha digitável será vinculada automaticamente após a autorização do cartão
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Linha Digitável para PIX - Opcional (apenas referência para admin) */}
+              {watchPaymentMethod === "pix" && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Banknote className="h-5 w-5 text-primary" />
+                      Linha Digitável (Opcional)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="boleto_linha_digitavel">Linha Digitável</Label>
+                      <Input
+                        id="boleto_linha_digitavel"
+                        {...register("boleto_linha_digitavel")}
+                        placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
+                      />
+                      <p className="text-xs text-amber-600 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Apenas para referência do administrador - sem função de vinculação
                       </p>
                     </div>
                   </CardContent>

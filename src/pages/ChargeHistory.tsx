@@ -1598,6 +1598,23 @@ export default function ChargeHistory() {
                     </div>
                   )}
 
+                  {/* ADMIN: Exibir linha digitável para transações PIX (apenas referência) */}
+                  {isAdmin && selectedCharge.payment_method === 'pix' && selectedCharge.boleto_linha_digitavel && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-ds-text-strong flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Linha Digitável (Referência)
+                      </h4>
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                        <code className="text-xs break-all text-amber-800 dark:text-amber-200">{selectedCharge.boleto_linha_digitavel}</code>
+                        <p className="text-xs text-amber-600 dark:text-amber-300 mt-1 flex items-center gap-1">
+                          <Info className="h-3 w-3" />
+                          Apenas para referência - sem função de vinculação
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* ADMIN: Campo para vincular boleto manualmente (pagamentos combinados) */}
                   {isAdmin && 
                    selectedCharge.payment_method === 'cartao_pix' &&
