@@ -96,7 +96,71 @@ export default function ThankYou() {
 
   useDocumentTitle('Pagamento Confirmado - Sistema de Cobrança');
 
+  // Dados fictícios para demonstração (PIX + Cartão)
+  const DEMO_COMBINED_DATA: ThankYouData = {
+    paid: true,
+    message: 'Obrigado! Seu pagamento combinado foi processado com sucesso.',
+    charge: {
+      id: 'demo-abc12345-6789-pix-card',
+      type: 'cartao_pix',
+      total_amount_cents: 150000, // R$ 1.500,00
+      total_paid_cents: 150000,
+      currency: 'BRL',
+      paid: true,
+      paid_at: new Date().toISOString(),
+    },
+    splits: [
+      {
+        id: 'split-pix-demo-001',
+        method: 'PIX',
+        amount_cents: 50000, // R$ 500,00
+        status: 'concluded',
+        processed_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 min atrás
+      },
+      {
+        id: 'split-card-demo-002',
+        method: 'CREDIT_CARD',
+        amount_cents: 100000, // R$ 1.000,00
+        status: 'concluded',
+        processed_at: new Date().toISOString(),
+      }
+    ],
+    transactions: [
+      {
+        id: 'txn-pix-demo-001',
+        created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+        amount_cents: 50000,
+        method: 'PIX',
+        transaction_id: 'E60746948202501091234abcdef123456',
+      },
+      {
+        id: 'txn-card-demo-002',
+        created_at: new Date().toISOString(),
+        amount_cents: 100000,
+        method: 'CREDIT_CARD',
+        transaction_id: 'AUTH-789456123',
+      }
+    ],
+    company: {
+      name: 'Autonegocie Soluções LTDA',
+      email: 'contato@autonegocie.com.br',
+      phone: '(11) 98765-4321',
+    },
+    ui: {
+      return_url: '/',
+      support_email: 'suporte@autonegocie.com.br',
+    }
+  };
+
   const loadData = async () => {
+    // Modo demo - dados fictícios para demonstração
+    const demoParam = searchParams.get('demo');
+    if (demoParam === 'combined') {
+      setData(DEMO_COMBINED_DATA);
+      setLoading(false);
+      return;
+    }
+
     // Montar query params para a edge function
     const queryParams = new URLSearchParams();
     if (token) queryParams.set('pl', token);
