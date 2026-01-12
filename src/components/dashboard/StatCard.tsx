@@ -46,11 +46,13 @@ export function StatCard({
       </div>
 
       {/* Value */}
-      <div className="mb-2">
+      <div className="mb-2 min-w-0">
         <span 
-          className="font-bold text-ds-text-strong tracking-tight whitespace-nowrap"
+          className="font-bold text-ds-text-strong tracking-tight whitespace-nowrap block max-w-full"
           style={{ 
-            fontSize: 'clamp(1.25rem, 2.2vw, 2rem)',
+            fontSize: String(value).length >= 12 
+              ? 'clamp(1rem, 1.2vw, 1.5rem)' 
+              : 'clamp(1.125rem, 1.6vw, 1.75rem)',
             lineHeight: '1.2',
             fontVariantNumeric: 'tabular-nums'
           }}
