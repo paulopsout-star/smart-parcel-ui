@@ -8,15 +8,16 @@ const corsHeaders = {
 
 // Mapeamento de statusCode da API Cappta para status interno
 const statusCodeMap: Record<number, string> = {
-  1: "pre_authorized",      // Received
-  2: "cancelled",           // Canceled
-  3: "boleto_linked",       // BarcodeAssigned
-  4: "processing",          // Settled
-  5: "payment_denied",      // PaymentDenied
-  6: "approved",            // PaymentValidated
-  7: "awaiting_validation", // AwaitingPayerValidation
-  8: "validating",          // ValidatingPayment
-  9: "completed",           // Paid
+  1: "pre_authorized",       // Received
+  2: "cancelled",            // Canceled
+  3: "boleto_linked",        // BarcodeAssigned
+  4: "processing",           // Settled
+  5: "payment_denied",       // PaymentDenied
+  6: "approved",             // PaymentValidated
+  7: "awaiting_validation",  // AwaitingPayerValidation
+  8: "validating",           // ValidatingPayment
+  9: "completed",            // Paid
+  50: "cnpj_nao_cadastrado", // MissingRegistryBankslipCNPJ - CNPJ não cadastrado
 };
 
 // Período de verificação: últimos 90 dias

@@ -107,15 +107,16 @@ serve(async (req) => {
 
     // Mapeamento statusCode → status interno do sistema
     const statusCodeMap: Record<number, string> = {
-      1: 'pre_authorized',      // Received - pré-pagamento foi criado
-      2: 'cancelled',           // Canceled - prazo expirou ou valor diferente
-      3: 'boleto_linked',       // BarcodeAssigned - boleto anexado
-      4: 'validating',          // Settled - analisado pelo robô
-      5: 'payment_denied',      // PaymentDenied - risco não aprovou
-      6: 'approved',            // PaymentValidated - risco aprovou
-      7: 'awaiting_validation', // AwaitingPayerValidation - aguardando PIN
-      8: 'validating',          // ValidatingPayment - risco analisando
-      9: 'completed',           // Paid - boleto foi pago
+      1: 'pre_authorized',       // Received - pré-pagamento foi criado
+      2: 'cancelled',            // Canceled - prazo expirou ou valor diferente
+      3: 'boleto_linked',        // BarcodeAssigned - boleto anexado
+      4: 'validating',           // Settled - analisado pelo robô
+      5: 'payment_denied',       // PaymentDenied - risco não aprovou
+      6: 'approved',             // PaymentValidated - risco aprovou
+      7: 'awaiting_validation',  // AwaitingPayerValidation - aguardando PIN
+      8: 'validating',           // ValidatingPayment - risco analisando
+      9: 'completed',            // Paid - boleto foi pago
+      50: 'cnpj_nao_cadastrado', // MissingRegistryBankslipCNPJ - CNPJ não cadastrado
     };
 
     const internalStatus = statusCode ? statusCodeMap[statusCode] || 'pending' : null;
