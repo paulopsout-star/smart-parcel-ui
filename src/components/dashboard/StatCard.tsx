@@ -50,9 +50,7 @@ export function StatCard({
         <span 
           className="font-bold text-ds-text-strong tracking-tight whitespace-nowrap block max-w-full"
           style={{ 
-            fontSize: String(value).length >= 12 
-              ? 'clamp(1rem, 1.2vw, 1.5rem)' 
-              : 'clamp(1.125rem, 1.6vw, 1.75rem)',
+            fontSize: 'clamp(1rem, 1.4vw, 1.5rem)',
             lineHeight: '1.2',
             fontVariantNumeric: 'tabular-nums'
           }}
