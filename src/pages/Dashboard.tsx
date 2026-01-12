@@ -214,8 +214,8 @@ export default function Dashboard() {
             Resumo
           </h2>
           <div 
-            className="grid gap-3 lg:gap-4"
-            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}
+            className="grid gap-3 lg:gap-4 overflow-x-auto"
+            style={{ gridTemplateColumns: 'repeat(6, minmax(180px, 1fr))' }}
           >
             <StatCard
               icon={CreditCard}
