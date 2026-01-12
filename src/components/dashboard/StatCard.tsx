@@ -29,7 +29,7 @@ export function StatCard({
       className={cn(
         'relative bg-ds-bg-surface rounded-card p-4 lg:p-5 xl:p-6 shadow-card-soft',
         'transition-all duration-200 hover:shadow-floating hover:scale-[1.01]',
-        'overflow-hidden min-h-[160px] h-full flex flex-col',
+        'overflow-hidden min-h-[180px] h-full flex flex-col justify-between',
         variant === 'highlight' && 'ring-2 ring-brand/20',
         className
       )}
@@ -46,7 +46,7 @@ export function StatCard({
       </div>
 
       {/* Value */}
-      <div className="mb-1 flex-grow flex items-start">
+      <div className="mb-2">
         <span 
           className="font-bold text-ds-text-strong tracking-tight whitespace-nowrap"
           style={{ 

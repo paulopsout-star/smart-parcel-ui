@@ -16,8 +16,7 @@ import { SimulatorModal } from '@/components/SimulatorModal';
 import { 
   DashboardShell, 
   StatCard, 
-  QuickActionCard, 
-  WelcomeCard 
+  QuickActionCard 
 } from '@/components/dashboard';
 import { Badge } from '@/components/ui/badge';
 
@@ -157,6 +156,16 @@ export default function Dashboard() {
   return (
     <DashboardShell>
       <div className="space-y-8">
+        {/* Welcome Message */}
+        <section>
+          <h1 className="text-2xl font-semibold text-ds-text-strong">
+            Bem-vindo ao Sistema de Cobrança
+          </h1>
+          <p className="text-ds-text-muted mt-1">
+            Gerencie suas cobranças pontuais e recorrentes integradas com o Quita+.
+          </p>
+        </section>
+
         {/* Admin/Company Indicator */}
         <section className="flex items-center gap-3">
           {isAdmin ? (
@@ -257,11 +266,6 @@ export default function Dashboard() {
               description="PIX ou cartão pago, outro pendente"
             />
           </div>
-        </section>
-
-        {/* Welcome Card */}
-        <section>
-          <WelcomeCard />
         </section>
 
         {/* Simulator Modal */}
