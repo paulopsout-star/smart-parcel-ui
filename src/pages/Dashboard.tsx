@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { 
   CreditCard, 
   TrendingUp, 
-  Calendar,
   Plus,
   BarChart3,
   Calculator,
   Users,
   CheckCircle,
   Building2,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,7 +26,9 @@ interface DashboardStats {
   activeCharges: number;
   completedCharges: number;
   totalAmount: number;
-  recurringCharges: number;
+  completedAmount: number;
+  combinedPendingCount: number;
+  combinedPaidAmount: number;
 }
 
 interface Company {
@@ -41,7 +43,9 @@ export default function Dashboard() {
     activeCharges: 0,
     completedCharges: 0,
     totalAmount: 0,
-    recurringCharges: 0,
+    completedAmount: 0,
+    combinedPendingCount: 0,
+    combinedPaidAmount: 0,
   });
   const [loading, setLoading] = useState(true);
   const [showSimulatorModal, setShowSimulatorModal] = useState(false);
@@ -76,27 +80,65 @@ export default function Dashboard() {
     if (!profile?.company_id) return;
     
     try {
-      const { data: charges, error } = await supabase
+      // Buscar cobranças
+      const { data: charges, error: chargesError } = await supabase
         .from('charges')
         .select('*');
 
-      if (error) {
-        console.error('Error loading stats:', error);
+      if (chargesError) {
+        console.error('Error loading charges:', chargesError);
         return;
       }
 
+      // Buscar payment_splits para identificar combinados pendentes
+      const { data: splits, error: splitsError } = await supabase
+        .from('payment_splits')
+        .select('charge_id, method, status, amount_cents')
+        .not('charge_id', 'is', null);
+
+      if (splitsError) {
+        console.error('Error loading splits:', splitsError);
+      }
+
+      // Calcular estatísticas de cobranças
       const totalCharges = charges?.length || 0;
       const activeCharges = charges?.filter(c => c.status === 'pending' || c.status === 'processing').length || 0;
       const completedCharges = charges?.filter(c => c.status === 'completed').length || 0;
       const totalAmount = charges?.reduce((sum, c) => sum + c.amount, 0) || 0;
-      const recurringCharges = charges?.filter(c => c.recurrence_type !== 'pontual').length || 0;
+      const completedAmount = charges
+        ?.filter(c => c.status === 'completed')
+        .reduce((sum, c) => sum + c.amount, 0) || 0;
+
+      // Agrupar splits por charge_id para identificar combinados
+      const chargeGroups = (splits || []).reduce((acc, split) => {
+        const chargeId = split.charge_id;
+        if (!chargeId) return acc;
+        if (!acc[chargeId]) acc[chargeId] = [];
+        acc[chargeId].push(split);
+        return acc;
+      }, {} as Record<string, typeof splits>);
+
+      // Identificar combinados com pendência (mais de 1 split, 1 concluded + 1 pending)
+      const combinedPending = Object.values(chargeGroups).filter(splitGroup => {
+        if (!splitGroup || splitGroup.length <= 1) return false;
+        const hasConcluded = splitGroup.some(s => s.status === 'concluded');
+        const hasPending = splitGroup.some(s => s.status === 'pending');
+        return hasConcluded && hasPending;
+      });
+
+      const combinedPendingCount = combinedPending.length;
+      const combinedPaidAmount = combinedPending
+        .flatMap(splitGroup => (splitGroup || []).filter(s => s.status === 'concluded'))
+        .reduce((sum, s) => sum + (s.amount_cents || 0), 0);
 
       setStats({
         totalCharges,
         activeCharges,
         completedCharges,
         totalAmount,
-        recurringCharges,
+        completedAmount,
+        combinedPendingCount,
+        combinedPaidAmount,
       });
     } catch (error) {
       console.error('Error loading dashboard stats:', error);
@@ -199,10 +241,17 @@ export default function Dashboard() {
               variant="highlight"
             />
             <StatCard
-              icon={Calendar}
-              label="Recorrentes"
-              value={stats.recurringCharges}
-              description="Cobranças automáticas"
+              icon={Wallet}
+              label="Pagamentos Concluídos"
+              value={formatCurrency(stats.completedAmount)}
+              description="Total de valores pagos com sucesso"
+              variant="highlight"
+            />
+            <StatCard
+              icon={CreditCard}
+              label="Combinados Pendentes"
+              value={stats.combinedPendingCount}
+              description="PIX ou cartão pago, outro pendente"
             />
           </div>
         </section>
