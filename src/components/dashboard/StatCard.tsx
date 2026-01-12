@@ -29,7 +29,7 @@ export function StatCard({
       className={cn(
         'relative bg-ds-bg-surface rounded-card p-4 lg:p-5 xl:p-6 shadow-card-soft',
         'transition-all duration-200 hover:shadow-floating hover:scale-[1.01]',
-        'overflow-hidden min-h-[140px] h-full flex flex-col',
+        'overflow-hidden min-h-[160px] h-full flex flex-col',
         variant === 'highlight' && 'ring-2 ring-brand/20',
         className
       )}
@@ -40,14 +40,21 @@ export function StatCard({
           <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-xl bg-brand/10 flex items-center justify-center flex-shrink-0">
             <Icon className="w-4 h-4 lg:w-5 lg:h-5 text-brand" />
           </div>
-          <span className="text-xs lg:text-sm font-medium text-ds-text-muted truncate">{label}</span>
+          <span className="text-xs lg:text-sm font-medium text-ds-text-muted line-clamp-2 leading-tight">{label}</span>
         </div>
         {delta && <DeltaPill value={delta.value} type={delta.type} />}
       </div>
 
       {/* Value */}
-      <div className="mb-1 flex-grow">
-        <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-ds-text-strong tracking-tight break-all">
+      <div className="mb-1 flex-grow flex items-start">
+        <span 
+          className="font-bold text-ds-text-strong tracking-tight whitespace-nowrap"
+          style={{ 
+            fontSize: 'clamp(1.25rem, 2.2vw, 2rem)',
+            lineHeight: '1.2',
+            fontVariantNumeric: 'tabular-nums'
+          }}
+        >
           {value}
         </span>
       </div>
