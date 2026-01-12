@@ -222,10 +222,7 @@ export default function Dashboard() {
           <h2 className="text-sm font-medium text-ds-text-muted uppercase tracking-wide mb-4">
             Resumo
           </h2>
-          <div 
-            className="grid gap-3 lg:gap-4 overflow-x-auto"
-            style={{ gridTemplateColumns: 'repeat(6, minmax(180px, 1fr))' }}
-          >
+          <div className="grid grid-cols-6 gap-3 lg:gap-4">
             <StatCard
               icon={CreditCard}
               label="Total de Cobranças"
