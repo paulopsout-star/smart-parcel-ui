@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,12 +9,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2, Download, FileSpreadsheet } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2, Download, FileSpreadsheet, Clock } from 'lucide-react';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { ptBR } from 'date-fns/locale';
+
+// Intervalo de sincronização automática: 5 minutos
+const AUTO_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -212,6 +215,11 @@ const getModernStatusBadge = (status: string) => {
     partial: {
       label: 'Parcialmente Pago',
       variant: 'warning' as const
+    },
+    // NOVO: StatusCode 50 - CNPJ não cadastrado
+    cnpj_nao_cadastrado: {
+      label: 'CNPJ não cadastrado',
+      variant: 'destructive' as const
     },
   };
   
@@ -588,6 +596,10 @@ export default function ChargeHistory() {
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [checkoutModalData, setCheckoutModalData] = useState<any>(null);
   
+  // Estado para última sincronização
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const autoSyncRef = useRef<NodeJS.Timeout | null>(null);
+  
   const {
     copyToClipboard,
     openPaymentLink
@@ -611,46 +623,71 @@ export default function ChargeHistory() {
     }
   };
 
-  // Função de sincronização manual com API Cappta
-  const syncPaymentStatuses = useCallback(async () => {
+  // Função de sincronização com API Cappta (manual ou automática)
+  const syncPaymentStatuses = useCallback(async (isAutoSync = false) => {
     setSyncing(true);
     try {
       const { data, error } = await supabase.functions.invoke('sync-payment-status');
       
       if (error) {
         console.error('Erro na sincronização:', error);
-        toast({
-          title: "Erro na sincronização",
-          description: "Não foi possível sincronizar com o gateway. Os dados locais serão exibidos.",
-          variant: "destructive",
-        });
+        if (!isAutoSync) {
+          toast({
+            title: "Erro na sincronização",
+            description: "Não foi possível sincronizar com o gateway. Os dados locais serão exibidos.",
+            variant: "destructive",
+          });
+        }
       } else {
         const updated = data?.updated || 0;
         const processed = data?.processed || 0;
-        if (updated > 0) {
+        
+        // Atualizar timestamp da última sincronização
+        setLastSync(new Date());
+        
+        // Mostrar toast apenas para sincronização manual ou se houve atualizações
+        if (!isAutoSync) {
+          if (updated > 0) {
+            toast({
+              title: "Sincronização concluída",
+              description: `${updated} de ${processed} cobrança(s) atualizada(s).`,
+            });
+          } else {
+            toast({
+              title: "Sincronização concluída",
+              description: `${processed} cobrança(s) verificada(s). Nenhuma atualização necessária.`,
+            });
+          }
+        } else if (updated > 0) {
+          // Para auto-sync, mostrar toast apenas se houve atualizações
           toast({
-            title: "Sincronização concluída",
-            description: `${updated} de ${processed} cobrança(s) atualizada(s).`,
-          });
-        } else {
-          toast({
-            title: "Sincronização concluída",
-            description: `${processed} cobrança(s) verificada(s). Nenhuma atualização necessária.`,
+            title: "Atualização automática",
+            description: `${updated} cobrança(s) atualizada(s).`,
           });
         }
+        
+        console.log(`[ChargeHistory] Sincronização ${isAutoSync ? 'automática' : 'manual'}: ${updated}/${processed} atualizados`);
       }
     } catch (err) {
       console.error('Erro ao sincronizar:', err);
-      toast({
-        title: "Erro",
-        description: "Falha na comunicação com o servidor.",
-        variant: "destructive",
-      });
+      if (!isAutoSync) {
+        toast({
+          title: "Erro",
+          description: "Falha na comunicação com o servidor.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setSyncing(false);
       await fetchCharges();
     }
   }, []);
+
+  // Verificar se há cobranças pendentes que precisam de sincronização
+  const hasPendingCharges = useCallback(() => {
+    const pendingStatuses = ['pending', 'pre_authorized', 'processing', 'validating', 'boleto_linked', 'awaiting_validation'];
+    return charges.some(c => pendingStatuses.includes(c.status));
+  }, [charges]);
 
   const fetchCharges = async () => {
     try {
@@ -1088,6 +1125,32 @@ export default function ChargeHistory() {
     return () => window.removeEventListener('openCheckoutModal', handleOpenCheckoutModal as EventListener);
   }, [isAdmin]);
 
+  // Polling automático: sincronizar a cada 5 minutos se houver cobranças pendentes
+  useEffect(() => {
+    // Sincronização inicial ao carregar a página (se houver cobranças pendentes)
+    const initialSyncTimeout = setTimeout(() => {
+      if (hasPendingCharges() && !syncing) {
+        console.log('[ChargeHistory] Sincronização inicial...');
+        syncPaymentStatuses(true);
+      }
+    }, 2000); // Aguardar 2s para garantir que charges foram carregados
+
+    // Configurar intervalo de sincronização automática
+    autoSyncRef.current = setInterval(() => {
+      if (hasPendingCharges() && !syncing) {
+        console.log('[ChargeHistory] Sincronização automática (5 min)...');
+        syncPaymentStatuses(true);
+      }
+    }, AUTO_SYNC_INTERVAL_MS);
+
+    return () => {
+      clearTimeout(initialSyncTimeout);
+      if (autoSyncRef.current) {
+        clearInterval(autoSyncRef.current);
+      }
+    };
+  }, [hasPendingCharges, syncing, syncPaymentStatuses]);
+
   useEffect(() => {
     applyFilters();
   }, [filters, charges]);
@@ -1184,7 +1247,15 @@ export default function ChargeHistory() {
           <div className="flex items-center gap-3">
             <div>
               <h1 className="text-2xl font-semibold text-ds-text-strong">Histórico de Cobranças</h1>
-              <p className="text-ds-text-muted">Gerencie e acompanhe todas as suas cobranças</p>
+              <div className="flex items-center gap-3">
+                <p className="text-ds-text-muted">Gerencie e acompanhe todas as suas cobranças</p>
+                {lastSync && (
+                  <span className="text-xs text-ds-text-muted flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Última sync: {formatDistanceToNow(lastSync, { locale: ptBR, addSuffix: true })}
+                  </span>
+                )}
+              </div>
             </div>
             {isAdmin && (
               <Badge variant="info" className="gap-1.5">
@@ -1217,7 +1288,7 @@ export default function ChargeHistory() {
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               Excel
             </Button>
-            <Button onClick={syncPaymentStatuses} variant="outline" disabled={loading || syncing}>
+            <Button onClick={() => syncPaymentStatuses(false)} variant="outline" disabled={loading || syncing}>
               <RefreshCw className={`w-4 h-4 mr-2 ${(loading || syncing) ? 'animate-spin' : ''}`} />
               {syncing ? 'Sincronizando...' : 'Atualizar'}
             </Button>
