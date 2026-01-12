@@ -27,30 +27,34 @@ export function StatCard({
   return (
     <div
       className={cn(
-        'relative bg-ds-bg-surface rounded-card p-6 shadow-card-soft transition-all duration-200 hover:shadow-floating hover:scale-[1.01]',
+        'relative bg-ds-bg-surface rounded-card p-4 lg:p-5 xl:p-6 shadow-card-soft',
+        'transition-all duration-200 hover:shadow-floating hover:scale-[1.01]',
+        'overflow-hidden min-h-[140px] h-full flex flex-col',
         variant === 'highlight' && 'ring-2 ring-brand/20',
         className
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-brand/10 flex items-center justify-center">
-            <Icon className="w-5 h-5 text-brand" />
+      <div className="flex items-center justify-between mb-3 lg:mb-4">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-xl bg-brand/10 flex items-center justify-center flex-shrink-0">
+            <Icon className="w-4 h-4 lg:w-5 lg:h-5 text-brand" />
           </div>
-          <span className="text-sm font-medium text-ds-text-muted">{label}</span>
+          <span className="text-xs lg:text-sm font-medium text-ds-text-muted truncate">{label}</span>
         </div>
         {delta && <DeltaPill value={delta.value} type={delta.type} />}
       </div>
 
       {/* Value */}
-      <div className="mb-1">
-        <span className="text-3xl font-bold text-ds-text-strong tracking-tight">{value}</span>
+      <div className="mb-1 flex-grow">
+        <span className="text-xl sm:text-2xl lg:text-3xl font-bold text-ds-text-strong tracking-tight break-all">
+          {value}
+        </span>
       </div>
 
       {/* Description */}
       {description && (
-        <p className="text-sm text-ds-text-muted">{description}</p>
+        <p className="text-xs lg:text-sm text-ds-text-muted line-clamp-2 mt-auto">{description}</p>
       )}
     </div>
   );
