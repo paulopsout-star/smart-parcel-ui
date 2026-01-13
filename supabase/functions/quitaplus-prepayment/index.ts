@@ -25,6 +25,78 @@ interface PrePaymentRequest {
   };
 }
 
+/**
+ * Extrai mensagem amigável da resposta da API Quita+ para exibir ao usuário
+ */
+function extractUserFriendlyMessage(apiResponse: string, httpStatus: number): string {
+  // Mapeamento de códigos conhecidos para mensagens amigáveis
+  const friendlyMessages: Record<string, string> = {
+    'CARD_DECLINED': 'Cartão recusado pela operadora',
+    'INSUFFICIENT_FUNDS': 'Saldo insuficiente no cartão',
+    'EXPIRED_CARD': 'Cartão expirado',
+    'INVALID_CVV': 'Código de segurança (CVV) inválido',
+    'INVALID_CARD_NUMBER': 'Número do cartão inválido',
+    'ANTIFRAUD_DECLINED': 'Transação não aprovada pelo sistema antifraude',
+    'CARD_BLOCKED': 'Cartão bloqueado',
+    'PROCESSING_ERROR': 'Erro ao processar pagamento. Tente novamente.',
+    'INVALID_EXPIRATION_DATE': 'Data de validade do cartão inválida',
+    'TRANSACTION_NOT_ALLOWED': 'Transação não permitida para este cartão',
+    'CARD_NOT_SUPPORTED': 'Bandeira do cartão não suportada',
+    'LIMIT_EXCEEDED': 'Limite do cartão excedido',
+    'DUPLICATE_TRANSACTION': 'Transação duplicada detectada',
+    'INVALID_AMOUNT': 'Valor da transação inválido',
+    'TIMEOUT': 'Tempo limite excedido. Tente novamente.',
+    'GENERIC_ERROR': 'Erro ao processar pagamento. Tente novamente.',
+  };
+
+  try {
+    const parsed = JSON.parse(apiResponse);
+    
+    // Tentar extrair mensagem e código da API (vários formatos possíveis)
+    const apiMessage = parsed.message || parsed.Message || 
+                       parsed.errorMessage || parsed.error?.message ||
+                       parsed.error_message || parsed.ErrorMessage ||
+                       parsed.returnMessage || parsed.ReturnMessage;
+    const apiCode = parsed.code || parsed.Code || parsed.errorCode ||
+                    parsed.returnCode || parsed.ReturnCode || parsed.error?.code;
+    
+    // Se temos um código conhecido, usar mensagem amigável
+    if (apiCode && friendlyMessages[String(apiCode).toUpperCase()]) {
+      return friendlyMessages[String(apiCode).toUpperCase()];
+    }
+    
+    // Se temos mensagem da API, retornar ela diretamente
+    if (apiMessage && typeof apiMessage === 'string' && apiMessage.trim().length > 0) {
+      return apiMessage;
+    }
+    
+    // Verificar se há campo específico de recusa de cartão
+    if (parsed.authorized === false || parsed.Authorized === false) {
+      const declineReason = parsed.declineReason || parsed.DeclineReason || 
+                           parsed.reason || parsed.Reason;
+      if (declineReason) {
+        return `Cartão não autorizado: ${declineReason}`;
+      }
+      return 'Cartão não autorizado pela operadora';
+    }
+    
+  } catch {
+    // JSON inválido - verificar se é HTML de bloqueio WAF
+    if (apiResponse.includes('Access Denied') || apiResponse.includes('errors.edgesuite.net')) {
+      return 'Serviço temporariamente indisponível. Tente novamente em alguns minutos.';
+    }
+  }
+  
+  // Fallback por status HTTP
+  if (httpStatus === 400) return 'Dados do cartão inválidos. Verifique e tente novamente.';
+  if (httpStatus === 401) return 'Falha na autenticação. Tente novamente.';
+  if (httpStatus === 403) return 'Transação não autorizada.';
+  if (httpStatus === 422) return 'Dados do pagamento inválidos. Verifique e tente novamente.';
+  if (httpStatus >= 500) return 'Erro temporário no servidor. Tente novamente em instantes.';
+  
+  return 'Não foi possível processar o pagamento. Verifique os dados e tente novamente.';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -214,8 +286,13 @@ DETALHES TÉCNICOS:
               }
             }
 
+            const userMessage = extractUserFriendlyMessage(responseText, quitaResponse.status);
+
             return new Response(
               JSON.stringify({
+                success: false,
+                error: 'payment_failed',
+                userMessage: userMessage,
                 apiRawResponse: responseText,
                 apiMetadata: {
                   httpStatus: quitaResponse.status,
@@ -242,10 +319,13 @@ DETALHES TÉCNICOS:
         if (!prePaymentKey) {
           console.error('[quitaplus-prepayment] API retornou sucesso HTTP mas sem prePaymentKey:', responseText);
           
+          const userMessage = extractUserFriendlyMessage(responseText, quitaResponse.status);
+
           return new Response(
             JSON.stringify({
               success: false,
-              error: 'API retornou resposta inválida - prePaymentKey ausente',
+              error: 'prepayment_key_missing',
+              userMessage: userMessage,
               apiRawResponse: responseText,
               apiMetadata: {
                 httpStatus: quitaResponse.status,
@@ -450,9 +530,9 @@ DETALHES TÉCNICOS:
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido',
+        error: 'internal_error',
+        userMessage: 'Erro temporário. Por favor, tente novamente.',
         code: 500,
-        message: 'Erro interno do servidor',
       }),
       {
         status: 200, // Sempre retorna 200 para o front-end conseguir ler o JSON

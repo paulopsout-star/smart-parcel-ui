@@ -229,11 +229,18 @@ export function PaymentForm({
         throw new Error(prePaymentError.message || 'Falha ao autorizar cartão');
       }
 
-      if (prePaymentData?.error) {
-        const errorMessage = prePaymentData.message || prePaymentData.error || 'Cartão recusado';
-        console.error('[PaymentForm] Cartão recusado:', errorMessage);
+      if (prePaymentData?.error || prePaymentData?.success === false) {
+        // Priorizar userMessage (mensagem da API) sobre error (código interno)
+        const errorMessage = prePaymentData.userMessage || 'Não foi possível processar o pagamento';
+        
+        console.error('[PaymentForm] Pagamento não autorizado:', {
+          internalError: prePaymentData.error,
+          userMessage: errorMessage,
+          apiResponse: prePaymentData.apiRawResponse?.substring(0, 200)
+        });
+        
         toast({
-          title: "Cartão recusado",
+          title: "Pagamento não autorizado",
           description: errorMessage,
           variant: "destructive",
         });
