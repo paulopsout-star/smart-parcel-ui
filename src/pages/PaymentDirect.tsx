@@ -246,7 +246,15 @@ export default function PaymentDirect() {
   };
 
   const handleSelectInstallmentsChange = (installments: number) => {
+    console.log('[PaymentDirect] handleSelectInstallmentsChange:', { 
+      installments, 
+      hasSimulation: !!simulation,
+      hasConditions: !!simulation?.simulation?.conditions,
+      conditionsLength: simulation?.simulation?.conditions?.length 
+    });
+
     if (!simulation?.simulation?.conditions) {
+      console.error('[PaymentDirect] Sem conditions disponíveis!');
       toast({
         title: "Erro",
         description: "Não foi possível buscar opções de parcelamento.",
@@ -256,6 +264,8 @@ export default function PaymentDirect() {
     }
 
     const condition = simulation.simulation.conditions.find(c => c.installments === installments);
+    console.log('[PaymentDirect] Condition encontrada:', condition);
+    
     if (condition) {
       setSelectInstallments(installments);
       setSelectResult({
@@ -263,6 +273,12 @@ export default function PaymentDirect() {
         totalCents: condition.totalAmount,
         installmentValueCents: condition.installmentAmount
       });
+      console.log('[PaymentDirect] Estados atualizados:', { 
+        selectInstallments: installments, 
+        selectResult: { installments: condition.installments, totalCents: condition.totalAmount }
+      });
+    } else {
+      console.error('[PaymentDirect] Condition não encontrada para installments:', installments);
     }
   };
 

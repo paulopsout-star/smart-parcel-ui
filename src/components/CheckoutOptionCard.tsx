@@ -30,7 +30,7 @@ interface CheckoutOptionCardProps {
     totalCents: number;
     installmentValueCents: number;
   } | null;
-  installmentConditions?: { installments: number }[];
+  installmentConditions?: { installments: number; totalAmount: number; installmentAmount: number }[];
 }
 
 export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
@@ -81,8 +81,10 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
   };
 
   const handleInstallmentSelect = (value: string) => {
+    console.log('[CheckoutOptionCard] handleInstallmentSelect:', value);
     const installments = parseInt(value, 10);
     if (installments > 0) {
+      console.log('[CheckoutOptionCard] Calling onSelect and onSelectInstallmentsChange');
       onSelect(); // Seleciona o card ao escolher parcelas
       if (onSelectInstallmentsChange) {
         onSelectInstallmentsChange(installments);
@@ -126,7 +128,7 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
               <SelectContent className="bg-background border-border z-50">
                 {installmentConditions?.map(condition => (
                   <SelectItem key={condition.installments} value={String(condition.installments)}>
-                    {condition.installments}x
+                    {condition.installments}x de {formatCurrency(condition.installmentAmount)} (Total: {formatCurrency(condition.totalAmount)})
                   </SelectItem>
                 ))}
               </SelectContent>
