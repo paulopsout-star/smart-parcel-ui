@@ -68,19 +68,25 @@ export const CheckoutOptionCard: React.FC<CheckoutOptionCardProps> = ({
       cents = (parseInt(cleanValue) || 0) * 100;
     }
     
-    if (onCustomValueChange && cents > 0) {
-      setIsSearching(true);
-      setTimeout(() => {
-        onCustomValueChange(cents);
-        setIsSearching(false);
-      }, 300);
+    if (cents > 0) {
+      onSelect(); // Seleciona o card ao digitar valor
+      if (onCustomValueChange) {
+        setIsSearching(true);
+        setTimeout(() => {
+          onCustomValueChange(cents);
+          setIsSearching(false);
+        }, 300);
+      }
     }
   };
 
   const handleInstallmentSelect = (value: string) => {
     const installments = parseInt(value, 10);
-    if (onSelectInstallmentsChange && installments > 0) {
-      onSelectInstallmentsChange(installments);
+    if (installments > 0) {
+      onSelect(); // Seleciona o card ao escolher parcelas
+      if (onSelectInstallmentsChange) {
+        onSelectInstallmentsChange(installments);
+      }
     }
   };
 
