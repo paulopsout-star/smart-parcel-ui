@@ -72,6 +72,8 @@ serve(async (req) => {
     // VERIFICAR PIX EXISTENTES ANTES DE CRIAR
     // ========================================
     const allPixIds = charge.metadata?.all_pix_ids || [];
+    // Recuperar dados de QR Codes salvos no metadata
+    const savedQrCodes = charge.metadata?.saved_qr_codes || {};
     
     if (allPixIds.length > 0) {
       console.log('[abacatepay-pix-create] 🔍 Verificando', allPixIds.length, 'PIX existentes antes de criar novo...');
@@ -113,20 +115,102 @@ serve(async (req) => {
             
             // CENÁRIO 2: PIX PENDENTE E NÃO EXPIRADO - REUTILIZAR
             if (pixStatus === 'PENDING' && expiresAt && expiresAt > new Date()) {
-              console.log('[abacatepay-pix-create] ♻️ PIX', existingPixId, 'ainda válido. Reutilizando...');
-              return new Response(
-                JSON.stringify({
-                  success: true,
-                  reused: true,
-                  pixId: existingPixId,
-                  brCode: checkData.data.brCode,
-                  brCodeBase64: checkData.data.brCodeBase64,
-                  expiresAt: checkData.data.expiresAt,
-                  status: 'PENDING',
-                  message: 'QR Code PIX válido já existe, reutilizando'
-                }),
-                { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-              );
+              console.log('[abacatepay-pix-create] ♻️ PIX', existingPixId, 'ainda válido. Tentando reutilizar...');
+              
+              // Primeiro: tentar recuperar QR Code do metadata salvo
+              const savedQr = savedQrCodes[existingPixId];
+              if (savedQr?.brCode && savedQr?.brCodeBase64) {
+                console.log('[abacatepay-pix-create] ✅ Dados do QR Code recuperados do metadata');
+                return new Response(
+                  JSON.stringify({
+                    success: true,
+                    reused: true,
+                    pixId: existingPixId,
+                    brCode: savedQr.brCode,
+                    brCodeBase64: savedQr.brCodeBase64,
+                    expiresAt: checkData.data.expiresAt,
+                    status: 'PENDING',
+                    message: 'QR Code PIX válido recuperado do cache'
+                  }),
+                  { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+              }
+              
+              // Segundo: endpoint /check pode ter brCode (verificar)
+              if (checkData.data?.brCode && checkData.data?.brCodeBase64) {
+                console.log('[abacatepay-pix-create] ✅ Dados do QR Code obtidos do /check');
+                return new Response(
+                  JSON.stringify({
+                    success: true,
+                    reused: true,
+                    pixId: existingPixId,
+                    brCode: checkData.data.brCode,
+                    brCodeBase64: checkData.data.brCodeBase64,
+                    expiresAt: checkData.data.expiresAt,
+                    status: 'PENDING',
+                    message: 'QR Code PIX válido já existe, reutilizando'
+                  }),
+                  { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                );
+              }
+              
+              // Terceiro: tentar buscar via endpoint /list ou /get específico
+              console.log('[abacatepay-pix-create] ⚠️ QR Code não encontrado no cache/check. Tentando endpoint list...');
+              try {
+                const listResponse = await fetch(`https://api.abacatepay.com/v1/pixQrCode/list`, {
+                  method: 'GET',
+                  headers: {
+                    'Authorization': `Bearer ${abacateApiKey}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                
+                if (listResponse.ok) {
+                  const listData = await listResponse.json();
+                  const pixItem = listData.data?.find((p: any) => p.id === existingPixId);
+                  
+                  if (pixItem?.brCode && pixItem?.brCodeBase64) {
+                    console.log('[abacatepay-pix-create] ✅ Dados do QR Code obtidos do /list');
+                    
+                    // Salvar no metadata para cache futuro
+                    await supabase
+                      .from('charges')
+                      .update({
+                        metadata: {
+                          ...charge.metadata,
+                          saved_qr_codes: {
+                            ...savedQrCodes,
+                            [existingPixId]: {
+                              brCode: pixItem.brCode,
+                              brCodeBase64: pixItem.brCodeBase64,
+                              savedAt: new Date().toISOString()
+                            }
+                          }
+                        }
+                      })
+                      .eq('id', chargeId);
+                    
+                    return new Response(
+                      JSON.stringify({
+                        success: true,
+                        reused: true,
+                        pixId: existingPixId,
+                        brCode: pixItem.brCode,
+                        brCodeBase64: pixItem.brCodeBase64,
+                        expiresAt: checkData.data.expiresAt,
+                        status: 'PENDING',
+                        message: 'QR Code PIX recuperado da API'
+                      }),
+                      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+                    );
+                  }
+                }
+              } catch (listErr) {
+                console.error('[abacatepay-pix-create] Erro ao buscar lista de PIX:', listErr);
+              }
+              
+              // Se não conseguiu recuperar os dados, precisa criar novo
+              console.log('[abacatepay-pix-create] ⚠️ Não foi possível recuperar QR Code do PIX válido. Criando novo...');
             }
             
             // PIX expirado ou outro status - continuar verificando os outros
@@ -222,14 +306,26 @@ serve(async (req) => {
     }
 
     // Atualizar cobrança no DB com dados do Abacate Pay
-    // Manter histórico de todos os PIX IDs gerados
+    // Manter histórico de todos os PIX IDs gerados E os dados do QR Code
     const existingPixIds = charge.metadata?.all_pix_ids || [];
+    const existingSavedQrCodes = charge.metadata?.saved_qr_codes || {};
     const newAllPixIds = [...existingPixIds, abacateData.data.id];
     
-    console.log('[abacatepay-pix-create] 📝 Atualizando histórico de PIX IDs:', {
+    // Salvar dados do QR Code para reutilização futura
+    const newSavedQrCodes = {
+      ...existingSavedQrCodes,
+      [abacateData.data.id]: {
+        brCode: abacateData.data.brCode,
+        brCodeBase64: abacateData.data.brCodeBase64,
+        savedAt: new Date().toISOString()
+      }
+    };
+    
+    console.log('[abacatepay-pix-create] 📝 Atualizando histórico de PIX IDs e salvando QR Code:', {
       previous: existingPixIds,
       new: abacateData.data.id,
-      total: newAllPixIds.length
+      total: newAllPixIds.length,
+      qrCodesSaved: Object.keys(newSavedQrCodes).length
     });
     
     const { error: updateError } = await supabase
@@ -240,6 +336,7 @@ serve(async (req) => {
           ...charge.metadata,
           pix_id: abacateData.data.id,
           all_pix_ids: newAllPixIds, // ARRAY com TODOS os PIX IDs gerados
+          saved_qr_codes: newSavedQrCodes, // DADOS dos QR Codes para reutilização
           abacate_pay_data: {
             created_at: new Date().toISOString(),
             pix_id: abacateData.data.id,
