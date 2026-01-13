@@ -554,10 +554,11 @@ export function PaymentForm({
               Resumo do Pagamento
             </h5>
             <div className="space-y-2">
-              {(() => {
+            {(() => {
                 // Valor para exibição = amountDisplay (com juros) ou amount (fallback)
-                const displayValue = amountDisplay || amount;
-                const installmentValue = displayValue / installments;
+                // CORREÇÃO: usar !== undefined para não tratar 0 como falsy
+                const displayValue = (amountDisplay !== undefined && amountDisplay > 0) ? amountDisplay : amount;
+                const installmentValue = installments > 0 ? displayValue / installments : displayValue;
                 
                 return (
                   <>
