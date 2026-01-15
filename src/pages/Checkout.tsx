@@ -112,12 +112,8 @@ export default function Checkout() {
             !!pixSplit.pix_paid_at
           );
 
-          // Helper para verificar se Cartão foi pago
-          const isCardPaid = cardSplit && (
-            cardSplit.status === 'concluded' || 
-            !!cardSplit.pre_payment_key || 
-            !!cardSplit.transaction_id
-          );
+          // Helper para verificar se Cartão foi pago - SOMENTE status === 'concluded'
+          const isCardPaid = cardSplit && cardSplit.status === 'concluded';
 
           // CENÁRIO 1: PIX já pago, cartão pendente → ir direto para cartão
           if (isPixPaid && cardSplit && !isCardPaid) {
