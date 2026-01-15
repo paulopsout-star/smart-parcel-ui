@@ -216,18 +216,50 @@ export default function PaymentCard() {
       if (error) {
         console.error('[PaymentCard] Erro ao concluir pagamento:', error);
         toast({
-          title: 'Atenção',
-          description: 'Pagamento aprovado, mas houve erro ao registrar. Entre em contato com o suporte.',
+          title: 'Pagamento Não Aprovado',
+          description: 'Seu pagamento não foi processado. Verifique os dados e tente novamente.',
           variant: 'destructive'
         });
-      } else {
-        console.log('[PaymentCard] ✅ Pagamento concluído com sucesso:', data);
+        // ✅ Redirecionar para thank-you que agora mostrará erro apropriado
+        navigate(`/thank-you?pl=${id}`);
+        return;
+      }
+      
+      console.log('[PaymentCard] Resposta do conclude-card-payment:', data);
+      
+      // ✅ CORREÇÃO: Verificar status retornado antes de considerar sucesso
+      const splitStatus = data?.split?.status;
+      
+      if (splitStatus === 'failed' || splitStatus === 'expired' || splitStatus === 'canceled' || splitStatus === 'cancelled') {
+        console.log('[PaymentCard] ❌ Pagamento não aprovado. Status:', splitStatus);
+        toast({
+          title: 'Pagamento Não Aprovado',
+          description: 'Seu pagamento não foi processado pela operadora.',
+          variant: 'destructive'
+        });
+        // Redirecionar para thank-you que mostrará tela de erro
+        navigate(`/thank-you?pl=${id}`);
+        return;
+      }
+      
+      // ✅ Sucesso confirmado
+      if (splitStatus === 'concluded') {
+        console.log('[PaymentCard] ✅ Pagamento concluído com sucesso!');
+        toast({
+          title: 'Pagamento Aprovado!',
+          description: 'Seu pagamento foi processado com sucesso.',
+        });
       }
       
       navigate(`/thank-you?pl=${id}`);
       
     } catch (err) {
       console.error('[PaymentCard] Erro inesperado:', err);
+      toast({
+        title: 'Erro',
+        description: 'Ocorreu um erro inesperado. Tente novamente.',
+        variant: 'destructive'
+      });
       navigate(`/thank-you?pl=${id}`);
     }
   };

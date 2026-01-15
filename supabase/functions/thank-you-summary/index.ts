@@ -293,33 +293,49 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Verificar se está PAID - considera múltiplos indicadores para cada método
-    // Um split de cartão com pre_payment_key indica pagamento aprovado (mesmo se vínculo de boleto falhou)
-    // Um split de PIX com pix_paid_at indica pagamento aprovado
-    const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => {
-      if (s.method === 'credit_card') {
-        // Cartão: considerar pago se concluded OU tem pre_payment_key/transaction_id
-        return s.status === 'concluded' || s.pre_payment_key || s.transaction_id;
-      }
-      if (s.method === 'pix') {
-        // PIX: considerar pago se concluded OU tem pix_paid_at
-        return s.status === 'concluded' || s.pix_paid_at;
-      }
-      // Outros métodos: apenas status concluded
-      return s.status === 'concluded';
-    });
+    // ✅ CORREÇÃO: Usar APENAS status como fonte da verdade
+    // pre_payment_key ou transaction_id NÃO garantem que o pagamento foi concluído
+    // O status 'concluded' é o único indicador válido de pagamento aprovado
+    const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => 
+      s.status === 'concluded'
+    );
     
-    console.log('[thank-you-summary] isPaid:', isPaid, '- splits checked:', finalSplits?.map(s => ({ 
+    // Verificar se algum split falhou/expirou/cancelou
+    const failedSplit = finalSplits?.find(s => 
+      s.status === 'failed' || 
+      s.status === 'expired' || 
+      s.status === 'canceled' ||
+      s.status === 'cancelled'
+    );
+    
+    console.log('[thank-you-summary] isPaid:', isPaid, '- failedSplit:', failedSplit?.method, '- splits checked:', finalSplits?.map(s => ({ 
       method: s.method, 
-      status: s.status, 
-      hasPrePaymentKey: !!s.pre_payment_key,
-      hasTransactionId: !!s.transaction_id 
+      status: s.status
     })))
 
     if (!isPaid) {
+      // Se tem split com falha, retornar estado de erro
+      if (failedSplit) {
+        const methodLabel = failedSplit.method === 'credit_card' ? 'Cartão de Crédito' : 
+                           failedSplit.method === 'pix' ? 'PIX' : failedSplit.method;
+        
+        return new Response(JSON.stringify({
+          paid: false,
+          processing: false,
+          failed: true,
+          failedMethod: failedSplit.method,
+          failedMethodLabel: methodLabel,
+          message: `Pagamento via ${methodLabel} não foi aprovado`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+      
+      // Sem falha, mas ainda não concluído = processando
       return new Response(JSON.stringify({
         paid: false,
         processing: true,
+        failed: false,
         message: "Pagamento em processamento"
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
