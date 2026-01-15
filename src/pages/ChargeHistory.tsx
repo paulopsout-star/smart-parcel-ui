@@ -145,9 +145,10 @@ const getComputedStatus = (charge: Charge): string => {
   const pixSplit = charge.splits.find(s => s.method === 'pix');
   const cardSplit = charge.splits.find(s => s.method === 'credit_card');
 
-  // Verificar se cada split está pago
+  // Verificar se cada split está pago - ÚNICA fonte de verdade: status === 'concluded'
   const pixPaid = pixSplit && (pixSplit.status === 'concluded' || pixSplit.pix_paid_at);
-  const cardPaid = cardSplit && (cardSplit.status === 'concluded' || cardSplit.pre_payment_key || cardSplit.transaction_id);
+  // Para cartão: SOMENTE status === 'concluded' indica pagamento aprovado (não pre_payment_key)
+  const cardPaid = cardSplit && cardSplit.status === 'concluded';
 
   // Ambos pagos → completed
   if (pixPaid && cardPaid) {
@@ -271,13 +272,15 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     ? ((cardFeeAmount / cardBase) * 100).toFixed(1) 
     : '0';
 
-  // Verificar se o split está pago
+  // Verificar se o split está pago - ÚNICA fonte de verdade: status === 'concluded'
   const isSplitPaid = (split: PaymentSplitInfo | undefined, isPix: boolean): boolean => {
     if (!split) return false;
+    // Para PIX, pix_paid_at também indica conclusão (webhook processado)
     if (isPix) {
       return split.status === 'concluded' || !!split.pix_paid_at;
     }
-    return split.status === 'concluded' || !!split.pre_payment_key || !!split.transaction_id;
+    // Para cartão: SOMENTE status === 'concluded' indica pagamento aprovado
+    return split.status === 'concluded';
   };
 
   const getSplitStatusBadge = (split: PaymentSplitInfo | undefined, isPix: boolean) => {
@@ -1630,9 +1633,11 @@ export default function ChargeHistory() {
                                   {split.method === 'pix' ? '💳 PIX' : '💳 Cartão de Crédito'}
                                 </span>
                                 <Badge variant={
-                                  split.status === 'concluded' || split.pix_paid_at || split.pre_payment_key ? 'success' : 'warning'
+                                  split.status === 'concluded' || (split.method === 'pix' && split.pix_paid_at) ? 'success' : 
+                                  split.status === 'failed' ? 'destructive' : 'warning'
                                 }>
-                                  {split.status === 'concluded' || split.pix_paid_at || split.pre_payment_key ? '✓ Pago' : '⏳ Pendente'}
+                                  {split.status === 'concluded' || (split.method === 'pix' && split.pix_paid_at) ? '✓ Pago' : 
+                                   split.status === 'failed' ? '✗ Recusado' : '⏳ Pendente'}
                                 </Badge>
                               </div>
                               <div className="grid grid-cols-2 gap-2 text-xs text-ds-text-muted">
