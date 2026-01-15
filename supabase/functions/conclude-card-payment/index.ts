@@ -5,6 +5,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Mapeamento statusCode Quita+ → status interno
+const statusCodeMap: Record<number, string> = {
+  1: 'pending',           // Received - pré-pagamento criado
+  2: 'failed',            // Canceled - prazo expirou ou valor diferente
+  3: 'expired',           // Expired
+  4: 'validating',        // Settled - analisado pelo robô
+  5: 'failed',            // PaymentDenied - risco não aprovou
+  6: 'approved',          // PaymentValidated - risco aprovou
+  7: 'awaiting_validation', // AwaitingPayerValidation - aguardando PIN
+  8: 'validating',        // ValidatingPayment - risco analisando
+  9: 'concluded',         // Paid - boleto foi pago
+  50: 'failed',           // MissingRegistryBankslipCNPJ - CNPJ não cadastrado
+};
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -25,7 +39,7 @@ Deno.serve(async (req) => {
       }
     );
 
-    const { payment_link_id, amount_cents, installments = 1, transaction_id } = await req.json();
+    const { payment_link_id, amount_cents, installments = 1, transaction_id, pre_payment_key } = await req.json();
 
     if (!payment_link_id) {
       console.error('[conclude-card-payment] Missing payment_link_id');
@@ -57,7 +71,73 @@ Deno.serve(async (req) => {
     const totalAmount = amount_cents || paymentLink.amount;
     const chargeId = paymentLink.charge_id;
 
-    console.log('[conclude-card-payment] Total amount:', totalAmount, 'Charge ID:', chargeId);
+    // Buscar pre_payment_key do charge se não foi fornecido
+    let prePaymentKey = pre_payment_key;
+    if (!prePaymentKey && chargeId) {
+      const { data: charge } = await supabase
+        .from('charges')
+        .select('pre_payment_key')
+        .eq('id', chargeId)
+        .single();
+      prePaymentKey = charge?.pre_payment_key;
+    }
+
+    console.log('[conclude-card-payment] Total amount:', totalAmount, 'Charge ID:', chargeId, 'PrePaymentKey:', prePaymentKey);
+
+    // ============================================================
+    // VALIDAÇÃO CRÍTICA: Verificar status real na API Quita+ antes de concluir
+    // ============================================================
+    let finalStatus = 'pending';
+    let authorizationCode: string | null = null;
+    let realTransactionId: string | null = transaction_id || null;
+    let statusFromApi = false;
+
+    if (prePaymentKey) {
+      console.log('[conclude-card-payment] Verificando status na API Quita+ para:', prePaymentKey);
+      
+      try {
+        const { data: statusData, error: statusError } = await supabase.functions.invoke('quitaplus-prepayment-status', {
+          body: { prePaymentKey }
+        });
+
+        if (!statusError && statusData?.success) {
+          const apiStatusCode = statusData.statusCode;
+          const mappedStatus = statusCodeMap[apiStatusCode] || 'pending';
+          
+          console.log('[conclude-card-payment] Status da API Quita+:', {
+            statusCode: apiStatusCode,
+            statusName: statusData.statusName,
+            mappedStatus,
+            authorizationCode: statusData.authorizationCode,
+            transactionId: statusData.transactionId
+          });
+
+          finalStatus = mappedStatus;
+          authorizationCode = statusData.authorizationCode || null;
+          realTransactionId = statusData.transactionId || transaction_id || null;
+          statusFromApi = true;
+
+          // Se o status é 'failed' ou 'expired', NÃO marcar como concluded
+          if (finalStatus === 'failed' || finalStatus === 'expired') {
+            console.log('[conclude-card-payment] Pagamento NÃO foi aprovado na API. Status:', finalStatus);
+          } else if (finalStatus === 'concluded') {
+            console.log('[conclude-card-payment] Pagamento CONFIRMADO como pago na API Quita+');
+          }
+        } else {
+          console.warn('[conclude-card-payment] Não foi possível verificar status na API:', statusError);
+          // Se não conseguiu verificar, manter como pending para verificação posterior
+          finalStatus = 'pending';
+        }
+      } catch (apiError) {
+        console.error('[conclude-card-payment] Erro ao consultar API Quita+:', apiError);
+        // Em caso de erro na verificação, manter como pending
+        finalStatus = 'pending';
+      }
+    } else {
+      console.warn('[conclude-card-payment] Sem pre_payment_key - não é possível validar na API Quita+');
+      // Sem prePaymentKey, assumir pending para segurança
+      finalStatus = 'pending';
+    }
 
     // Check for existing credit_card split
     const { data: existingSplits } = await supabase
@@ -71,16 +151,18 @@ Deno.serve(async (req) => {
     if (existingSplits && existingSplits.length > 0) {
       // Update existing split
       splitId = existingSplits[0].id;
-      console.log('[conclude-card-payment] Updating existing split:', splitId);
+      console.log('[conclude-card-payment] Updating existing split:', splitId, 'with status:', finalStatus);
 
       const { error: updateError } = await supabase
         .from('payment_splits')
         .update({
-          status: 'concluded',
-          transaction_id: transaction_id,
-          processed_at: new Date().toISOString(),
+          status: finalStatus,
+          transaction_id: realTransactionId,
+          authorization_code: authorizationCode,
+          processed_at: finalStatus === 'concluded' ? new Date().toISOString() : null,
           amount_cents: totalAmount,
           installments: installments,
+          pre_payment_key: prePaymentKey || existingSplits[0].pre_payment_key,
         })
         .eq('id', splitId);
 
@@ -90,7 +172,7 @@ Deno.serve(async (req) => {
       }
     } else {
       // Create new split
-      console.log('[conclude-card-payment] Creating new credit_card split');
+      console.log('[conclude-card-payment] Creating new credit_card split with status:', finalStatus);
 
       const { data: newSplit, error: insertError } = await supabase
         .from('payment_splits')
@@ -99,9 +181,13 @@ Deno.serve(async (req) => {
           charge_id: chargeId,
           method: 'credit_card',
           amount_cents: totalAmount,
-          status: 'pending',
+          status: finalStatus,
           installments: installments,
           order_index: 1,
+          pre_payment_key: prePaymentKey,
+          transaction_id: realTransactionId,
+          authorization_code: authorizationCode,
+          processed_at: finalStatus === 'concluded' ? new Date().toISOString() : null,
         })
         .select()
         .single();
@@ -112,60 +198,64 @@ Deno.serve(async (req) => {
       }
 
       splitId = newSplit.id;
-      console.log('[conclude-card-payment] Split created:', splitId);
+    }
 
-      // Now update to concluded
-      const { error: updateError } = await supabase
+    console.log('[conclude-card-payment] Split processed:', splitId, 'Final status:', finalStatus);
+
+    // Se pagamento foi confirmado como failed, também remover PIX pendentes
+    if (finalStatus === 'failed' || finalStatus === 'expired') {
+      const { error: deleteError } = await supabase
         .from('payment_splits')
-        .update({
-          status: 'concluded',
-          transaction_id: transaction_id,
-          processed_at: new Date().toISOString(),
-        })
-        .eq('id', splitId);
+        .delete()
+        .eq('payment_link_id', payment_link_id)
+        .eq('method', 'pix')
+        .eq('status', 'pending');
 
-      if (updateError) {
-        console.error('[conclude-card-payment] Error concluding split:', updateError);
-        throw updateError;
+      if (deleteError) {
+        console.warn('[conclude-card-payment] Could not delete pending PIX splits:', deleteError);
       }
     }
 
-    console.log('[conclude-card-payment] Split concluded successfully:', splitId);
-
-    // Remove any pending PIX splits for this payment_link (cleanup)
-    const { error: deleteError } = await supabase
-      .from('payment_splits')
-      .delete()
-      .eq('payment_link_id', payment_link_id)
-      .eq('method', 'pix')
-      .eq('status', 'pending');
-
-    if (deleteError) {
-      console.warn('[conclude-card-payment] Could not delete pending PIX splits:', deleteError);
-    } else {
-      console.log('[conclude-card-payment] Cleaned up any pending PIX splits');
-    }
-
-    // Optionally update charge status if all splits are concluded
+    // Atualizar status do charge baseado em todos os splits
     if (chargeId) {
       const { data: allSplits } = await supabase
         .from('payment_splits')
-        .select('status')
+        .select('status, method')
         .eq('charge_id', chargeId);
 
-      if (allSplits && allSplits.every(s => s.status === 'concluded')) {
-        console.log('[conclude-card-payment] All splits concluded, updating charge status');
+      if (allSplits) {
+        const allConcluded = allSplits.every(s => s.status === 'concluded');
+        const anyFailed = allSplits.some(s => s.status === 'failed' || s.status === 'expired');
+        const anyConcluded = allSplits.some(s => s.status === 'concluded');
+
+        let chargeStatus = 'pending';
+        if (allConcluded && allSplits.length > 0) {
+          chargeStatus = 'completed';
+        } else if (anyFailed && !anyConcluded) {
+          chargeStatus = 'failed';
+        } else if (anyConcluded) {
+          chargeStatus = 'processing'; // Parcialmente pago
+        }
+
+        console.log('[conclude-card-payment] Updating charge status to:', chargeStatus);
         await supabase
           .from('charges')
-          .update({ status: 'completed' })
+          .update({ status: chargeStatus })
           .eq('id', chargeId);
       }
     }
 
-    console.log('[conclude-card-payment] Payment conclusion completed successfully');
+    console.log('[conclude-card-payment] Payment conclusion completed. Final status:', finalStatus, 'Validated by API:', statusFromApi);
 
     return new Response(
-      JSON.stringify({ ok: true, splitId }),
+      JSON.stringify({ 
+        ok: true, 
+        splitId, 
+        status: finalStatus,
+        authorizationCode,
+        transactionId: realTransactionId,
+        validatedByApi: statusFromApi
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

@@ -627,14 +627,19 @@ export default function ChargeHistory() {
   const syncPaymentStatuses = useCallback(async (isAutoSync = false) => {
     setSyncing(true);
     try {
-      // Sincronizar status de pagamentos Quita+/Cartão
+      // Sincronizar status de pagamentos Quita+/Boleto
       const { data, error } = await supabase.functions.invoke('sync-payment-status');
       
-      // Sincronizar status de PIX (novo job)
+      // Sincronizar status de PIX
       const { data: pixData, error: pixError } = await supabase.functions.invoke('sync-pix-status');
       
-      if (error && pixError) {
-        console.error('Erro na sincronização:', error, pixError);
+      // Sincronizar status de Cartão (verifica API Quita+ para pagamentos pendentes/inconsistentes)
+      const { data: cardData, error: cardError } = await supabase.functions.invoke('sync-card-status');
+      
+      const allFailed = error && pixError && cardError;
+      
+      if (allFailed) {
+        console.error('Erro na sincronização:', { error, pixError, cardError });
         if (!isAutoSync) {
           toast({
             title: "Erro na sincronização",
@@ -643,8 +648,8 @@ export default function ChargeHistory() {
           });
         }
       } else {
-        const updated = (data?.updated || 0) + (pixData?.stats?.updated || 0);
-        const processed = (data?.processed || 0) + (pixData?.stats?.checked || 0);
+        const updated = (data?.updated || 0) + (pixData?.stats?.updated || 0) + (cardData?.stats?.updated || 0);
+        const processed = (data?.processed || 0) + (pixData?.stats?.checked || 0) + (cardData?.stats?.checked || 0);
         
         // Atualizar timestamp da última sincronização
         setLastSync(new Date());
@@ -666,11 +671,11 @@ export default function ChargeHistory() {
           // Para auto-sync, mostrar toast apenas se houve atualizações
           toast({
             title: "Atualização automática",
-            description: `${updated} cobrança(s) atualizada(s) (inclui PIX).`,
+            description: `${updated} cobrança(s) atualizada(s) (inclui PIX e Cartão).`,
           });
         }
         
-        console.log(`[ChargeHistory] Sincronização ${isAutoSync ? 'automática' : 'manual'}: ${updated}/${processed} atualizados (Cartão: ${data?.updated || 0}, PIX: ${pixData?.stats?.updated || 0})`);
+        console.log(`[ChargeHistory] Sincronização ${isAutoSync ? 'automática' : 'manual'}: ${updated}/${processed} atualizados (Boleto: ${data?.updated || 0}, PIX: ${pixData?.stats?.updated || 0}, Cartão: ${cardData?.stats?.updated || 0})`);
       }
     } catch (err) {
       console.error('Erro ao sincronizar:', err);
