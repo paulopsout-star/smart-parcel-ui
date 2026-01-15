@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, ArrowLeft, History, Printer, RefreshCw, Calendar, Download, QrCode, CreditCard, Phone, Mail, Building2 } from "lucide-react";
+import { CheckCircle, ArrowLeft, History, Printer, RefreshCw, Calendar, Download, QrCode, CreditCard, Phone, Mail, Building2, XCircle, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -31,6 +31,9 @@ const useDocumentTitle = (title: string) => {
 interface ThankYouData {
   paid: boolean;
   processing?: boolean;
+  failed?: boolean;
+  failedMethod?: string;
+  failedMethodLabel?: string;
   message?: string;
   charge?: {
     id: string;
@@ -362,6 +365,64 @@ export default function ThankYou() {
     );
   }
 
+  // ✅ TELA DE ERRO: Pagamento não aprovado
+  if (!data?.paid && data?.failed) {
+    const methodLabel = data.failedMethodLabel || 
+      (data.failedMethod === 'credit_card' ? 'Cartão de Crédito' : 
+       data.failedMethod === 'pix' ? 'PIX' : 'Pagamento');
+    
+    return (
+      <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="pt-6 text-center">
+            <div className="w-16 h-16 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <XCircle className="h-8 w-8 text-destructive" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2 text-ds-text-strong">
+              Pagamento Não Aprovado
+            </h2>
+            <p className="text-ds-text-muted mb-4">
+              Infelizmente seu pagamento via <strong>{methodLabel}</strong> não foi aprovado.
+            </p>
+            
+            <div className="bg-muted/50 rounded-lg p-4 mb-6 text-left">
+              <p className="text-sm font-medium text-ds-text-strong mb-2 flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                Isso pode acontecer por:
+              </p>
+              <ul className="text-sm text-ds-text-muted space-y-1 ml-6 list-disc">
+                <li>Saldo ou limite insuficiente</li>
+                <li>Cartão bloqueado ou vencido</li>
+                <li>Tempo de sessão expirado</li>
+                <li>Dados do cartão incorretos</li>
+              </ul>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button onClick={() => window.history.back()} variant="default">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Tentar Novamente
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/">
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Voltar ao Início
+                </Link>
+              </Button>
+            </div>
+            
+            {data?.ui?.support_email && (
+              <p className="text-xs text-ds-text-muted mt-6">
+                Precisa de ajuda? Entre em contato: {data.ui.support_email}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Tela de processamento
   if (!data?.paid && data?.processing) {
     return (
       <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
