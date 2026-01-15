@@ -250,6 +250,12 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
   const pixSplit = splits.find(s => s.method === 'pix');
   const cardSplit = splits.find(s => s.method === 'credit_card');
 
+  // ✅ STATUS ÚNICO: usar getComputedStatus como fonte da verdade para exibição
+  const displayStatus = getComputedStatus(charge);
+  const isTerminalStatus = ['cancelled', 'failed', 'payment_denied'].includes(displayStatus);
+  const isCompleted = displayStatus === 'completed';
+  const isPartial = displayStatus === 'partial';
+
   // Cálculos para PIX - sempre calcular 5% de taxa
   const pixBase = charge.pix_amount || 0;
   const PIX_FEE_RATE = 0.05; // 5%
@@ -272,23 +278,41 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     ? ((cardFeeAmount / cardBase) * 100).toFixed(1) 
     : '0';
 
-  // Verificar se o split está pago - ÚNICA fonte de verdade: status === 'concluded'
+  // ✅ Badge usa o displayStatus computado (igual ao topo) quando terminal
+  const getUnifiedStatusBadge = (splitMethod: 'pix' | 'card') => {
+    // Se status terminal, mostrar o mesmo badge do topo
+    if (isTerminalStatus) {
+      if (displayStatus === 'cancelled') return <Badge variant="secondary" className="text-xs">✗ Cancelado</Badge>;
+      if (displayStatus === 'failed') return <Badge variant="destructive" className="text-xs">✗ Falhou</Badge>;
+      if (displayStatus === 'payment_denied') return <Badge variant="destructive" className="text-xs">✗ Negado</Badge>;
+    }
+    
+    // Se completado, todos os splits estão pagos
+    if (isCompleted) {
+      return <Badge variant="success" className="text-xs">✓ Pago</Badge>;
+    }
+    
+    // Se parcial, verificar individual do split
+    if (isPartial) {
+      const split = splitMethod === 'pix' ? pixSplit : cardSplit;
+      if (split) {
+        const isPaid = split.status === 'concluded' || (splitMethod === 'pix' && split.pix_paid_at);
+        if (isPaid) return <Badge variant="success" className="text-xs">✓ Pago</Badge>;
+      }
+    }
+    
+    return <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>;
+  };
+
+  // Verificar se o split está efetivamente pago (para cálculos de totais)
   const isSplitPaid = (split: PaymentSplitInfo | undefined, isPix: boolean): boolean => {
+    // Se terminal, nada está "pago" para fins de exibição
+    if (isTerminalStatus) return false;
     if (!split) return false;
-    // Para PIX, pix_paid_at também indica conclusão (webhook processado)
     if (isPix) {
       return split.status === 'concluded' || !!split.pix_paid_at;
     }
-    // Para cartão: SOMENTE status === 'concluded' indica pagamento aprovado
     return split.status === 'concluded';
-  };
-
-  const getSplitStatusBadge = (split: PaymentSplitInfo | undefined, isPix: boolean) => {
-    if (!split) return null;
-    if (isSplitPaid(split, isPix)) {
-      return <Badge variant="success" className="text-xs">✓ Pago</Badge>;
-    }
-    return <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>;
   };
 
   // Se não há splits e não é pagamento combinado
@@ -316,7 +340,7 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                 </div>
                 <span className="font-medium text-green-700">PIX</span>
               </div>
-              {getSplitStatusBadge(pixSplit, true)}
+              {getUnifiedStatusBadge('pix')}
             </div>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between text-ds-text-muted">
@@ -351,7 +375,7 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                   Cartão {cardSplit?.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''}
                 </span>
               </div>
-              {getSplitStatusBadge(cardSplit, false)}
+              {getUnifiedStatusBadge('card')}
             </div>
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between text-ds-text-muted">
@@ -376,7 +400,7 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
       </div>
 
       {/* Total Geral - só somar o que foi efetivamente pago */}
-      {hasPix && hasCard && (() => {
+      {hasPix && hasCard && !isTerminalStatus && (() => {
         const pixPaid = isSplitPaid(pixSplit, true);
         const cardPaid = isSplitPaid(cardSplit, false);
         const totalPaid = (pixPaid ? pixTotal : 0) + (cardPaid ? cardTotal : 0);
@@ -1624,39 +1648,43 @@ export default function ChargeHistory() {
                       <PaymentMethodsSummary charge={selectedCharge} isAdmin={isAdmin} />
                       
                       {/* Detalhes individuais dos splits */}
-                      {selectedCharge.splits && selectedCharge.splits.length > 0 && (
+                      {selectedCharge.splits && selectedCharge.splits.length > 0 && (() => {
+                        // ✅ STATUS ÚNICO: usar getComputedStatus como fonte da verdade (igual ao topo)
+                        const displayStatus = getComputedStatus(selectedCharge);
+                        const isTerminalStatus = ['cancelled', 'failed', 'payment_denied'].includes(displayStatus);
+                        const isCompleted = displayStatus === 'completed';
+                        const isPartial = displayStatus === 'partial';
+                        
+                        return (
                         <div className="space-y-2 mt-3">
                             {selectedCharge.splits.map((split) => {
-                              // ✅ CORREÇÃO: Badge do split deve respeitar o status COMPUTADO da cobrança
-                              // Se a cobrança está cancelada/failed, o split também deve mostrar esse status
-                              const chargeComputedStatus = getComputedStatus(selectedCharge);
-                              const isChargeTerminal = ['cancelled', 'failed', 'payment_denied'].includes(chargeComputedStatus) || 
-                                                       ['cancelled', 'failed', 'payment_denied'].includes(selectedCharge.status);
-                              
-                              // Determinar status do split para exibição
-                              const splitDisplayStatus = isChargeTerminal 
-                                ? selectedCharge.status // Usar status da cobrança quando terminal
-                                : split.status;
-                              
-                              // Determinar se está "pago" baseado no status real
-                              const isSplitConcluded = split.status === 'concluded' || (split.method === 'pix' && split.pix_paid_at);
-                              
-                              // Badge variant e label baseados no status da cobrança (quando terminal) ou do split
-                              const getBadgeConfig = () => {
-                                if (isChargeTerminal) {
-                                  // Status terminal da cobrança: mostrar o mesmo
-                                  if (selectedCharge.status === 'cancelled') return { variant: 'secondary' as const, label: '✗ Cancelado' };
-                                  if (selectedCharge.status === 'failed') return { variant: 'destructive' as const, label: '✗ Falhou' };
-                                  if (selectedCharge.status === 'payment_denied') return { variant: 'destructive' as const, label: '✗ Negado' };
+                              // ✅ Badge unificado: usa o displayStatus (getComputedStatus) como o topo
+                              const getSplitBadgeConfig = () => {
+                                // Se status terminal, TODOS os cards mostram o mesmo status do topo
+                                if (isTerminalStatus) {
+                                  if (displayStatus === 'cancelled') return { variant: 'secondary' as const, label: '✗ Cancelado' };
+                                  if (displayStatus === 'failed') return { variant: 'destructive' as const, label: '✗ Falhou' };
+                                  if (displayStatus === 'payment_denied') return { variant: 'destructive' as const, label: '✗ Negado' };
                                 }
+                                
+                                // Se completado, todos os splits estão pagos
+                                if (isCompleted) {
+                                  return { variant: 'success' as const, label: '✓ Pago' };
+                                }
+                                
+                                // Se parcial, verificar individual do split
+                                if (isPartial) {
+                                  const isPaid = split.status === 'concluded' || (split.method === 'pix' && split.pix_paid_at);
+                                  if (isPaid) return { variant: 'success' as const, label: '✓ Pago' };
+                                }
+                                
                                 // Status normal do split
-                                if (isSplitConcluded) return { variant: 'success' as const, label: '✓ Pago' };
                                 if (split.status === 'failed') return { variant: 'destructive' as const, label: '✗ Recusado' };
                                 if (split.status === 'cancelled') return { variant: 'secondary' as const, label: '✗ Cancelado' };
                                 return { variant: 'warning' as const, label: '⏳ Pendente' };
                               };
                               
-                              const badgeConfig = getBadgeConfig();
+                              const badgeConfig = getSplitBadgeConfig();
                               
                               return (
                               <div key={split.id} className="p-3 bg-ds-bg-surface-alt rounded-lg border border-ds-border-subtle">
@@ -1682,7 +1710,7 @@ export default function ChargeHistory() {
                                     <span className="font-medium">PreAuth:</span> {split.pre_payment_key.slice(0, 8)}...
                                   </div>
                                 )}
-                                {split.pix_paid_at && (
+                                {!isTerminalStatus && split.pix_paid_at && (
                                   <div className="col-span-2">
                                     <span className="font-medium">Pago em:</span> {format(new Date(split.pix_paid_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                                   </div>
@@ -1692,7 +1720,8 @@ export default function ChargeHistory() {
                             );
                           })}
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   )}
 
