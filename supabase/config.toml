@@ -150,5 +150,8 @@ verify_jwt = false
 [functions.sync-payment-status]
 verify_jwt = false
 
+[functions.sync-pix-status]
+verify_jwt = false
+
 [functions.admin-link-boleto]
 verify_jwt = false

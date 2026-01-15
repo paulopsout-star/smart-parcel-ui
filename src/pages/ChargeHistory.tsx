@@ -627,10 +627,14 @@ export default function ChargeHistory() {
   const syncPaymentStatuses = useCallback(async (isAutoSync = false) => {
     setSyncing(true);
     try {
+      // Sincronizar status de pagamentos Quita+/Cartão
       const { data, error } = await supabase.functions.invoke('sync-payment-status');
       
-      if (error) {
-        console.error('Erro na sincronização:', error);
+      // Sincronizar status de PIX (novo job)
+      const { data: pixData, error: pixError } = await supabase.functions.invoke('sync-pix-status');
+      
+      if (error && pixError) {
+        console.error('Erro na sincronização:', error, pixError);
         if (!isAutoSync) {
           toast({
             title: "Erro na sincronização",
@@ -639,8 +643,8 @@ export default function ChargeHistory() {
           });
         }
       } else {
-        const updated = data?.updated || 0;
-        const processed = data?.processed || 0;
+        const updated = (data?.updated || 0) + (pixData?.stats?.updated || 0);
+        const processed = (data?.processed || 0) + (pixData?.stats?.checked || 0);
         
         // Atualizar timestamp da última sincronização
         setLastSync(new Date());
@@ -650,7 +654,7 @@ export default function ChargeHistory() {
           if (updated > 0) {
             toast({
               title: "Sincronização concluída",
-              description: `${updated} de ${processed} cobrança(s) atualizada(s).`,
+              description: `${updated} cobrança(s) atualizada(s).`,
             });
           } else {
             toast({
@@ -662,11 +666,11 @@ export default function ChargeHistory() {
           // Para auto-sync, mostrar toast apenas se houve atualizações
           toast({
             title: "Atualização automática",
-            description: `${updated} cobrança(s) atualizada(s).`,
+            description: `${updated} cobrança(s) atualizada(s) (inclui PIX).`,
           });
         }
         
-        console.log(`[ChargeHistory] Sincronização ${isAutoSync ? 'automática' : 'manual'}: ${updated}/${processed} atualizados`);
+        console.log(`[ChargeHistory] Sincronização ${isAutoSync ? 'automática' : 'manual'}: ${updated}/${processed} atualizados (Cartão: ${data?.updated || 0}, PIX: ${pixData?.stats?.updated || 0})`);
       }
     } catch (err) {
       console.error('Erro ao sincronizar:', err);
