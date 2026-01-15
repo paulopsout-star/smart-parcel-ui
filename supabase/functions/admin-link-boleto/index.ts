@@ -117,6 +117,55 @@ serve(async (req) => {
       );
     }
 
+    // ====== PRÉ-VALIDAÇÃO: Verificar status do pré-pagamento na API antes de vincular ======
+    console.log('[admin-link-boleto] Verificando status do pré-pagamento na API...');
+    
+    const statusResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-prepayment-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prePaymentKey: charge.pre_payment_key }),
+    });
+
+    const statusResult = await statusResponse.json();
+    console.log('[admin-link-boleto] Status do pré-pagamento:', statusResult);
+
+    // Verificar se status é válido para vínculo
+    // Status válidos: 1 (Pending), 9 (Paid)
+    // Status inválidos: 2 (Canceled), 3 (Expired), 4 (Failed), etc.
+    const validStatusCodes = [1, 9]; // Pending, Paid
+    const statusCode = statusResult.statusCode ?? statusResult.StatusCode;
+
+    if (statusCode === undefined || statusCode === null) {
+      console.error('[admin-link-boleto] Não foi possível obter status do pré-pagamento');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Pré-pagamento não encontrado',
+          message: 'Não foi possível verificar o status do pré-pagamento na API. Verifique se o pagamento por cartão foi realizado corretamente.',
+          apiResponse: statusResult,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!validStatusCodes.includes(statusCode)) {
+      const statusDescription = statusResult.statusDescription || statusResult.StatusDescription || 'Status desconhecido';
+      console.warn('[admin-link-boleto] Pré-pagamento com status inválido para vínculo:', statusCode, statusDescription);
+      
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Pré-pagamento inválido',
+          message: `O pré-pagamento não está em status válido para vincular o boleto. Status atual: ${statusDescription} (código ${statusCode})`,
+          statusCode: statusCode,
+          statusDescription: statusDescription,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[admin-link-boleto] Pré-pagamento válido, prosseguindo com vínculo do boleto...');
+
     // Obter credenciais padrão
     const creditorName = Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || '';
     const creditorDocument = Deno.env.get('QUITA_MAIS_CREDITOR_DOCUMENT') || '';
@@ -143,19 +192,30 @@ serve(async (req) => {
     const linkResult = await linkResponse.json();
     console.log('[admin-link-boleto] Resultado do vínculo:', linkResult);
 
-    // Verificar se houve erro
-    if (linkResult.error || (linkResult.apiMetadata?.httpStatus && linkResult.apiMetadata.httpStatus >= 400)) {
-      const errorMessage = linkResult.error || 'Erro ao vincular boleto na API';
+    // ====== PÓS-VALIDAÇÃO: Verificar flag success + erros + httpStatus ======
+    // linkResult.success === false indica que a API retornou erro (mesmo com HTTP 200)
+    if (linkResult.success === false || linkResult.error || (linkResult.apiMetadata?.httpStatus && linkResult.apiMetadata.httpStatus >= 400)) {
+      const errorMessage = linkResult.errorMessage || linkResult.error || 'Erro ao vincular boleto na API';
+      
+      console.error('[admin-link-boleto] Falha no vínculo do boleto:', errorMessage);
       
       return new Response(
         JSON.stringify({
           success: false,
           error: errorMessage,
+          message: 'O boleto não foi vinculado. Verifique se o pré-pagamento ainda é válido e tente novamente.',
           apiResponse: linkResult.apiRawResponse,
           httpStatus: linkResult.apiMetadata?.httpStatus,
+          errorDetected: linkResult.errorDetected,
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Verificar se linkResult.success está explicitamente true
+    if (linkResult.success !== true) {
+      console.warn('[admin-link-boleto] Resposta sem flag success explícita, tratando com cautela');
+      // Continuar apenas se não houver indicadores de erro
     }
 
     // Sucesso - Atualizar cobrança
