@@ -315,7 +315,20 @@ DETALHES TÉCNICOS:
         const quitaData = JSON.parse(responseText);
         const prePaymentKey = quitaData.prePaymentKey || quitaData.pre_payment_key;
 
-        // VALIDAÇÃO CRÍTICA: Não atualizar status se prePaymentKey não existir
+        // Extrair isApproved e message da resposta da API
+        // isApproved pode vir como IsApproved (PascalCase) ou isApproved (camelCase)
+        // Se não existir, assumimos false para segurança (deve existir explicitamente)
+        const isApproved = quitaData.isApproved ?? quitaData.IsApproved ?? false;
+        const apiMessage = quitaData.message || quitaData.Message || 
+                          quitaData.returnMessage || quitaData.ReturnMessage || '';
+
+        console.log('[quitaplus-prepayment] Resposta da API analisada:', {
+          prePaymentKey: prePaymentKey ? 'presente' : 'ausente',
+          isApproved,
+          message: apiMessage
+        });
+
+        // VALIDAÇÃO 1: Verificar se prePaymentKey existe
         if (!prePaymentKey) {
           console.error('[quitaplus-prepayment] API retornou sucesso HTTP mas sem prePaymentKey:', responseText);
           
@@ -326,6 +339,7 @@ DETALHES TÉCNICOS:
               success: false,
               error: 'prepayment_key_missing',
               userMessage: userMessage,
+              isApproved: false,
               apiRawResponse: responseText,
               apiMetadata: {
                 httpStatus: quitaResponse.status,
@@ -341,7 +355,11 @@ DETALHES TÉCNICOS:
           );
         }
 
-        console.log('[quitaplus-prepayment] Pré-pagamento autorizado com sucesso, prePaymentKey:', prePaymentKey);
+        // SALVAR prePaymentKey no banco MESMO se não aprovado (para rastreamento)
+        // O status depende de isApproved
+        const splitStatus = isApproved === true ? 'pending' : 'failed';
+        
+        console.log(`[quitaplus-prepayment] Salvando prePaymentKey com status: ${splitStatus}`);
 
         // Atualizar payment_splits com pre_payment_key
         const { error: updateError } = await supabase
@@ -349,7 +367,7 @@ DETALHES TÉCNICOS:
           .update({
             pre_payment_key: prePaymentKey,
             authorization_code: quitaData.authorizationCode || quitaData.authorization_code,
-            status: 'pending',
+            status: splitStatus,
           })
           .eq('payment_link_id', requestData.paymentLinkId)
           .eq('method', 'credit_card');
@@ -358,7 +376,49 @@ DETALHES TÉCNICOS:
           console.error('[quitaplus-prepayment] Erro ao atualizar payment_splits:', updateError);
         }
 
-        // Atualizar cobrança com pre_payment_key e status
+        // VALIDAÇÃO 2: Verificar se isApproved === true
+        // Só continua o fluxo de sucesso se aprovado
+        if (isApproved !== true) {
+          console.log('[quitaplus-prepayment] Pagamento NÃO aprovado pela API:', apiMessage);
+          
+          // Determinar mensagem amigável para o usuário
+          const userMessage = apiMessage || extractUserFriendlyMessage(responseText, quitaResponse.status);
+          
+          // Atualizar cobrança com status failed
+          await supabase
+            .from('charges')
+            .update({
+              pre_payment_key: prePaymentKey,
+              status: 'payment_denied',
+            })
+            .eq('id', requestData.chargeId);
+
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: 'payment_not_approved',
+              userMessage: userMessage,
+              prePaymentKey: prePaymentKey, // Retornar para referência
+              isApproved: false,
+              apiRawResponse: responseText,
+              apiMetadata: {
+                httpStatus: quitaResponse.status,
+                httpStatusText: quitaResponse.statusText,
+                httpHeaders: Object.fromEntries(quitaResponse.headers.entries()),
+                requestUrl: fullUrl
+              }
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+
+        // Só chega aqui se prePaymentKey existe E isApproved === true
+        console.log('[quitaplus-prepayment] Pré-pagamento autorizado com sucesso, prePaymentKey:', prePaymentKey);
+
+        // Atualizar cobrança com pre_payment_key e status (somente se aprovado)
         await supabase
           .from('charges')
           .update({
