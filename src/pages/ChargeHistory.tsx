@@ -1626,20 +1626,48 @@ export default function ChargeHistory() {
                       {/* Detalhes individuais dos splits */}
                       {selectedCharge.splits && selectedCharge.splits.length > 0 && (
                         <div className="space-y-2 mt-3">
-                          {selectedCharge.splits.map((split) => (
-                            <div key={split.id} className="p-3 bg-ds-bg-surface-alt rounded-lg border border-ds-border-subtle">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-sm">
-                                  {split.method === 'pix' ? '💳 PIX' : '💳 Cartão de Crédito'}
-                                </span>
-                                <Badge variant={
-                                  split.status === 'concluded' || (split.method === 'pix' && split.pix_paid_at) ? 'success' : 
-                                  split.status === 'failed' ? 'destructive' : 'warning'
-                                }>
-                                  {split.status === 'concluded' || (split.method === 'pix' && split.pix_paid_at) ? '✓ Pago' : 
-                                   split.status === 'failed' ? '✗ Recusado' : '⏳ Pendente'}
-                                </Badge>
-                              </div>
+                            {selectedCharge.splits.map((split) => {
+                              // ✅ CORREÇÃO: Badge do split deve respeitar o status COMPUTADO da cobrança
+                              // Se a cobrança está cancelada/failed, o split também deve mostrar esse status
+                              const chargeComputedStatus = getComputedStatus(selectedCharge);
+                              const isChargeTerminal = ['cancelled', 'failed', 'payment_denied'].includes(chargeComputedStatus) || 
+                                                       ['cancelled', 'failed', 'payment_denied'].includes(selectedCharge.status);
+                              
+                              // Determinar status do split para exibição
+                              const splitDisplayStatus = isChargeTerminal 
+                                ? selectedCharge.status // Usar status da cobrança quando terminal
+                                : split.status;
+                              
+                              // Determinar se está "pago" baseado no status real
+                              const isSplitConcluded = split.status === 'concluded' || (split.method === 'pix' && split.pix_paid_at);
+                              
+                              // Badge variant e label baseados no status da cobrança (quando terminal) ou do split
+                              const getBadgeConfig = () => {
+                                if (isChargeTerminal) {
+                                  // Status terminal da cobrança: mostrar o mesmo
+                                  if (selectedCharge.status === 'cancelled') return { variant: 'secondary' as const, label: '✗ Cancelado' };
+                                  if (selectedCharge.status === 'failed') return { variant: 'destructive' as const, label: '✗ Falhou' };
+                                  if (selectedCharge.status === 'payment_denied') return { variant: 'destructive' as const, label: '✗ Negado' };
+                                }
+                                // Status normal do split
+                                if (isSplitConcluded) return { variant: 'success' as const, label: '✓ Pago' };
+                                if (split.status === 'failed') return { variant: 'destructive' as const, label: '✗ Recusado' };
+                                if (split.status === 'cancelled') return { variant: 'secondary' as const, label: '✗ Cancelado' };
+                                return { variant: 'warning' as const, label: '⏳ Pendente' };
+                              };
+                              
+                              const badgeConfig = getBadgeConfig();
+                              
+                              return (
+                              <div key={split.id} className="p-3 bg-ds-bg-surface-alt rounded-lg border border-ds-border-subtle">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-medium text-sm">
+                                    {split.method === 'pix' ? '💳 PIX' : '💳 Cartão de Crédito'}
+                                  </span>
+                                  <Badge variant={badgeConfig.variant}>
+                                    {badgeConfig.label}
+                                  </Badge>
+                                </div>
                               <div className="grid grid-cols-2 gap-2 text-xs text-ds-text-muted">
                                 <div>
                                   <span className="font-medium">Valor:</span> {formatCurrency(split.amount_cents)}
@@ -1659,9 +1687,10 @@ export default function ChargeHistory() {
                                     <span className="font-medium">Pago em:</span> {format(new Date(split.pix_paid_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
                                   </div>
                                 )}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </div>

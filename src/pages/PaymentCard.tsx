@@ -129,9 +129,9 @@ export default function PaymentCard() {
           }
         }
 
-        const isCardPaid = 
-          cardSplit.status === 'concluded' || 
-          cardSplit.transaction_id;
+        // ÚNICA fonte de verdade: status === 'concluded'
+        // NÃO usar transaction_id como indicador de pagamento
+        const isCardPaid = cardSplit.status === 'concluded';
         
         if (isCardPaid) {
           console.log('[PaymentCard] ✅ Cartão já foi pago (indicadores locais), redirecionando...');

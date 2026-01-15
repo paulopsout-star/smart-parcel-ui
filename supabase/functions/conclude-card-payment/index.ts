@@ -6,9 +6,10 @@ const corsHeaders = {
 };
 
 // Mapeamento statusCode Quita+ → status interno
+// IMPORTANTE: StatusCode 2 (Canceled) deve mapear para 'cancelled' para consistência com charges
 const statusCodeMap: Record<number, string> = {
   1: 'pending',           // Received - pré-pagamento criado
-  2: 'failed',            // Canceled - prazo expirou ou valor diferente
+  2: 'cancelled',         // Canceled - prazo expirou ou valor diferente → CANCELLED (não failed)
   3: 'expired',           // Expired
   4: 'validating',        // Settled - analisado pelo robô
   5: 'failed',            // PaymentDenied - risco não aprovou
@@ -117,8 +118,8 @@ Deno.serve(async (req) => {
           realTransactionId = statusData.transactionId || transaction_id || null;
           statusFromApi = true;
 
-          // Se o status é 'failed' ou 'expired', NÃO marcar como concluded
-          if (finalStatus === 'failed' || finalStatus === 'expired') {
+          // Se o status é 'failed', 'expired' ou 'cancelled', NÃO marcar como concluded
+          if (finalStatus === 'failed' || finalStatus === 'expired' || finalStatus === 'cancelled') {
             console.log('[conclude-card-payment] Pagamento NÃO foi aprovado na API. Status:', finalStatus);
           } else if (finalStatus === 'concluded') {
             console.log('[conclude-card-payment] Pagamento CONFIRMADO como pago na API Quita+');
@@ -202,8 +203,8 @@ Deno.serve(async (req) => {
 
     console.log('[conclude-card-payment] Split processed:', splitId, 'Final status:', finalStatus);
 
-    // Se pagamento foi confirmado como failed, também remover PIX pendentes
-    if (finalStatus === 'failed' || finalStatus === 'expired') {
+    // Se pagamento foi confirmado como failed/cancelled, também remover PIX pendentes
+    if (finalStatus === 'failed' || finalStatus === 'expired' || finalStatus === 'cancelled') {
       const { error: deleteError } = await supabase
         .from('payment_splits')
         .delete()
@@ -226,11 +227,14 @@ Deno.serve(async (req) => {
       if (allSplits) {
         const allConcluded = allSplits.every(s => s.status === 'concluded');
         const anyFailed = allSplits.some(s => s.status === 'failed' || s.status === 'expired');
+        const anyCancelled = allSplits.some(s => s.status === 'cancelled');
         const anyConcluded = allSplits.some(s => s.status === 'concluded');
 
         let chargeStatus = 'pending';
         if (allConcluded && allSplits.length > 0) {
           chargeStatus = 'completed';
+        } else if (anyCancelled && !anyConcluded) {
+          chargeStatus = 'cancelled'; // Cancelado pela API Quita+
         } else if (anyFailed && !anyConcluded) {
           chargeStatus = 'failed';
         } else if (anyConcluded) {
