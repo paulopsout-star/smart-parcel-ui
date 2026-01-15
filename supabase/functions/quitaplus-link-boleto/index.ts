@@ -109,11 +109,28 @@ serve(async (req) => {
           body: responseText.substring(0, 500),
         });
 
+        // Detectar erros no corpo da resposta mesmo com HTTP 200
+        const responseTextLower = responseText.toLowerCase();
+        const isApiError = 
+          responseTextLower.includes('não encontrado') ||
+          responseTextLower.includes('not found') ||
+          responseTextLower.includes('invalid') ||
+          responseTextLower.includes('canceled') ||
+          responseTextLower.includes('cancelled') ||
+          responseTextLower.includes('expired') ||
+          responseTextLower.includes('expirado') ||
+          responseTextLower.includes('cancelado') ||
+          responseTextLower.includes('error') ||
+          responseTextLower.includes('erro') ||
+          responseTextLower.includes('failed') ||
+          responseTextLower.includes('falha');
+
         if (!quitaResponse.ok) {
           // Erros 4xx não devem ser retried
           if (quitaResponse.status >= 400 && quitaResponse.status < 500) {
             return new Response(
               JSON.stringify({
+                success: false,
                 apiRawResponse: responseText,
                 apiMetadata: {
                   httpStatus: quitaResponse.status,
@@ -131,6 +148,29 @@ serve(async (req) => {
 
           // Erros 5xx podem ser retried
           throw new Error(`HTTP ${quitaResponse.status}: ${responseText}`);
+        }
+
+        // Se a resposta contém padrões de erro, considerar como falha
+        if (isApiError) {
+          console.warn('[quitaplus-link-boleto] API retornou HTTP 200 mas com mensagem de erro:', responseText);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              apiRawResponse: responseText,
+              apiMetadata: {
+                httpStatus: quitaResponse.status,
+                httpStatusText: quitaResponse.statusText,
+                httpHeaders: Object.fromEntries(quitaResponse.headers.entries()),
+                requestUrl: `${baseUrl}/prepayment/AttachBankslip/${requestData.prePaymentKey}`
+              },
+              errorDetected: true,
+              errorMessage: 'API retornou mensagem de erro no corpo da resposta'
+            }),
+            {
+              status: 200,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
         }
 
         const quitaData = JSON.parse(responseText);
@@ -169,6 +209,7 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({
+            success: true,
             apiRawResponse: responseText,
             apiMetadata: {
               httpStatus: quitaResponse.status,
