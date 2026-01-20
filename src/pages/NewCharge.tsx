@@ -304,7 +304,9 @@ export default function NewCharge() {
       console.log('[NewCharge] Cobrança criada com sucesso no banco:', charge.id);
 
       if (data.payment_method === 'pix') {
-        const checkoutUrl = `${window.location.origin}/checkout-pix/${charge.id}`;
+        // Sempre usar domínio de produção fixo - NUNCA usar window.location.origin
+        const PRODUCTION_DOMAIN = 'https://pay1.autonegocie.com';
+        const checkoutUrl = `${PRODUCTION_DOMAIN}/checkout-pix/${charge.id}`;
         
         const fullCheckoutData = {
           chargeId: charge.id,
