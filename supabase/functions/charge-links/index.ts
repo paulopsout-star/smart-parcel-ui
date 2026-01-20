@@ -7,6 +7,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Domínio de produção fixo - NUNCA usar headers do request para URLs de pagamento
+const PRODUCTION_DOMAIN = 'https://pay1.autonegocie.com';
+
+// Função para obter origem segura (sempre domínio de produção)
+function getSecureOrigin(): string {
+  return Deno.env.get('APP_ORIGIN') || PRODUCTION_DOMAIN;
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -14,6 +22,7 @@ serve(async (req) => {
   }
 
   try {
+    // Cliente com credenciais do usuário (para validar acesso via RLS)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -22,6 +31,12 @@ serve(async (req) => {
           headers: { Authorization: req.headers.get('Authorization')! },
         }
       }
+    );
+
+    // Cliente admin para operações privilegiadas (bypass RLS após validação)
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     let chargeId: string | null = null;
@@ -115,13 +130,12 @@ serve(async (req) => {
         });
       }
 
-      // Generate canonical checkout URL
-      const origin = Deno.env.get('APP_ORIGIN') 
-        || req.headers.get('origin') 
-        || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
-        || new URL(req.url).origin;
+      // Generate canonical checkout URL usando domínio seguro
+      const origin = getSecureOrigin();
       const checkoutId = existingLink.id;
       const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
+
+      console.log(`Generated checkout URL: ${checkoutUrl} for charge ${chargeId}`);
 
       return new Response(JSON.stringify({
         link: {
@@ -179,17 +193,16 @@ serve(async (req) => {
       if (existingLink) {
         console.log(`Returning existing payment link for charge ${chargeId}`);
         
-        // Generate canonical checkout URL
-        const origin = Deno.env.get('APP_ORIGIN') 
-          || req.headers.get('origin') 
-          || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
-          || new URL(req.url).origin;
+        // Generate canonical checkout URL usando domínio seguro
+        const origin = getSecureOrigin();
         const checkoutId = existingLink.id;
         const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
         
-        // Update charge with checkout URL if not set
+        console.log(`Generated checkout URL: ${checkoutUrl} for existing link`);
+        
+        // Update charge with checkout URL if not set (usando admin para bypass RLS)
         if (!charge.checkout_url || !charge.checkout_link_id) {
-          await supabase
+          await supabaseAdmin
             .from('charges')
             .update({
               checkout_url: checkoutUrl,
@@ -212,19 +225,16 @@ serve(async (req) => {
       // Generate mock values for required NOT NULL fields
       const tmpLinkId = crypto.randomUUID();
       const tmpGuid = crypto.randomUUID();
-      const origin = Deno.env.get('APP_ORIGIN') 
-        || req.headers.get('origin') 
-        || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
-        || new URL(req.url).origin;
+      const origin = getSecureOrigin();
       
       // Determine checkout URL based on payment method
       const checkoutPath = charge.payment_method === 'pix' ? `/checkout-pix/${chargeId}` : `/checkout/${tmpLinkId}`;
       const tmpLinkUrl = new URL(checkoutPath, origin).toString();
 
-      // Create new payment link with all required fields
-      console.log(`Creating payment link for charge ${chargeId} with company_id: ${charge.company_id}`);
+      // Create new payment link with all required fields (usando admin para bypass RLS)
+      console.log(`Creating payment link for charge ${chargeId} with company_id: ${charge.company_id}, origin: ${origin}`);
       
-      const { data: newLink, error: insertError } = await supabase
+      const { data: newLink, error: insertError } = await supabaseAdmin
         .from('payment_links')
         .insert({
           charge_id: chargeId,
@@ -266,16 +276,15 @@ serve(async (req) => {
             .maybeSingle();
           
           if (existingAfterRace) {
-            // Generate canonical checkout URL
-            const origin = Deno.env.get('APP_ORIGIN') 
-              || req.headers.get('origin') 
-              || req.headers.get('referer')?.split('/').slice(0, 3).join('/')
-              || new URL(req.url).origin;
+            // Generate canonical checkout URL usando domínio seguro
+            const origin = getSecureOrigin();
             const checkoutId = existingAfterRace.id;
             const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
             
-            // Update charge with checkout URL and link ID
-            await supabase
+            console.log(`Race condition resolved, using existing link: ${checkoutUrl}`);
+            
+            // Update charge with checkout URL and link ID (usando admin para bypass RLS)
+            await supabaseAdmin
               .from('charges')
               .update({
                 checkout_url: checkoutUrl,
@@ -297,7 +306,8 @@ serve(async (req) => {
         
         return new Response(JSON.stringify({ 
           code: 'CREATE_FAILED',
-          error: 'Failed to create payment link' 
+          error: 'Failed to create payment link',
+          details: insertError?.message
         }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -311,8 +321,10 @@ serve(async (req) => {
       const finalCheckoutPath = charge.payment_method === 'pix' ? `/checkout-pix/${chargeId}` : `/checkout/${checkoutId}`;
       const checkoutUrl = new URL(finalCheckoutPath, origin).toString();
       
-      // Update charge with checkout URL and link ID
-      await supabase
+      console.log(`Final checkout URL: ${checkoutUrl}`);
+      
+      // Update charge with checkout URL and link ID (usando admin para bypass RLS)
+      await supabaseAdmin
         .from('charges')
         .update({
           checkout_url: checkoutUrl,
