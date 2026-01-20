@@ -272,7 +272,10 @@ export default function NewCharge() {
           has_boleto: data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
           has_boleto_link: requiresBoleto,
-          boleto_linha_digitavel: normalizedLinhaDigitavel || null,
+          // Cartão simples: usa campo de vínculo automático
+          // Cartão + PIX: usa campo informativo (vínculo será manual pelo admin)
+          boleto_linha_digitavel: data.payment_method === 'cartao' ? normalizedLinhaDigitavel : null,
+          boleto_pix_cartao_linha_digitavel: data.payment_method === 'cartao_pix' ? normalizedLinhaDigitavel : null,
           pix_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.pix_amount || '0') : null,
           card_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.card_amount || '0') : null,
           creditor_document: creditorSettings?.creditor_document || null,
