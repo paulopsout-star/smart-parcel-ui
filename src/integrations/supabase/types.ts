@@ -150,6 +150,7 @@ export type Database = {
           boleto_barcode: string | null
           boleto_linha_digitavel: string | null
           boleto_linked_at: string | null
+          boleto_pix_cartao_linha_digitavel: string | null
           card_amount: number | null
           checkout_link_id: string | null
           checkout_url: string | null
@@ -192,6 +193,7 @@ export type Database = {
           boleto_barcode?: string | null
           boleto_linha_digitavel?: string | null
           boleto_linked_at?: string | null
+          boleto_pix_cartao_linha_digitavel?: string | null
           card_amount?: number | null
           checkout_link_id?: string | null
           checkout_url?: string | null
@@ -234,6 +236,7 @@ export type Database = {
           boleto_barcode?: string | null
           boleto_linha_digitavel?: string | null
           boleto_linked_at?: string | null
+          boleto_pix_cartao_linha_digitavel?: string | null
           card_amount?: number | null
           checkout_link_id?: string | null
           checkout_url?: string | null
