@@ -14,7 +14,6 @@ serve(async (req) => {
   }
 
   try {
-    // Cliente com credenciais do usuário (para validar acesso via RLS)
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
@@ -23,12 +22,6 @@ serve(async (req) => {
           headers: { Authorization: req.headers.get('Authorization')! },
         }
       }
-    );
-
-    // Cliente admin para operações privilegiadas (INSERT/UPDATE após validação)
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     let chargeId: string | null = null;
@@ -194,9 +187,9 @@ serve(async (req) => {
         const checkoutId = existingLink.id;
         const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
         
-        // Update charge with checkout URL if not set (usando admin para bypass RLS)
+        // Update charge with checkout URL if not set
         if (!charge.checkout_url || !charge.checkout_link_id) {
-          await supabaseAdmin
+          await supabase
             .from('charges')
             .update({
               checkout_url: checkoutUrl,
@@ -229,10 +222,9 @@ serve(async (req) => {
       const tmpLinkUrl = new URL(checkoutPath, origin).toString();
 
       // Create new payment link with all required fields
-      // Usar cliente admin para bypass RLS após validação de acesso
       console.log(`Creating payment link for charge ${chargeId} with company_id: ${charge.company_id}`);
       
-      const { data: newLink, error: insertError } = await supabaseAdmin
+      const { data: newLink, error: insertError } = await supabase
         .from('payment_links')
         .insert({
           charge_id: chargeId,
@@ -266,7 +258,7 @@ serve(async (req) => {
         
         // Handle unique constraint violations (race condition)
         if (insertError.code === '23505') {
-          const { data: existingAfterRace } = await supabaseAdmin
+          const { data: existingAfterRace } = await supabase
             .from('payment_links')
             .select('id, token, url, status')
             .eq('charge_id', chargeId)
@@ -282,8 +274,8 @@ serve(async (req) => {
             const checkoutId = existingAfterRace.id;
             const checkoutUrl = new URL(`/checkout/${checkoutId}`, origin).toString();
             
-            // Update charge with checkout URL and link ID (usando admin para bypass RLS)
-            await supabaseAdmin
+            // Update charge with checkout URL and link ID
+            await supabase
               .from('charges')
               .update({
                 checkout_url: checkoutUrl,
@@ -319,8 +311,8 @@ serve(async (req) => {
       const finalCheckoutPath = charge.payment_method === 'pix' ? `/checkout-pix/${chargeId}` : `/checkout/${checkoutId}`;
       const checkoutUrl = new URL(finalCheckoutPath, origin).toString();
       
-      // Update charge with checkout URL and link ID (usando admin para bypass RLS)
-      await supabaseAdmin
+      // Update charge with checkout URL and link ID
+      await supabase
         .from('charges')
         .update({
           checkout_url: checkoutUrl,
