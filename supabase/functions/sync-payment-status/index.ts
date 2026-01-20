@@ -46,7 +46,7 @@ serve(async (req) => {
     // Buscar TODAS as cobranças com pre_payment_key (sem filtro de status)
     const { data: charges, error: chargesError } = await supabase
       .from("charges")
-      .select("id, pre_payment_key, status, company_id, payer_name, amount")
+      .select("id, pre_payment_key, status, company_id, payer_name, amount, boleto_linked_at, completed_at")
       .not("pre_payment_key", "is", null)
       .gte("created_at", dateLimitISO)
       .order("created_at", { ascending: false })
