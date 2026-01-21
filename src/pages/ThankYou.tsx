@@ -601,13 +601,6 @@ export default function ThankYou() {
 
           {data?.charge && (
             <>
-              <Button variant="outline" asChild>
-                <Link to="/charges">
-                  <History className="h-4 w-4 mr-2" />
-                  Ver histórico
-                </Link>
-              </Button>
-
               <Button variant="outline" onClick={handlePrint}>
                 <Printer className="h-4 w-4 mr-2" />
                 Imprimir
