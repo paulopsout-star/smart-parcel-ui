@@ -43,14 +43,16 @@ serve(async (req) => {
 
     console.log(`[sync-payment-status] Buscando cobranças com pre_payment_key dos últimos ${SYNC_DAYS_WINDOW} dias (desde ${dateLimitISO})`);
 
-    // Buscar TODAS as cobranças com pre_payment_key (sem filtro de status)
+    // Buscar cobranças com pre_payment_key - limitar a 30 para evitar timeout
+    // Priorizar cobranças não-terminais (pending, processing, pre_authorized, boleto_linked, awaiting_validation, validating)
     const { data: charges, error: chargesError } = await supabase
       .from("charges")
       .select("id, pre_payment_key, status, company_id, payer_name, amount, boleto_linked_at, completed_at")
       .not("pre_payment_key", "is", null)
+      .not("status", "in", '("completed","cancelled","payment_denied","failed")')
       .gte("created_at", dateLimitISO)
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(30);
 
     if (chargesError) {
       console.error("[sync-payment-status] Erro ao buscar cobranças:", chargesError);
@@ -214,8 +216,8 @@ serve(async (req) => {
           });
         }
 
-        // Rate limiting: aguardar 1 segundo entre chamadas
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Rate limiting: aguardar 500ms entre chamadas (reduzido para evitar timeout)
+        await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (chargeError) {
         console.error(`[sync-payment-status] Erro ao processar ${charge.id}:`, chargeError);
         results.push({
