@@ -144,6 +144,51 @@ Deno.serve(async (req) => {
       if (updateError) {
         console.error("Error updating split:", updateError);
       }
+
+      // If approved, check if all splits are concluded and update charge status
+      if (isApproved) {
+        // Fetch the split to get charge_id
+        const { data: splitData } = await supabase
+          .from("payment_splits")
+          .select("charge_id")
+          .eq("id", payment_split_id)
+          .single();
+
+        if (splitData?.charge_id) {
+          // Get all splits for this charge
+          const { data: allSplits } = await supabase
+            .from("payment_splits")
+            .select("id, status")
+            .eq("charge_id", splitData.charge_id);
+
+          // Check if all splits are concluded
+          const allConcluded = allSplits?.every(s => 
+            s.id === payment_split_id ? true : s.status === "concluded"
+          );
+
+          if (allConcluded) {
+            // Update charge to completed
+            const { error: chargeError } = await supabase
+              .from("charges")
+              .update({
+                status: "completed",
+                completed_at: new Date().toISOString(),
+                metadata: {
+                  pix_paid_at: mpPayment.date_approved || new Date().toISOString()
+                }
+              })
+              .eq("id", splitData.charge_id);
+
+            if (chargeError) {
+              console.error("Error updating charge status:", chargeError);
+            } else {
+              console.log("Charge status updated to completed:", splitData.charge_id);
+            }
+          } else {
+            console.log("Not all splits concluded yet, charge status not updated");
+          }
+        }
+      }
     }
 
     return new Response(
