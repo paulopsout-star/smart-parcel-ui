@@ -132,25 +132,10 @@ verify_jwt = true
 [functions.public-payment-splits]
 verify_jwt = false
 
-[functions.abacatepay-pix-create]
-verify_jwt = true
-
-[functions.abacatepay-webhook]
-verify_jwt = false
-
-[functions.abacatepay-pix-qrcode]
-verify_jwt = false
-
-[functions.abacatepay-check-status]
-verify_jwt = false
-
 [functions.quitaplus-prepayment-status]
 verify_jwt = false
 
 [functions.sync-payment-status]
-verify_jwt = false
-
-[functions.sync-pix-status]
 verify_jwt = false
 
 [functions.sync-card-status]
