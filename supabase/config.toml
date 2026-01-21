@@ -143,3 +143,15 @@ verify_jwt = false
 
 [functions.admin-link-boleto]
 verify_jwt = false
+
+[functions.mercadopago-pix-create]
+verify_jwt = false
+
+[functions.mercadopago-pix-status]
+verify_jwt = false
+
+[functions.mercadopago-webhook]
+verify_jwt = false
+
+[functions.sync-mercadopago-status]
+verify_jwt = false
