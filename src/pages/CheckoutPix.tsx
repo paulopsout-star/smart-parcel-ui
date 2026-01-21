@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, CheckCircle2, Clock, Copy, QrCode, RefreshCw, ExternalLink } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, Copy, QrCode, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -352,9 +352,6 @@ function CheckoutPixContent() {
         <div className="text-center py-4 bg-muted rounded-xl">
           <p className="text-sm text-muted-foreground mb-1">Valor a pagar</p>
           <p className="text-3xl font-bold text-primary">{formatCurrency(displayAmount)}</p>
-          <p className="text-xs text-muted-foreground mt-1">
-            (Inclui taxa de {(PIX_FEE_PERCENT * 100).toFixed(0)}%)
-          </p>
         </div>
 
         {/* QR Code */}
@@ -387,17 +384,6 @@ function CheckoutPixContent() {
               </>
             )}
           </Button>
-
-          {pixData.ticket_url && (
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={() => window.open(pixData.ticket_url, '_blank')}
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Abrir no Mercado Pago
-            </Button>
-          )}
         </div>
 
         {/* Instructions */}
