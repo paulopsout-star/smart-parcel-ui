@@ -135,7 +135,18 @@ export const mapSimulationToPaymentOptions = (
   const conditions = simulation.simulation.conditions;
   const options: PaymentOption[] = [];
 
-  // 1️⃣ À vista (1x)
+  // 1️⃣ Escolher Parcelas (PRIMEIRA OPÇÃO)
+  options.push({
+    id: 'select',
+    title: 'Escolher Parcelas',
+    type: 'select',
+    totalCents: originalTotalCents,
+    installments: 0,
+    installmentValueCents: 0,
+    isSelectInstallments: true
+  });
+
+  // 2️⃣ À vista (1x)
   const oneTime = conditions.find(c => c.installments === 1);
   if (oneTime) {
     const discountCents = originalTotalCents - oneTime.totalAmount > 0 
@@ -153,7 +164,7 @@ export const mapSimulationToPaymentOptions = (
     });
   }
 
-  // 2️⃣ Mais escolhido (6x)
+  // 3️⃣ Mais escolhido (6x)
   const popular = conditions.find(c => c.installments === 6);
   if (popular) {
     options.push({
@@ -166,7 +177,7 @@ export const mapSimulationToPaymentOptions = (
     });
   }
 
-  // 3️⃣ Menor valor de parcela (máximo de parcelas disponível)
+  // 4️⃣ Menor valor de parcela (máximo de parcelas disponível)
   const maxInstallments = Math.max(...conditions.map(c => c.installments));
   const minimum = conditions.find(c => c.installments === maxInstallments);
   if (minimum) {
@@ -179,17 +190,6 @@ export const mapSimulationToPaymentOptions = (
       installmentValueCents: minimum.installmentAmount
     });
   }
-
-  // 4️⃣ Escolher Parcelas (seletor)
-  options.push({
-    id: 'select',
-    title: 'Escolher Parcelas',
-    type: 'select',
-    totalCents: originalTotalCents,
-    installments: 0,
-    installmentValueCents: 0,
-    isSelectInstallments: true
-  });
 
   // 5️⃣ Valor personalizado (placeholder - será preenchido dinamicamente)
   options.push({
