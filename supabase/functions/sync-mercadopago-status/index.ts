@@ -156,6 +156,36 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Fix orphaned charges: PIX charges with all splits concluded but charge still pending
+    const { data: orphanedCharges } = await supabase
+      .from("charges")
+      .select("id")
+      .eq("status", "pending")
+      .eq("payment_method", "pix");
+
+    if (orphanedCharges && orphanedCharges.length > 0) {
+      console.log(`Checking ${orphanedCharges.length} potentially orphaned PIX charges`);
+      
+      for (const charge of orphanedCharges) {
+        const { data: chargeSplits } = await supabase
+          .from("payment_splits")
+          .select("id, status")
+          .eq("charge_id", charge.id);
+
+        // Only fix if there are splits and ALL are concluded
+        if (chargeSplits && chargeSplits.length > 0 && chargeSplits.every(s => s.status === "concluded")) {
+          await supabase
+            .from("charges")
+            .update({ 
+              status: "completed",
+              completed_at: new Date().toISOString(),
+            })
+            .eq("id", charge.id);
+          console.log(`Fixed orphaned charge ${charge.id} - marked as completed`);
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
