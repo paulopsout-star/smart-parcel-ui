@@ -5,6 +5,71 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Validate Mercado Pago webhook signature (HMAC-SHA256)
+async function validateSignature(
+  req: Request,
+  secret: string
+): Promise<boolean> {
+  const xSignature = req.headers.get("x-signature");
+  const xRequestId = req.headers.get("x-request-id");
+
+  if (!xSignature || !xRequestId) {
+    console.log("Missing x-signature or x-request-id headers");
+    return false;
+  }
+
+  // Extract data.id from query params
+  const url = new URL(req.url);
+  const dataId = url.searchParams.get("data.id");
+
+  // Parse x-signature (format: ts=...,v1=...)
+  const parts = xSignature.split(",");
+  let ts = "";
+  let hash = "";
+
+  for (const part of parts) {
+    const [key, value] = part.split("=");
+    if (key?.trim() === "ts") ts = value?.trim() || "";
+    if (key?.trim() === "v1") hash = value?.trim() || "";
+  }
+
+  if (!ts || !hash) {
+    console.log("Could not extract ts or hash from x-signature");
+    return false;
+  }
+
+  // Build manifest per MP documentation
+  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+
+  // Calculate HMAC-SHA256
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(manifest));
+
+  // Convert to hex
+  const calculatedHash = Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  const isValid = calculatedHash === hash;
+
+  if (!isValid) {
+    console.log("Signature mismatch:", {
+      expected: hash,
+      calculated: calculatedHash,
+      manifest,
+    });
+  }
+
+  return isValid;
+}
+
 interface WebhookPayload {
   action: string;
   api_version: string;
@@ -63,10 +128,23 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const mercadoPagoToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
+    const webhookSecret = Deno.env.get("MERCADOPAGO_WEBHOOK_SECRET");
 
     if (!mercadoPagoToken) {
       console.error("MERCADOPAGO_ACCESS_TOKEN not configured");
       return new Response("Configuration error", { status: 500, headers: corsHeaders });
+    }
+
+    // Validate webhook signature if secret is configured
+    if (webhookSecret) {
+      const isValid = await validateSignature(req, webhookSecret);
+      if (!isValid) {
+        console.error("Invalid webhook signature - rejecting request");
+        return new Response("Invalid signature", { status: 401, headers: corsHeaders });
+      }
+      console.log("Webhook signature validated successfully");
+    } else {
+      console.warn("MERCADOPAGO_WEBHOOK_SECRET not configured - skipping signature validation");
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
