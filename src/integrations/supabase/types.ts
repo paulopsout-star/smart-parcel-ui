@@ -588,6 +588,13 @@ export type Database = {
           installments: number | null
           link_id: string | null
           method: string
+          mp_date_of_expiration: string | null
+          mp_payment_id: string | null
+          mp_qr_code: string | null
+          mp_qr_code_base64: string | null
+          mp_status: string | null
+          mp_status_detail: string | null
+          mp_ticket_url: string | null
           order_index: number | null
           payment_link_id: string | null
           pix_paid_at: string | null
@@ -608,6 +615,13 @@ export type Database = {
           installments?: number | null
           link_id?: string | null
           method: string
+          mp_date_of_expiration?: string | null
+          mp_payment_id?: string | null
+          mp_qr_code?: string | null
+          mp_qr_code_base64?: string | null
+          mp_status?: string | null
+          mp_status_detail?: string | null
+          mp_ticket_url?: string | null
           order_index?: number | null
           payment_link_id?: string | null
           pix_paid_at?: string | null
@@ -628,6 +642,13 @@ export type Database = {
           installments?: number | null
           link_id?: string | null
           method?: string
+          mp_date_of_expiration?: string | null
+          mp_payment_id?: string | null
+          mp_qr_code?: string | null
+          mp_qr_code_base64?: string | null
+          mp_status?: string | null
+          mp_status_detail?: string | null
+          mp_ticket_url?: string | null
           order_index?: number | null
           payment_link_id?: string | null
           pix_paid_at?: string | null
