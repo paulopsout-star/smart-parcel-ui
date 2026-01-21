@@ -78,7 +78,7 @@ function CheckoutPixContent() {
 
         // Check if already completed
         if (chargeData.status === 'completed') {
-          navigate(`/thank-you?charge=${chargeData.id}`, { replace: true });
+          navigate(`/thank-you?chargeId=${chargeData.id}&method=pix&amount=${chargeData.amount}`, { replace: true });
           return;
         }
 
@@ -96,7 +96,7 @@ function CheckoutPixContent() {
           setSplitId(existingSplit.id);
           
           if (existingSplit.status === 'concluded' || existingSplit.pix_paid_at) {
-            navigate(`/thank-you?charge=${chargeData.id}`, { replace: true });
+            navigate(`/thank-you?chargeId=${chargeData.id}&method=pix&amount=${chargeData.amount}`, { replace: true });
             return;
           }
 
@@ -228,7 +228,7 @@ function CheckoutPixContent() {
 
         if (data.pix_paid) {
           toast.success('Pagamento PIX confirmado!');
-          navigate(`/thank-you?charge=${charge?.id}`, { replace: true });
+          navigate(`/thank-you?chargeId=${charge?.id}&method=pix&amount=${charge?.amount}`, { replace: true });
         }
       } catch (err) {
         console.error('Error polling status:', err);
@@ -270,7 +270,7 @@ function CheckoutPixContent() {
 
       if (data.pix_paid) {
         toast.success('Pagamento confirmado!');
-        navigate(`/thank-you?charge=${charge?.id}`, { replace: true });
+        navigate(`/thank-you?chargeId=${charge?.id}&method=pix&amount=${charge?.amount}`, { replace: true });
       } else {
         toast.info('Aguardando pagamento...');
       }

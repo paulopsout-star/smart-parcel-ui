@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url)
     const token = url.searchParams.get('pl')
-    const chargeIdParam = url.searchParams.get('chargeId')
+    const chargeIdParam = url.searchParams.get('chargeId') || url.searchParams.get('charge')
     const methodParam = url.searchParams.get('method')
     const amountParam = url.searchParams.get('amount')
     const payerNameParam = url.searchParams.get('payerName')

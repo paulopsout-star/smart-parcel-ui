@@ -91,7 +91,7 @@ export default function ThankYou() {
   const timeoutTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const token = searchParams.get('pl');
-  const chargeIdParam = searchParams.get('chargeId');
+  const chargeIdParam = searchParams.get('chargeId') || searchParams.get('charge');
   const methodParam = searchParams.get('method');
   const amountParam = searchParams.get('amount');
   const payerNameParam = searchParams.get('payerName');
