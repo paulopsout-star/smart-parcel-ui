@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
         processed_at: paidAt
       }]
       
-      const totalPaidCents = finalSplits.reduce((sum, s) => sum + (s.amount_cents || 0), 0)
+      const totalPaidCents = finalSplits.reduce((sum, s) => sum + (s.display_amount_cents || s.amount_cents || 0), 0)
       
       return new Response(JSON.stringify({
         paid: true,
@@ -117,13 +117,14 @@ Deno.serve(async (req) => {
           paid: true,
           paid_at: paidAt
         },
-        splits: finalSplits.map(s => ({
-          id: s.id,
-          method: s.method?.toUpperCase() || 'PIX',
-          amount_cents: s.amount_cents,
-          status: (s.status || 'CONCLUDED').toUpperCase(),
-          processed_at: s.processed_at || paidAt
-        })),
+      splits: finalSplits.map(s => ({
+        id: s.id,
+        method: s.method?.toUpperCase() || 'PIX',
+        amount_cents: s.display_amount_cents || s.amount_cents,
+        original_amount_cents: s.amount_cents,
+        status: (s.status || 'CONCLUDED').toUpperCase(),
+        processed_at: s.processed_at || paidAt
+      })),
         transactions: [],
         recurrence: { next_dates: [] },
         company: {
