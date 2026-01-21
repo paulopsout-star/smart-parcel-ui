@@ -257,7 +257,8 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
   const isPartial = displayStatus === 'partial';
 
   // Cálculos para PIX - sempre calcular 5% de taxa
-  const pixBase = charge.pix_amount || 0;
+  // Para PIX avulso (100% PIX), usar charge.amount; para combinado, usar pix_amount
+  const pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
   const PIX_FEE_RATE = 0.05; // 5%
   const pixFeeCalculated = Math.round(pixBase * PIX_FEE_RATE);
   // Se há split, usar o valor real; senão, calcular com taxa de 5%
@@ -320,7 +321,7 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     return null;
   }
 
-  const hasPix = pixSplit || (charge.payment_method === 'cartao_pix' && pixBase > 0);
+  const hasPix = pixSplit || charge.payment_method === 'pix' || (charge.payment_method === 'cartao_pix' && pixBase > 0);
   const hasCard = cardSplit || (charge.payment_method === 'cartao_pix' && cardBase > 0);
 
   return (
