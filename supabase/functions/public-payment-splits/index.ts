@@ -54,7 +54,32 @@ serve(async (req) => {
         );
       }
 
-      // Primeiro, deletar TODOS os splits existentes para este charge_id
+      // GUARD: Verificar se existem splits com dados de pagamento já iniciados
+      // Se sim, NÃO deletar - retornar os splits existentes para evitar perda de dados
+      const { data: existingSplits } = await supabase
+        .from('payment_splits')
+        .select('*')
+        .eq('charge_id', chargeId);
+
+      const hasActivePayment = existingSplits?.some(s => 
+        s.mp_payment_id ||       // PIX já gerado no Mercado Pago
+        s.pre_payment_key ||     // Cartão já pré-autorizado
+        s.status === 'concluded' // Já concluído
+      );
+
+      if (hasActivePayment) {
+        console.log('[public-payment-splits] ⚠️ Splits com pagamento ativo encontrados, retornando existentes');
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            payment_splits: existingSplits,
+            warning: 'Splits already have active payment data, not replaced'
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Se não há pagamento ativo, pode deletar e recriar
       const { error: deleteError } = await supabase
         .from('payment_splits')
         .delete()
