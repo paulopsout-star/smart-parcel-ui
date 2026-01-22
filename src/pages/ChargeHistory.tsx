@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
@@ -481,32 +482,106 @@ const InfoCard = ({ icon: Icon, label, value, subvalue, variant = 'default' }: I
 };
 
 // Skeleton Component
-const ChargeCardSkeleton = () => (
-  <Card className="overflow-hidden">
-    <CardHeader className="pb-4 bg-ds-bg-surface-alt">
-      <div className="flex items-start gap-4">
-        <Skeleton className="h-14 w-14 rounded-full" />
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-4 w-64" />
-        </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-6 w-20" />
-          <Skeleton className="h-6 w-20" />
+// Skeleton para a lista de cobranças (formato tabela)
+const ChargeListSkeleton = () => (
+  <TableRow>
+    <TableCell>
+      <div className="flex items-center gap-3">
+        <Skeleton className="h-9 w-9 rounded-full" />
+        <div className="space-y-1">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-3 w-20" />
         </div>
       </div>
-    </CardHeader>
-    <CardContent className="pt-6 space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Skeleton className="h-24 rounded-card" />
-        <Skeleton className="h-24 rounded-card" />
-        <Skeleton className="h-24 rounded-card" />
-      </div>
-      <Skeleton className="h-16 rounded-card" />
-      <Skeleton className="h-20 rounded-card" />
-    </CardContent>
-  </Card>
+    </TableCell>
+    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+    <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+    <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+    <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
+    <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
+    <TableCell><Skeleton className="h-8 w-20 ml-auto rounded-full" /></TableCell>
+  </TableRow>
 );
+
+// Componente de linha da tabela para cada cobrança
+interface ChargeListRowProps {
+  charge: Charge;
+  onViewDetails: () => void;
+  isAdmin: boolean;
+}
+
+const ChargeListRow = ({ charge, onViewDetails, isAdmin }: ChargeListRowProps) => {
+  const computedStatus = getComputedStatus(charge);
+  
+  return (
+    <TableRow 
+      className="group hover:bg-ds-bg-surface-alt/50 cursor-pointer transition-colors"
+      onClick={onViewDetails}
+    >
+      {/* Cliente (Avatar + Nome + Empresa para admin) */}
+      <TableCell>
+        <div className="flex items-center gap-3">
+          <Avatar className="h-9 w-9 border border-ds-border-subtle">
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+              {getInitials(charge.payer_name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="font-medium text-ds-text-strong truncate max-w-[160px]">
+              {charge.payer_name}
+            </p>
+            {isAdmin && charge.company && (
+              <p className="text-xs text-ds-text-muted truncate max-w-[160px]">
+                {charge.company.name}
+              </p>
+            )}
+          </div>
+        </div>
+      </TableCell>
+      
+      {/* CPF/CNPJ */}
+      <TableCell className="text-ds-text-muted text-sm hidden md:table-cell">
+        {formatDocument(charge.payer_document)}
+      </TableCell>
+      
+      {/* Valor */}
+      <TableCell className="text-right font-semibold text-ds-text-strong">
+        {formatCurrency(charge.amount)}
+      </TableCell>
+      
+      {/* Tipo de Pagamento */}
+      <TableCell className="hidden sm:table-cell">
+        {charge.payment_method && getPaymentMethodBadge(charge.payment_method)}
+      </TableCell>
+      
+      {/* Status */}
+      <TableCell>
+        {getModernStatusBadge(computedStatus)}
+      </TableCell>
+      
+      {/* Data (hidden em telas menores) */}
+      <TableCell className="hidden lg:table-cell text-ds-text-muted text-sm">
+        {format(new Date(charge.created_at), 'dd/MM/yy', { locale: ptBR })}
+      </TableCell>
+      
+      {/* Ação */}
+      <TableCell className="text-right">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails();
+          }}
+          className="opacity-70 group-hover:opacity-100 transition-opacity"
+        >
+          <Eye className="h-4 w-4" />
+          <span className="hidden sm:inline ml-1.5">Detalhes</span>
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+};
 
 // Executions Dialog Component
 const ExecutionsDialogContent = ({ 
@@ -1534,11 +1609,28 @@ export default function ChargeHistory() {
 
         {/* Charges List */}
         {loading ? (
-          <div className="space-y-4">
-            <ChargeCardSkeleton />
-            <ChargeCardSkeleton />
-            <ChargeCardSkeleton />
-          </div>
+          <Card className="overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
+                  <TableHead className="font-semibold">Cliente</TableHead>
+                  <TableHead className="font-semibold hidden md:table-cell">CPF/CNPJ</TableHead>
+                  <TableHead className="font-semibold text-right">Valor</TableHead>
+                  <TableHead className="font-semibold hidden sm:table-cell">Pagamento</TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold hidden lg:table-cell">Data</TableHead>
+                  <TableHead className="font-semibold text-right">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <ChargeListSkeleton />
+                <ChargeListSkeleton />
+                <ChargeListSkeleton />
+                <ChargeListSkeleton />
+                <ChargeListSkeleton />
+              </TableBody>
+            </Table>
+          </Card>
         ) : filteredCharges.length === 0 ? (
           <Card>
             <CardContent className="py-12">
@@ -1560,136 +1652,31 @@ export default function ChargeHistory() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4">
-            {filteredCharges.map((charge) => (
-              <Card key={charge.id} className="overflow-hidden hover:shadow-floating transition-shadow duration-200">
-                <CardHeader className="bg-ds-bg-surface-alt border-b border-ds-border-subtle">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-12 w-12 border-2 border-ds-bg-surface">
-                        <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                          {getInitials(charge.payer_name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <h3 className="font-semibold text-ds-text-strong">{charge.payer_name}</h3>
-                        <p className="text-sm text-ds-text-muted">{charge.payer_email}</p>
-                        <p className="text-xs text-ds-text-muted">{formatDocument(charge.payer_document)}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {isAdmin && charge.company && (
-                        <Badge variant="outline" className="gap-1 text-xs">
-                          <Building2 className="h-3 w-3" />
-                          {charge.company.name}
-                        </Badge>
-                      )}
-                      {getModernStatusBadge(getComputedStatus(charge))}
-                      {charge.payment_method && getPaymentMethodBadge(charge.payment_method)}
-                      {/* Status do vínculo de boleto para pagamentos combinados */}
-                      {charge.payment_method === 'cartao_pix' && charge.pre_payment_key && (
-                        <Badge variant={charge.boleto_admin_linha_digitavel ? 'success' : 'warning'} className="gap-1 text-xs">
-                          <Link2 className="h-3 w-3" />
-                          {charge.boleto_admin_linha_digitavel ? 'Boleto Vinculado' : 'Aguardando Vínculo'}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                    <InfoCard
-                      icon={CreditCard}
-                      label="Valor Total"
-                      value={formatCurrency(charge.amount)}
-                      variant="primary"
-                    />
-                    <InfoCard
-                      icon={CalendarIcon}
-                      label="Criado em"
-                      value={format(new Date(charge.created_at), 'dd/MM/yyyy', { locale: ptBR })}
-                      subvalue={format(new Date(charge.created_at), 'HH:mm', { locale: ptBR })}
-                    />
-                    <InfoCard
-                      icon={Phone}
-                      label="Telefone"
-                      value={formatPhone(charge.payer_phone)}
-                    />
-                    <InfoCard
-                      icon={User}
-                      label="CPF/CNPJ"
-                      value={formatDocument(charge.payer_document)}
-                    />
-                    <InfoCard
-                      icon={FileText}
-                      label="Descrição"
-                      value={charge.description || 'Sem descrição'}
-                    />
-                  </div>
-                  
-                  {/* Métodos de Pagamento (Splits) */}
-                  {(charge.payment_method === 'cartao_pix' || (charge.splits && charge.splits.length > 0)) && (
-                    <div className="mb-6">
-                      <p className="text-xs font-medium text-ds-text-muted uppercase tracking-wider mb-2">
-                        Métodos de Pagamento
-                      </p>
-                      <PaymentMethodsSummary charge={charge} isAdmin={isAdmin} />
-                    </div>
-                  )}
-                  
-                  {/* Alerta de erro no vínculo de boleto - só mostra se status ainda é pre_authorized e não foi vinculado */}
-                  {charge.metadata?.link_boleto_error && 
-                   charge.status === 'pre_authorized' && 
-                   !['boleto_linked', 'completed', 'approved'].includes(charge.status) && (
-                    <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="font-medium text-amber-800 dark:text-amber-200 text-sm">
-                            Erro ao vincular boleto
-                          </p>
-                          <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
-                            O cartão foi aprovado, mas houve falha ao vincular o boleto.
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleRetryLinkBoleto(charge)}
-                            className="mt-3 gap-2 border-amber-300 text-amber-700 hover:bg-amber-100"
-                          >
-                            <RefreshCw className="h-4 w-4" />
-                            Tentar Vincular Novamente
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-ds-border-subtle">
-                    <CheckoutButtons charge={charge} />
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedCharge(charge)}
-                      >
-                        <Eye className="w-4 h-4 mr-2" />
-                        Detalhes
-                      </Button>
-                      {charge.status === 'pending' && (
-                        <Button
-                          size="sm"
-                          onClick={() => processCharge(charge.id)}
-                        >
-                          Processar
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          <Card className="overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
+                  <TableHead className="font-semibold">Cliente</TableHead>
+                  <TableHead className="font-semibold hidden md:table-cell">CPF/CNPJ</TableHead>
+                  <TableHead className="font-semibold text-right">Valor</TableHead>
+                  <TableHead className="font-semibold hidden sm:table-cell">Pagamento</TableHead>
+                  <TableHead className="font-semibold">Status</TableHead>
+                  <TableHead className="font-semibold hidden lg:table-cell">Data</TableHead>
+                  <TableHead className="font-semibold text-right">Ação</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredCharges.map((charge) => (
+                  <ChargeListRow 
+                    key={charge.id} 
+                    charge={charge} 
+                    onViewDetails={() => setSelectedCharge(charge)}
+                    isAdmin={isAdmin}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
         )}
 
         {/* Charge Details Sheet */}
