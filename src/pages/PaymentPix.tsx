@@ -62,6 +62,7 @@ export default function PaymentPix() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [resolvedSplitId, setResolvedSplitId] = useState<string | null>(null);
 
   // Fetch split and charge data
   useEffect(() => {
@@ -120,6 +121,7 @@ export default function PaymentPix() {
         }
 
         setSplit(splitData as PaymentSplit);
+        setResolvedSplitId(splitData.id); // Store the real split ID
 
         // Check if already paid
         if (splitData.status === 'concluded' || splitData.pix_paid_at) {
@@ -128,9 +130,9 @@ export default function PaymentPix() {
             .from('payment_splits')
             .select('id, method, status')
             .eq('charge_id', splitData.charge_id)
-            .neq('id', id);
+            .neq('id', splitData.id);
 
-          const cardSplit = otherSplits?.find(s => s.method === 'CARD' && s.status === 'pending');
+          const cardSplit = otherSplits?.find(s => s.method === 'credit_card' && s.status === 'pending');
           if (cardSplit) {
             navigate(`/payment-card/${cardSplit.id}`, { replace: true });
           } else {
@@ -236,9 +238,12 @@ export default function PaymentPix() {
 
     const checkStatus = async () => {
       try {
+        const splitIdToCheck = resolvedSplitId || split?.id;
+        if (!splitIdToCheck) return;
+
         const { data, error: statusError } = await supabase.functions.invoke('mercadopago-pix-status', {
           body: {
-            payment_split_id: id,
+            payment_split_id: splitIdToCheck,
           },
         });
 
@@ -255,9 +260,9 @@ export default function PaymentPix() {
             .from('payment_splits')
             .select('id, method, status')
             .eq('charge_id', split?.charge_id)
-            .neq('id', id);
+            .neq('id', splitIdToCheck);
 
-          const cardSplit = otherSplits?.find(s => s.method === 'CARD' && s.status === 'pending');
+          const cardSplit = otherSplits?.find(s => s.method === 'credit_card' && s.status === 'pending');
           if (cardSplit) {
             navigate(`/payment-card/${cardSplit.id}`, { replace: true });
           } else {
@@ -271,7 +276,7 @@ export default function PaymentPix() {
 
     const interval = setInterval(checkStatus, 5000); // Check every 5 seconds
     return () => clearInterval(interval);
-  }, [pixData, id, split, navigate]);
+  }, [pixData, resolvedSplitId, split, navigate]);
 
   const handleCopyCode = async () => {
     if (!pixData?.qr_code) return;
@@ -289,9 +294,15 @@ export default function PaymentPix() {
   const handleCheckStatus = async () => {
     setChecking(true);
     try {
+      const splitIdToCheck = resolvedSplitId || split?.id;
+      if (!splitIdToCheck) {
+        toast.error('ID do pagamento não encontrado');
+        return;
+      }
+
       const { data, error: statusError } = await supabase.functions.invoke('mercadopago-pix-status', {
         body: {
-          payment_split_id: id,
+          payment_split_id: splitIdToCheck,
         },
       });
 
@@ -307,9 +318,9 @@ export default function PaymentPix() {
           .from('payment_splits')
           .select('id, method, status')
           .eq('charge_id', split?.charge_id)
-          .neq('id', id);
+          .neq('id', splitIdToCheck);
 
-        const cardSplit = otherSplits?.find(s => s.method === 'CARD' && s.status === 'pending');
+        const cardSplit = otherSplits?.find(s => s.method === 'credit_card' && s.status === 'pending');
         if (cardSplit) {
           navigate(`/payment-card/${cardSplit.id}`, { replace: true });
         } else {
