@@ -526,12 +526,12 @@ const ChargeListRow = ({ charge, onViewDetails, isAdmin }: ChargeListRowProps) =
               {getInitials(charge.payer_name)}
             </AvatarFallback>
           </Avatar>
-          <div className="min-w-0">
-            <p className="font-medium text-ds-text-strong truncate max-w-[160px]">
+          <div className="min-w-0 max-w-[220px]">
+            <p className="font-medium text-ds-text-strong whitespace-normal break-words leading-tight">
               {charge.payer_name}
             </p>
             {isAdmin && charge.company && (
-              <p className="text-xs text-ds-text-muted truncate max-w-[160px]">
+              <p className="text-xs text-ds-text-muted whitespace-normal break-words mt-0.5">
                 {charge.company.name}
               </p>
             )}
