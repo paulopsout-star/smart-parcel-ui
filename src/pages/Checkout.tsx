@@ -122,12 +122,8 @@ export default function Checkout() {
             return;
           }
 
-          // CENÁRIO 2: PIX pendente, cartão pendente (split já definido) → ir para PIX
-          if (pixSplit && !isPixPaid && cardSplit && !isCardPaid) {
-            console.log('[Checkout] Splits existentes pendentes, redirecionando para PIX');
-            navigate(`/payment-pix/${id}?next=card`, { replace: true });
-            return;
-          }
+          // CENÁRIO 2: Ambos splits existem mas nenhum pago → MOSTRAR CombinedCheckoutSummary
+          // (removido redirecionamento automático - cliente deve ver o resumo e confirmar parcelas)
 
           // CENÁRIO 3: Ambos concluídos → ir para thank-you
           if (isPixPaid && isCardPaid) {
