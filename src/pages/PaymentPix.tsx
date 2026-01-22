@@ -57,14 +57,16 @@ export default function PaymentPix() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [split, setSplit] = useState<PaymentSplit | null>(null);
+  const [allSplits, setAllSplits] = useState<PaymentSplit[]>([]); // Store all splits for redirect logic
   const [charge, setCharge] = useState<ChargeData | null>(null);
   const [pixData, setPixData] = useState<PixData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(false);
   const [resolvedSplitId, setResolvedSplitId] = useState<string | null>(null);
+  const [paymentLinkId, setPaymentLinkId] = useState<string | null>(null);
 
-  // Fetch split and charge data
+  // Fetch split and charge data using public edge function (bypasses RLS)
   useEffect(() => {
     async function fetchData() {
       if (!id) {
@@ -74,101 +76,100 @@ export default function PaymentPix() {
       }
 
       try {
-        let splitData = null;
+        console.log('PaymentPix: Fetching data for id:', id);
 
-        // Strategy 1: Try to find charge by checkout_link_id or id, then get its PIX split
-        const { data: chargeData } = await supabase
-          .from('charges')
-          .select('id')
-          .or(`checkout_link_id.eq.${id},id.eq.${id}`)
-          .maybeSingle();
+        // Use public edge function that bypasses RLS
+        const { data, error: fetchError } = await supabase.functions.invoke('public-payment-splits', {
+          body: { id }
+        });
 
-        if (chargeData?.id) {
-          // Found charge, now get the PIX split for this charge
-          const { data: splitByCharge, error: splitByChargeError } = await supabase
-            .from('payment_splits')
-            .select('*')
-            .eq('charge_id', chargeData.id)
-            .eq('method', 'pix')
-            .maybeSingle();
-
-          if (splitByChargeError) {
-            console.error('PaymentPix: Error fetching split by charge_id:', splitByChargeError);
+        if (fetchError) {
+          console.error('PaymentPix: Error fetching data via edge function:', fetchError);
+          
+          // Check for specific error types
+          if (fetchError.message?.includes('401') || fetchError.message?.includes('403')) {
+            setError('Erro de autenticação. Link público não autorizado.');
+          } else if (fetchError.message?.includes('404')) {
+            setError('Serviço de pagamento não encontrado.');
+          } else {
+            setError('Erro ao carregar dados do pagamento');
           }
-          splitData = splitByCharge;
+          setLoading(false);
+          return;
         }
 
-        // Strategy 2: Fallback - try to find split directly by id (for legacy URLs with split id)
-        if (!splitData) {
-          const { data: splitById, error: splitByIdError } = await supabase
-            .from('payment_splits')
-            .select('*')
-            .eq('id', id)
-            .eq('method', 'pix')
-            .maybeSingle();
-
-          if (splitByIdError) {
-            console.error('PaymentPix: Error fetching split by id:', splitByIdError);
-          }
-          splitData = splitById;
+        if (!data) {
+          console.error('PaymentPix: No data returned from edge function');
+          setError('Pagamento não encontrado');
+          setLoading(false);
+          return;
         }
 
-        if (!splitData) {
-          console.error('PaymentPix: PIX split not found for id:', id);
+        console.log('PaymentPix: Data received:', { 
+          splitsCount: data.payment_splits?.length,
+          hasCharge: !!data.charge,
+          hasPaymentLink: !!data.payment_link
+        });
+
+        // Find PIX split from the returned data
+        const splits = data.payment_splits || [];
+        const pixSplit = splits.find((s: any) => s.method === 'pix');
+
+        if (!pixSplit) {
+          console.error('PaymentPix: PIX split not found in returned data');
           setError('Pagamento PIX não encontrado');
           setLoading(false);
           return;
         }
 
-        setSplit(splitData as PaymentSplit);
-        setResolvedSplitId(splitData.id); // Store the real split ID
+        // Store all splits for later use in redirect logic
+        setAllSplits(splits as PaymentSplit[]);
+        setPaymentLinkId(data.payment_link?.id || null);
+
+        setSplit(pixSplit as PaymentSplit);
+        setResolvedSplitId(pixSplit.id);
 
         // Check if already paid
-        if (splitData.status === 'concluded' || splitData.pix_paid_at) {
-          // Redirect based on whether there's a card payment pending
-          const { data: otherSplits } = await supabase
-            .from('payment_splits')
-            .select('id, method, status')
-            .eq('charge_id', splitData.charge_id)
-            .neq('id', splitData.id);
+        if (pixSplit.status === 'concluded' || pixSplit.pix_paid_at) {
+          // Check for pending card split in the same response
+          const cardSplit = splits.find(
+            (s: any) => s.method === 'credit_card' && s.status === 'pending'
+          );
 
-          const cardSplit = otherSplits?.find(s => s.method === 'credit_card' && s.status === 'pending');
           if (cardSplit) {
             navigate(`/payment-card/${cardSplit.id}`, { replace: true });
           } else {
-            navigate(`/thank-you?pl=${splitData.payment_link_id || splitData.charge_id}`, { replace: true });
+            navigate(`/thank-you?pl=${data.payment_link?.id || pixSplit.charge_id}`, { replace: true });
           }
           return;
         }
 
-        // Fetch charge data for payer info
-        if (splitData.charge_id) {
-          const { data: chargeData } = await supabase
-            .from('charges')
-            .select('id, payer_name, payer_email, payer_document, description')
-            .eq('id', splitData.charge_id)
-            .single();
-
-          if (chargeData) {
-            setCharge(chargeData);
-          }
+        // Set charge data for PIX creation
+        if (data.charge) {
+          setCharge({
+            id: data.charge.id,
+            payer_name: data.charge.payer_name,
+            payer_email: data.charge.payer_email,
+            payer_document: data.charge.payer_document,
+            description: data.payment_link?.description || data.charge.description || null,
+          });
         }
 
-        // If we already have MP data, use it
-        if (splitData.mp_payment_id && splitData.mp_qr_code && splitData.mp_qr_code_base64) {
+        // If we already have MP data, use it directly
+        if (pixSplit.mp_payment_id && pixSplit.mp_qr_code && pixSplit.mp_qr_code_base64) {
           setPixData({
-            payment_id: splitData.mp_payment_id,
-            qr_code: splitData.mp_qr_code,
-            qr_code_base64: splitData.mp_qr_code_base64,
-            ticket_url: splitData.mp_ticket_url || undefined,
-            status: splitData.mp_status || 'pending',
-            amount_cents: splitData.display_amount_cents || splitData.amount_cents,
+            payment_id: pixSplit.mp_payment_id,
+            qr_code: pixSplit.mp_qr_code,
+            qr_code_base64: pixSplit.mp_qr_code_base64,
+            ticket_url: pixSplit.mp_ticket_url || undefined,
+            status: pixSplit.mp_status || 'pending',
+            amount_cents: pixSplit.display_amount_cents || pixSplit.amount_cents,
           });
         }
 
         setLoading(false);
       } catch (err) {
-        console.error('Error fetching data:', err);
+        console.error('PaymentPix: Unexpected error:', err);
         setError('Erro ao carregar dados do pagamento');
         setLoading(false);
       }
@@ -255,18 +256,15 @@ export default function PaymentPix() {
         if (data.pix_paid) {
           toast.success('Pagamento PIX confirmado!');
           
-          // Check for card payment
-          const { data: otherSplits } = await supabase
-            .from('payment_splits')
-            .select('id, method, status')
-            .eq('charge_id', split?.charge_id)
-            .neq('id', splitIdToCheck);
-
-          const cardSplit = otherSplits?.find(s => s.method === 'credit_card' && s.status === 'pending');
+          // Use already loaded splits to find pending card payment (avoids RLS issues)
+          const cardSplit = allSplits.find(
+            s => s.id !== splitIdToCheck && s.method === 'credit_card' && s.status === 'pending'
+          );
+          
           if (cardSplit) {
             navigate(`/payment-card/${cardSplit.id}`, { replace: true });
           } else {
-            navigate(`/thank-you?pl=${split?.payment_link_id || split?.charge_id}`, { replace: true });
+            navigate(`/thank-you?pl=${paymentLinkId || split?.charge_id}`, { replace: true });
           }
         }
       } catch (err) {
@@ -276,7 +274,7 @@ export default function PaymentPix() {
 
     const interval = setInterval(checkStatus, 5000); // Check every 5 seconds
     return () => clearInterval(interval);
-  }, [pixData, resolvedSplitId, split, navigate]);
+  }, [pixData, resolvedSplitId, split, allSplits, paymentLinkId, navigate]);
 
   const handleCopyCode = async () => {
     if (!pixData?.qr_code) return;
@@ -314,17 +312,15 @@ export default function PaymentPix() {
       if (data.pix_paid) {
         toast.success('Pagamento confirmado!');
         
-        const { data: otherSplits } = await supabase
-          .from('payment_splits')
-          .select('id, method, status')
-          .eq('charge_id', split?.charge_id)
-          .neq('id', splitIdToCheck);
-
-        const cardSplit = otherSplits?.find(s => s.method === 'credit_card' && s.status === 'pending');
+        // Use already loaded splits to find pending card payment (avoids RLS issues)
+        const cardSplit = allSplits.find(
+          s => s.id !== splitIdToCheck && s.method === 'credit_card' && s.status === 'pending'
+        );
+        
         if (cardSplit) {
           navigate(`/payment-card/${cardSplit.id}`, { replace: true });
         } else {
-          navigate(`/thank-you?pl=${split?.payment_link_id || split?.charge_id}`, { replace: true });
+          navigate(`/thank-you?pl=${paymentLinkId || split?.charge_id}`, { replace: true });
         }
       } else {
         toast.info('Aguardando pagamento...');
