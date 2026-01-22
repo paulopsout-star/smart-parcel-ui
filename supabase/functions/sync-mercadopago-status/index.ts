@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
     let approved = 0;
     let failed = 0;
     const errors: string[] = [];
+    const updatedCharges = new Set<string>(); // Track updated charge IDs
 
     for (const split of pendingSplits) {
       try {
@@ -124,6 +125,11 @@ Deno.serve(async (req) => {
 
         synced++;
         console.log(`Synced split ${split.id}: ${mpPayment.status}`);
+
+        // Track updated charge ID for frontend merge
+        if (split.charge_id) {
+          updatedCharges.add(split.charge_id);
+        }
 
         // Small delay to avoid rate limiting
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -193,6 +199,7 @@ Deno.serve(async (req) => {
         approved,
         failed,
         errors: errors.length > 0 ? errors : undefined,
+        updatedChargeIds: Array.from(updatedCharges), // Return updated charge IDs for frontend merge
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
