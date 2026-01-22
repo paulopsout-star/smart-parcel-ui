@@ -228,7 +228,7 @@ export default function PaymentCard() {
       console.log('[PaymentCard] Resposta do conclude-card-payment:', data);
       
       // ✅ CORREÇÃO: Verificar status retornado antes de considerar sucesso
-      const splitStatus = data?.split?.status;
+      const splitStatus = data?.status;
       
       if (splitStatus === 'failed' || splitStatus === 'expired' || splitStatus === 'canceled' || splitStatus === 'cancelled') {
         console.log('[PaymentCard] ❌ Pagamento não aprovado. Status:', splitStatus);
@@ -238,6 +238,17 @@ export default function PaymentCard() {
           variant: 'destructive'
         });
         // Redirecionar para thank-you que mostrará tela de erro
+        navigate(`/thank-you?pl=${id}`);
+        return;
+      }
+      
+      // ✅ NOVO: Status 'analyzing' - Pagamento em análise
+      if (splitStatus === 'analyzing' || splitStatus === 'pending') {
+        console.log('[PaymentCard] ⏳ Pagamento em análise. Status:', splitStatus);
+        toast({
+          title: 'Pagamento Enviado!',
+          description: 'Seu pagamento foi recebido e está em análise. Você será notificado por email.',
+        });
         navigate(`/thank-you?pl=${id}`);
         return;
       }

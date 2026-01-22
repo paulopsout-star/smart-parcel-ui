@@ -6,9 +6,10 @@ const corsHeaders = {
 };
 
 // Mapeamento statusCode Quita+ → status interno
-// IMPORTANTE: StatusCode 2 (Canceled) deve mapear para 'cancelled' para consistência com charges
+// IMPORTANTE: StatusCode 1 (Received) agora mapeia para 'analyzing' (pagamento em análise)
+// StatusCode 2 (Canceled) deve mapear para 'cancelled' para consistência com charges
 const statusCodeMap: Record<number, string> = {
-  1: 'pending',           // Received - pré-pagamento criado
+  1: 'analyzing',         // Received - pagamento recebido, em análise pela operadora
   2: 'cancelled',         // Canceled - prazo expirou ou valor diferente → CANCELLED (não failed)
   3: 'expired',           // Expired
   4: 'validating',        // Settled - analisado pelo robô
@@ -227,6 +228,7 @@ Deno.serve(async (req) => {
       // GUARD: Só atualizar charge se houver splits (evita marcar como failed sem pagamento iniciado)
       if (allSplits && allSplits.length > 0) {
         const allConcluded = allSplits.every(s => s.status === 'concluded');
+        const anyAnalyzing = allSplits.some(s => s.status === 'analyzing');
         const anyFailed = allSplits.some(s => s.status === 'failed' || s.status === 'expired');
         const anyCancelled = allSplits.some(s => s.status === 'cancelled');
         const anyConcluded = allSplits.some(s => s.status === 'concluded');
@@ -238,6 +240,8 @@ Deno.serve(async (req) => {
           chargeStatus = 'cancelled'; // Cancelado pela API Quita+
         } else if (anyFailed && !anyConcluded) {
           chargeStatus = 'failed';
+        } else if (anyAnalyzing) {
+          chargeStatus = 'processing'; // Em análise - aguardando confirmação
         } else if (anyConcluded) {
           chargeStatus = 'processing'; // Parcialmente pago
         }

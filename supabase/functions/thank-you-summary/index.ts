@@ -301,6 +301,9 @@ Deno.serve(async (req) => {
       s.status === 'concluded'
     );
     
+    // Verificar se algum split está em análise
+    const analyzingSplit = finalSplits?.find(s => s.status === 'analyzing');
+    
     // Verificar se algum split falhou/expirou/cancelou
     const failedSplit = finalSplits?.find(s => 
       s.status === 'failed' || 
@@ -309,7 +312,7 @@ Deno.serve(async (req) => {
       s.status === 'cancelled'
     );
     
-    console.log('[thank-you-summary] isPaid:', isPaid, '- failedSplit:', failedSplit?.method, '- splits checked:', finalSplits?.map(s => ({ 
+    console.log('[thank-you-summary] isPaid:', isPaid, '- analyzingSplit:', analyzingSplit?.method, '- failedSplit:', failedSplit?.method, '- splits checked:', finalSplits?.map(s => ({ 
       method: s.method, 
       status: s.status
     })))
@@ -332,7 +335,55 @@ Deno.serve(async (req) => {
         })
       }
       
-      // Sem falha, mas ainda não concluído = processando
+      // ✅ NOVO: Se tem split em análise (sem falha), retornar estado de análise
+      if (analyzingSplit) {
+        console.log('[thank-you-summary] Pagamento em análise detectado');
+        
+        // Calcular valores confirmados vs em análise
+        const confirmedSplits = finalSplits.filter(s => s.status === 'concluded');
+        const analyzingSplits = finalSplits.filter(s => s.status === 'analyzing');
+        const totalConfirmedCents = confirmedSplits.reduce((sum, s) => sum + (s.display_amount_cents || s.amount_cents || 0), 0);
+        const totalAnalyzingCents = analyzingSplits.reduce((sum, s) => sum + (s.display_amount_cents || s.amount_cents || 0), 0);
+        
+        return new Response(JSON.stringify({
+          paid: false,
+          analyzing: true,
+          processing: false,
+          failed: false,
+          message: 'Seu pagamento foi recebido e está em análise. Assim que ele for confirmado, você será notificado no email cadastrado.',
+          charge: {
+            id: charge?.id || paymentLink.id,
+            type: charge?.recurrence_type || 'pontual',
+            total_amount_cents: charge?.amount || paymentLink.amount,
+            total_confirmed_cents: totalConfirmedCents,
+            total_analyzing_cents: totalAnalyzingCents,
+            currency: 'BRL',
+            paid: false,
+            analyzing: true,
+            submitted_at: new Date().toISOString()
+          },
+          splits: finalSplits.map(split => ({
+            id: split.id,
+            method: split.method,
+            amount_cents: split.display_amount_cents || split.amount_cents,
+            original_amount_cents: split.amount_cents,
+            status: split.status.toUpperCase(),
+            processed_at: split.processed_at
+          })),
+          company: {
+            name: company?.name || null,
+            email: company?.email || null,
+            phone: company?.phone || null
+          },
+          ui: {
+            support_email: "faleconosco@autonegocie.com"
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+      
+      // Sem falha e sem análise, mas ainda não concluído = processando
       return new Response(JSON.stringify({
         paid: false,
         processing: true,
