@@ -12,6 +12,10 @@ interface PaymentSplit {
   status: string;
   amount_cents: number;
   installments?: number;
+  pix_paid_at?: string;
+  mp_payment_id?: string;
+  pre_payment_key?: string;
+  transaction_id?: string;
 }
 
 export default function Checkout() {
@@ -139,14 +143,22 @@ export default function Checkout() {
             return;
           }
 
-          // CENÁRIO 5: Só PIX existe e ainda não pago → ir para PIX
+          // CENÁRIO 5: PIX existe, não pago, MAS já tem QR Code gerado → ir direto para PIX
+          // Isso evita que o cliente confirme novamente e delete o split com dados do MP
+          if (pixSplit && !isPixPaid && pixSplit.mp_payment_id) {
+            console.log('[Checkout] PIX já tem QR Code gerado (mp_payment_id existe), redirecionando direto');
+            navigate(`/payment-pix/${id}`, { replace: true });
+            return;
+          }
+
+          // CENÁRIO 6: Só PIX existe e ainda não pago (sem QR gerado) → ir para PIX
           if (pixSplit && !isPixPaid && !cardSplit) {
             console.log('[Checkout] Só PIX pendente, redirecionando para PIX');
             navigate(`/payment-pix/${id}`, { replace: true });
             return;
           }
 
-          // CENÁRIO 5: Nenhum split existe → exibir CombinedCheckoutSummary
+          // CENÁRIO 7: Nenhum split existe → exibir CombinedCheckoutSummary
           console.log('[Checkout] Nenhum split existente, exibindo formulário de divisão');
           setLoading(false);
           return;
