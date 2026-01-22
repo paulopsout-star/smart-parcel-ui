@@ -651,60 +651,143 @@ export default function ChargeHistory() {
     }
   };
 
-  // Função de sincronização com API Cappta (manual ou automática)
+  // Função para buscar apenas cobranças específicas e fazer merge no estado (sem setLoading)
+  const refreshSpecificCharges = async (chargeIds: string[]) => {
+    if (chargeIds.length === 0) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('charges')
+        .select(`
+          *,
+          company:companies(id, name),
+          executions:charge_executions(
+            id,
+            execution_date,
+            status,
+            payment_link_url
+          ),
+          splits:payment_splits(
+            id,
+            method,
+            amount_cents,
+            display_amount_cents,
+            status,
+            pix_paid_at,
+            pre_payment_key,
+            transaction_id,
+            processed_at,
+            order_index,
+            installments,
+            created_at
+          )
+        `)
+        .in('id', chargeIds);
+
+      if (error || !data || data.length === 0) {
+        console.error('[ChargeHistory] Erro ao buscar charges específicas:', error);
+        return;
+      }
+
+      // Deduplicate splits by method (keep the most recent)
+      const processedData = data.map(charge => {
+        if (charge.splits && charge.splits.length > 0) {
+          const splitsByMethod = new Map<string, any>();
+          charge.splits.forEach((split: any) => {
+            const existing = splitsByMethod.get(split.method);
+            if (!existing || new Date(split.created_at) > new Date(existing.created_at)) {
+              splitsByMethod.set(split.method, split);
+            }
+          });
+          charge.splits = Array.from(splitsByMethod.values()).sort((a, b) => a.order_index - b.order_index);
+        }
+        return charge;
+      });
+
+      // MERGE: atualizar apenas os registros modificados no estado
+      setCharges(prevCharges => {
+        const chargeMap = new Map(prevCharges.map(c => [c.id, c]));
+        processedData.forEach(updated => {
+          chargeMap.set(updated.id, updated as Charge);
+        });
+        return Array.from(chargeMap.values())
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      });
+
+      // Atualizar também a lista filtrada
+      setFilteredCharges(prev => {
+        const chargeMap = new Map(prev.map(c => [c.id, c]));
+        processedData.forEach(updated => {
+          if (chargeMap.has(updated.id)) {
+            chargeMap.set(updated.id, updated as Charge);
+          }
+        });
+        return Array.from(chargeMap.values())
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      });
+
+      console.log(`[ChargeHistory] Merge concluído: ${processedData.length} cobranças atualizadas`);
+    } catch (err) {
+      console.error('[ChargeHistory] Erro no refreshSpecificCharges:', err);
+    }
+  };
+
+  // Função de sincronização com API (manual ou automática) - SEM REFRESH DE TELA
   const syncPaymentStatuses = useCallback(async (isAutoSync = false) => {
     setSyncing(true);
     try {
-      // Sincronizar status de pagamentos Quita+/Boleto
-      const { data, error } = await supabase.functions.invoke('sync-payment-status');
-      
-      // Sincronizar status de PIX
-      const { data: pixData, error: pixError } = await supabase.functions.invoke('sync-pix-status');
-      
-      // Sincronizar status de Cartão (verifica API Quita+ para pagamentos pendentes/inconsistentes)
-      const { data: cardData, error: cardError } = await supabase.functions.invoke('sync-card-status');
-      
-      const allFailed = error && pixError && cardError;
-      
-      if (allFailed) {
-        console.error('Erro na sincronização:', { error, pixError, cardError });
+      // Executar sincronizações em paralelo
+      const [paymentResult, pixResult, cardResult] = await Promise.allSettled([
+        supabase.functions.invoke('sync-payment-status'),
+        supabase.functions.invoke('sync-mercadopago-status'), // Corrigido: era sync-pix-status
+        supabase.functions.invoke('sync-card-status'),
+      ]);
+
+      // Coletar IDs de charges que foram atualizados
+      const updatedChargeIds = new Set<string>();
+
+      // Extrair IDs do sync-payment-status
+      if (paymentResult.status === 'fulfilled' && paymentResult.value.data?.results) {
+        paymentResult.value.data.results.forEach((r: any) => {
+          if (r.updated && r.chargeId) updatedChargeIds.add(r.chargeId);
+        });
+      }
+
+      // Extrair IDs do sync-mercadopago-status
+      if (pixResult.status === 'fulfilled' && pixResult.value.data?.updatedChargeIds) {
+        pixResult.value.data.updatedChargeIds.forEach((id: string) => updatedChargeIds.add(id));
+      }
+
+      // Extrair IDs do sync-card-status
+      if (cardResult.status === 'fulfilled' && cardResult.value.data?.updatedChargeIds) {
+        cardResult.value.data.updatedChargeIds.forEach((id: string) => updatedChargeIds.add(id));
+      }
+
+      // Se houve atualizações, buscar APENAS esses registros (sem setLoading)
+      if (updatedChargeIds.size > 0) {
+        await refreshSpecificCharges(Array.from(updatedChargeIds));
+
         if (!isAutoSync) {
           toast({
-            title: "Erro na sincronização",
-            description: "Não foi possível sincronizar com o gateway. Os dados locais serão exibidos.",
-            variant: "destructive",
+            title: "Sincronização concluída",
+            description: `${updatedChargeIds.size} cobrança(s) atualizada(s).`,
           });
-        }
-      } else {
-        const updated = (data?.updated || 0) + (pixData?.stats?.updated || 0) + (cardData?.stats?.updated || 0);
-        const processed = (data?.processed || 0) + (pixData?.stats?.checked || 0) + (cardData?.stats?.checked || 0);
-        
-        // Atualizar timestamp da última sincronização
-        setLastSync(new Date());
-        
-        // Mostrar toast apenas para sincronização manual ou se houve atualizações
-        if (!isAutoSync) {
-          if (updated > 0) {
-            toast({
-              title: "Sincronização concluída",
-              description: `${updated} cobrança(s) atualizada(s).`,
-            });
-          } else {
-            toast({
-              title: "Sincronização concluída",
-              description: `${processed} cobrança(s) verificada(s). Nenhuma atualização necessária.`,
-            });
-          }
-        } else if (updated > 0) {
-          // Para auto-sync, mostrar toast apenas se houve atualizações
+        } else {
           toast({
             title: "Atualização automática",
-            description: `${updated} cobrança(s) atualizada(s) (inclui PIX e Cartão).`,
+            description: `${updatedChargeIds.size} cobrança(s) atualizada(s).`,
           });
         }
-        
-        console.log(`[ChargeHistory] Sincronização ${isAutoSync ? 'automática' : 'manual'}: ${updated}/${processed} atualizados (Boleto: ${data?.updated || 0}, PIX: ${pixData?.stats?.updated || 0}, Cartão: ${cardData?.stats?.updated || 0})`);
+      } else if (!isAutoSync) {
+        toast({
+          title: "Sincronização concluída",
+          description: "Nenhuma atualização necessária.",
+        });
       }
+
+      setLastSync(new Date());
+      console.log(`[ChargeHistory] Sincronização ${isAutoSync ? 'automática' : 'manual'}: ${updatedChargeIds.size} charges atualizadas`);
+
     } catch (err) {
       console.error('Erro ao sincronizar:', err);
       if (!isAutoSync) {
@@ -716,7 +799,7 @@ export default function ChargeHistory() {
       }
     } finally {
       setSyncing(false);
-      await fetchCharges();
+      // NÃO chama fetchCharges() - apenas atualiza registros específicos!
     }
   }, []);
 

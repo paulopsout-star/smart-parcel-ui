@@ -99,6 +99,7 @@ Deno.serve(async (req) => {
       failed: 0,
       unchanged: 0,
     };
+    const updatedCharges = new Set<string>(); // Track updated charge IDs for frontend merge
 
     for (const split of uniqueSplits) {
       if (!split.pre_payment_key) {
@@ -180,6 +181,11 @@ Deno.serve(async (req) => {
         console.log('[sync-card-status] Updated split', split.id, 'from', split.status, 'to', mappedStatus);
         stats.updated++;
 
+        // Track updated charge ID for frontend merge
+        if (split.charge_id) {
+          updatedCharges.add(split.charge_id);
+        }
+
         if (mappedStatus === 'concluded') {
           stats.concluded++;
         } else if (mappedStatus === 'failed' || mappedStatus === 'expired' || mappedStatus === 'cancelled') {
@@ -231,6 +237,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         stats,
+        updatedChargeIds: Array.from(updatedCharges), // Return updated charge IDs for frontend merge
         message: `Verificados: ${stats.checked}, Atualizados: ${stats.updated}, Concluídos: ${stats.concluded}, Falhos: ${stats.failed}, Erros: ${stats.errors}`
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
