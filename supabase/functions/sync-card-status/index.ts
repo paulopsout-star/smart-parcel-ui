@@ -199,7 +199,8 @@ Deno.serve(async (req) => {
             .select('status')
             .eq('charge_id', split.charge_id);
 
-          if (allChargeSplits) {
+          // GUARD: Só atualizar charge se houver splits (evita marcar como failed sem pagamento iniciado)
+          if (allChargeSplits && allChargeSplits.length > 0) {
             const allConcluded = allChargeSplits.every(s => s.status === 'concluded');
             const anyFailed = allChargeSplits.some(s => s.status === 'failed' || s.status === 'expired');
             const anyCancelled = allChargeSplits.some(s => s.status === 'cancelled');
@@ -222,6 +223,8 @@ Deno.serve(async (req) => {
               .eq('id', split.charge_id);
 
             console.log('[sync-card-status] Updated charge', split.charge_id, 'status to:', chargeStatus);
+          } else {
+            console.log('[sync-card-status] Skipping charge update - no splits found for charge:', split.charge_id);
           }
         }
 
