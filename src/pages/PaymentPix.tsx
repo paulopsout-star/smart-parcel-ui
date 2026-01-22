@@ -73,16 +73,47 @@ export default function PaymentPix() {
       }
 
       try {
-        // First, try to find payment split
-        const { data: splitData, error: splitError } = await supabase
-          .from('payment_splits')
-          .select('*')
-          .eq('id', id)
-          .eq('method', 'pix')
-          .single();
+        let splitData = null;
 
-        if (splitError || !splitData) {
-          console.error('Split not found:', splitError);
+        // Strategy 1: Try to find charge by checkout_link_id or id, then get its PIX split
+        const { data: chargeData } = await supabase
+          .from('charges')
+          .select('id')
+          .or(`checkout_link_id.eq.${id},id.eq.${id}`)
+          .maybeSingle();
+
+        if (chargeData?.id) {
+          // Found charge, now get the PIX split for this charge
+          const { data: splitByCharge, error: splitByChargeError } = await supabase
+            .from('payment_splits')
+            .select('*')
+            .eq('charge_id', chargeData.id)
+            .eq('method', 'pix')
+            .maybeSingle();
+
+          if (splitByChargeError) {
+            console.error('PaymentPix: Error fetching split by charge_id:', splitByChargeError);
+          }
+          splitData = splitByCharge;
+        }
+
+        // Strategy 2: Fallback - try to find split directly by id (for legacy URLs with split id)
+        if (!splitData) {
+          const { data: splitById, error: splitByIdError } = await supabase
+            .from('payment_splits')
+            .select('*')
+            .eq('id', id)
+            .eq('method', 'pix')
+            .maybeSingle();
+
+          if (splitByIdError) {
+            console.error('PaymentPix: Error fetching split by id:', splitByIdError);
+          }
+          splitData = splitById;
+        }
+
+        if (!splitData) {
+          console.error('PaymentPix: PIX split not found for id:', id);
           setError('Pagamento PIX não encontrado');
           setLoading(false);
           return;
