@@ -137,7 +137,8 @@ export default function PaymentPix() {
           );
 
           if (cardSplit) {
-            navigate(`/payment-card/${cardSplit.id}`, { replace: true });
+            // Use payment_link.id instead of split.id for correct routing
+            navigate(`/payment-card/${data.payment_link?.id || id}`, { replace: true });
           } else {
             navigate(`/thank-you?pl=${data.payment_link?.id || pixSplit.charge_id}`, { replace: true });
           }
@@ -262,7 +263,8 @@ export default function PaymentPix() {
           );
           
           if (cardSplit) {
-            navigate(`/payment-card/${cardSplit.id}`, { replace: true });
+            // Use paymentLinkId instead of split.id for correct routing
+            navigate(`/payment-card/${paymentLinkId || id}`, { replace: true });
           } else {
             navigate(`/thank-you?pl=${paymentLinkId || split?.charge_id}`, { replace: true });
           }
@@ -318,7 +320,8 @@ export default function PaymentPix() {
         );
         
         if (cardSplit) {
-          navigate(`/payment-card/${cardSplit.id}`, { replace: true });
+          // Use paymentLinkId instead of split.id for correct routing
+          navigate(`/payment-card/${paymentLinkId || id}`, { replace: true });
         } else {
           navigate(`/thank-you?pl=${paymentLinkId || split?.charge_id}`, { replace: true });
         }
