@@ -9,7 +9,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Receipt, Banknote, Calculator, CreditCard, QrCode, AlertCircle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { User, Receipt, Banknote, Calculator, CreditCard, QrCode, AlertCircle, Building2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +23,11 @@ import { formatPhone, formatDocument, formatCurrencyInput, unformatPhone, unform
 import { cn } from '@/lib/utils';
 import { SimulatorModal } from '@/components/SimulatorModal';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
+
+interface Company {
+  id: string;
+  name: string;
+}
 
 const formSchema = z.object({
   payer_name: z.string().min(1, "Nome é obrigatório").max(200, "Nome deve ter no máximo 200 caracteres"),
@@ -117,6 +123,11 @@ export default function NewCharge() {
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [showSimulatorModal, setShowSimulatorModal] = useState(false);
   
+  // Admin: seleção de empresa
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
+  const [loadingCompanies, setLoadingCompanies] = useState(false);
+  
   const { 
     data: creditorSettings, 
     isLoading: settingsLoading, 
@@ -131,7 +142,7 @@ export default function NewCharge() {
     description?: string;
     status: 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'ERRO';
   } | null>(null);
-  const { profile, loading: authLoading } = useAuth();
+  const { profile, loading: authLoading, isAdmin } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -159,6 +170,36 @@ export default function NewCharge() {
   const watchPaymentMethod = watch("payment_method");
   const watchPixAmount = watch("pix_amount");
   const watchCardAmount = watch("card_amount");
+
+  // Buscar empresas para admin
+  useEffect(() => {
+    if (!profile || !isAdmin) return;
+    
+    const fetchCompanies = async () => {
+      setLoadingCompanies(true);
+      try {
+        const { data, error } = await supabase
+          .from('companies')
+          .select('id, name')
+          .eq('is_active', true)
+          .order('name');
+        
+        if (error) throw error;
+        setCompanies(data || []);
+        
+        // Setar a empresa do usuário como padrão
+        if (profile.company_id) {
+          setSelectedCompanyId(profile.company_id);
+        }
+      } catch (error) {
+        console.error('[NewCharge] Erro ao carregar empresas:', error);
+      } finally {
+        setLoadingCompanies(false);
+      }
+    };
+    
+    fetchCompanies();
+  }, [profile, isAdmin]);
 
   useEffect(() => {
     if (!profile) return;
@@ -255,10 +296,13 @@ export default function NewCharge() {
         });
       }
 
+      // Admin pode escolher outra empresa; operador usa sua própria
+      const targetCompanyId = isAdmin && selectedCompanyId ? selectedCompanyId : profile.company_id;
+
       const { data: charge, error: chargeError } = await supabase
         .from('charges')
         .insert({
-          company_id: profile.company_id,
+          company_id: targetCompanyId,
           created_by: profile.id,
           payer_name: data.payer_name,
           payer_email: data.payer_email,
@@ -446,6 +490,40 @@ export default function NewCharge() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Form */}
             <div className="lg:col-span-2 space-y-6">
+              
+              {/* ADMIN: Seletor de Empresa */}
+              {isAdmin && companies.length > 0 && (
+                <Card className="border-purple-200 dark:border-purple-800 bg-purple-50/30 dark:bg-purple-950/20">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg text-purple-800 dark:text-purple-200">
+                      <Building2 className="h-5 w-5" />
+                      Empresa Responsável
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Select
+                      value={selectedCompanyId}
+                      onValueChange={setSelectedCompanyId}
+                      disabled={loadingCompanies}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Selecione a empresa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {companies.map((company) => (
+                          <SelectItem key={company.id} value={company.id}>
+                            {company.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">
+                      Como administrador, você pode criar cobranças para qualquer empresa.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+              
               {/* Dados do Pagador */}
               <Card>
                 <CardHeader>

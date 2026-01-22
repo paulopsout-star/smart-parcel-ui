@@ -684,6 +684,11 @@ export default function ChargeHistory() {
   const [adminLinhaDigitavel, setAdminLinhaDigitavel] = useState('');
   const [linkingBoleto, setLinkingBoleto] = useState(false);
   
+  // Estado para alteração de empresa (admin)
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [newCompanyId, setNewCompanyId] = useState('');
+  const [changingCompany, setChangingCompany] = useState(false);
+  
   // Filter state
   const [filters, setFilters] = useState<ChargeFilters>({
     status: 'all',
@@ -1698,6 +1703,118 @@ export default function ChargeHistory() {
                     <InfoCard icon={FileText} label="CPF/CNPJ" value={formatDocument(selectedCharge.payer_document)} />
                     <InfoCard icon={CreditCard} label="Valor" value={formatCurrency(selectedCharge.amount)} variant="primary" />
                   </div>
+                  
+                  {/* ADMIN: Alterar Empresa da Cobrança */}
+                  {isAdmin && (
+                    <div className="space-y-3 p-4 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-200 dark:border-purple-800">
+                      <h4 className="font-medium text-purple-800 dark:text-purple-200 flex items-center gap-2">
+                        <Building2 className="h-4 w-4" />
+                        Empresa da Cobrança
+                      </h4>
+                      
+                      {!editingCompany ? (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-sm">
+                            {selectedCharge.company?.name || 'Não definida'}
+                          </Badge>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => {
+                              setEditingCompany(true);
+                              setNewCompanyId(selectedCharge.company_id || '');
+                            }}
+                          >
+                            Alterar
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <Select
+                            value={newCompanyId}
+                            onValueChange={setNewCompanyId}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Selecione a nova empresa" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {companies.map((company) => (
+                                <SelectItem key={company.id} value={company.id}>
+                                  {company.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          
+                          <div className="flex gap-2">
+                            <Button 
+                              size="sm"
+                              onClick={async () => {
+                                if (!selectedCharge || !newCompanyId) return;
+                                
+                                setChangingCompany(true);
+                                try {
+                                  const { error } = await supabase
+                                    .from('charges')
+                                    .update({ company_id: newCompanyId })
+                                    .eq('id', selectedCharge.id);
+                                  
+                                  if (error) throw error;
+                                  
+                                  const newCompany = companies.find(c => c.id === newCompanyId);
+                                  
+                                  // Atualizar estado local
+                                  setCharges(prev => prev.map(c => 
+                                    c.id === selectedCharge.id 
+                                      ? { ...c, company_id: newCompanyId, company: newCompany }
+                                      : c
+                                  ));
+                                  
+                                  setFilteredCharges(prev => prev.map(c => 
+                                    c.id === selectedCharge.id 
+                                      ? { ...c, company_id: newCompanyId, company: newCompany }
+                                      : c
+                                  ));
+                                  
+                                  // Atualizar o charge selecionado
+                                  setSelectedCharge(prev => prev ? { ...prev, company_id: newCompanyId, company: newCompany } : null);
+                                  
+                                  toast({ title: 'Empresa alterada com sucesso!' });
+                                  setEditingCompany(false);
+                                  setNewCompanyId('');
+                                } catch (error: any) {
+                                  toast({ 
+                                    title: 'Erro ao alterar empresa', 
+                                    description: error.message,
+                                    variant: 'destructive'
+                                  });
+                                } finally {
+                                  setChangingCompany(false);
+                                }
+                              }}
+                              disabled={!newCompanyId || newCompanyId === selectedCharge.company_id || changingCompany}
+                            >
+                              {changingCompany ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => {
+                                setEditingCompany(false);
+                                setNewCompanyId('');
+                              }}
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <p className="text-xs text-purple-600 dark:text-purple-400">
+                        Altere a empresa responsável por esta cobrança.
+                      </p>
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     <h4 className="font-medium text-ds-text-strong">Status</h4>
