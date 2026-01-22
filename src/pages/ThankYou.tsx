@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle, ArrowLeft, History, Printer, RefreshCw, Calendar, Download, QrCode, CreditCard, Phone, Mail, Building2, XCircle, AlertTriangle } from "lucide-react";
+import { CheckCircle, ArrowLeft, History, Printer, RefreshCw, Calendar, Download, QrCode, CreditCard, Phone, Mail, Building2, XCircle, AlertTriangle, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -31,6 +31,7 @@ const useDocumentTitle = (title: string) => {
 interface ThankYouData {
   paid: boolean;
   processing?: boolean;
+  analyzing?: boolean;
   failed?: boolean;
   failedMethod?: string;
   failedMethodLabel?: string;
@@ -39,10 +40,14 @@ interface ThankYouData {
     id: string;
     type: string;
     total_amount_cents: number;
-    total_paid_cents: number;
+    total_paid_cents?: number;
+    total_confirmed_cents?: number;
+    total_analyzing_cents?: number;
     currency: string;
     paid: boolean;
-    paid_at: string;
+    analyzing?: boolean;
+    paid_at?: string;
+    submitted_at?: string;
   };
   splits?: Array<{
     id: string;
@@ -422,15 +427,160 @@ export default function ThankYou() {
     );
   }
 
+  // ✅ NOVO: TELA DE ANÁLISE - Pagamento recebido, aguardando confirmação
+  if (!data?.paid && data?.analyzing) {
+    const pixSplitAnalysis = data?.splits?.find(s => s.method.toUpperCase() === 'PIX');
+    const cardSplitAnalysis = data?.splits?.find(s => 
+      s.method.toUpperCase() === 'CREDIT_CARD' || s.method.toUpperCase() === 'CARD'
+    );
+    
+    return (
+      <div className="min-h-screen bg-muted">
+        <div id="comprovante-container" className="container mx-auto py-8 px-4 max-w-4xl">
+          {/* Header com ícone de análise */}
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 bg-amber-100 dark:bg-amber-950/30 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Clock className="h-10 w-10 text-amber-600" />
+            </div>
+            <h1 className="text-3xl font-bold text-amber-600 mb-2">
+              Pagamento em Análise
+            </h1>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Seu pagamento foi recebido e está em análise. Assim que ele for confirmado, você será notificado no email cadastrado.
+            </p>
+          </div>
+
+          {/* Resumo da Transação */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Resumo da Transação</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Total */}
+              <div className="flex justify-between items-center">
+                <span className="font-medium text-muted-foreground">Valor Total:</span>
+                <span className="text-2xl font-bold text-foreground">
+                  {formatCurrency(data?.charge?.total_amount_cents || 0)}
+                </span>
+              </div>
+
+              <Separator />
+
+              {/* Detalhamento por método */}
+              <div className="space-y-3">
+                {/* PIX (se existir e estiver pago) */}
+                {pixSplitAnalysis && pixSplitAnalysis.status === 'CONCLUDED' && (
+                  <div className="flex justify-between items-center p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-emerald-600" />
+                      <span className="font-medium">PIX</span>
+                    </div>
+                    <div className="text-right flex items-center gap-2">
+                      <Badge variant="success">Pago</Badge>
+                      <span className="font-medium text-emerald-600">
+                        {formatCurrency(pixSplitAnalysis.amount_cents)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Cartão (em análise) */}
+                {cardSplitAnalysis && cardSplitAnalysis.status === 'ANALYZING' && (
+                  <div className="flex justify-between items-center p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-amber-600 animate-pulse" />
+                      <span className="font-medium">Cartão de Crédito</span>
+                    </div>
+                    <div className="text-right flex items-center gap-2">
+                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                        Em Análise
+                      </Badge>
+                      <span className="font-medium text-amber-600">
+                        {formatCurrency(cardSplitAnalysis.amount_cents)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Caso seja apenas cartão em análise (sem PIX) */}
+                {!pixSplitAnalysis && cardSplitAnalysis && cardSplitAnalysis.status === 'ANALYZING' && (
+                  <div className="flex justify-between items-center p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-amber-600 animate-pulse" />
+                      <span className="font-medium">Cartão de Crédito</span>
+                    </div>
+                    <div className="text-right flex items-center gap-2">
+                      <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                        Em Análise
+                      </Badge>
+                      <span className="font-medium text-amber-600">
+                        {formatCurrency(cardSplitAnalysis.amount_cents)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* Informação importante */}
+              <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p className="text-sm text-blue-800 dark:text-blue-200 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>
+                    O pagamento via cartão está sendo analisado pela operadora.
+                    Você receberá um email de confirmação em até 24 horas.
+                    <strong className="block mt-1">Não é necessário realizar o pagamento novamente.</strong>
+                  </span>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Botões */}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center print:hidden">
+            <Button onClick={handlePrint} variant="outline">
+              <Printer className="h-4 w-4 mr-2" />
+              Imprimir
+            </Button>
+            <Button onClick={handleDownloadPDF} variant="outline" disabled={isDownloadingPDF}>
+              {isDownloadingPDF ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Baixar PDF
+            </Button>
+            <Button asChild>
+              <Link to="/">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Voltar ao Início
+              </Link>
+            </Button>
+          </div>
+          
+          {/* Suporte */}
+          <div className="mt-8 text-center text-sm text-muted-foreground">
+            <p>Precisa de ajuda? Entre em contato:</p>
+            <p className="flex items-center justify-center gap-1 mt-1">
+              <Mail className="h-3 w-3" />
+              {data?.ui?.support_email || 'faleconosco@autonegocie.com'}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Tela de processamento
   if (!data?.paid && data?.processing) {
     return (
-      <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
             <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
-            <h2 className="text-xl font-semibold mb-2 text-ds-text-strong">Pagamento em processamento</h2>
-            <p className="text-ds-text-muted mb-4">
+            <h2 className="text-xl font-semibold mb-2 text-foreground">Pagamento em processamento</h2>
+            <p className="text-muted-foreground mb-4">
               Estamos confirmando seu pagamento. Isso pode levar alguns segundos.
             </p>
             <Button onClick={loadData}>
