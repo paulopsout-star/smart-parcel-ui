@@ -772,12 +772,8 @@ export default function ChargeHistory() {
             title: "Sincronização concluída",
             description: `${updatedChargeIds.size} cobrança(s) atualizada(s).`,
           });
-        } else {
-          toast({
-            title: "Atualização automática",
-            description: `${updatedChargeIds.size} cobrança(s) atualizada(s).`,
-          });
         }
+        // Sincronização automática: sem toast (apenas log no console)
       } else if (!isAutoSync) {
         toast({
           title: "Sincronização concluída",
