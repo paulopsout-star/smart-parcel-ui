@@ -6,11 +6,12 @@ const corsHeaders = {
 };
 
 // Mapeamento statusCode Quita+ → status interno do payment_split
-// IMPORTANTE: StatusCode 2 (Canceled) deve mapear para 'cancelled' para consistência com charges
+// IMPORTANTE: Mapeamento correto segundo documentação API Quita+
+// StatusCode 2 (Canceled) = cancelled, StatusCode 3 (BarcodeAssigned) = boleto_linked
 const statusCodeMap: Record<number, string> = {
   1: 'pending',           // Received - pré-pagamento criado
-  2: 'cancelled',         // Canceled - prazo expirou ou valor diferente → CANCELLED (não failed)
-  3: 'expired',           // Expired
+  2: 'cancelled',         // Canceled - prazo expirou ou valor diferente
+  3: 'boleto_linked',     // BarcodeAssigned - boleto vinculado ao pagamento ✅ CORRIGIDO
   4: 'processing',        // Settled - analisado pelo robô
   5: 'failed',            // PaymentDenied - risco não aprovou
   6: 'processing',        // PaymentValidated - risco aprovou (aguardando pagamento)
