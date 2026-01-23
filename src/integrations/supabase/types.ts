@@ -185,6 +185,7 @@ export type Database = {
           recurrence_interval: number | null
           recurrence_type: Database["public"]["Enums"]["recurrence_type"]
           status: Database["public"]["Enums"]["charge_status"]
+          sync_attempts: number | null
           updated_at: string
         }
         Insert: {
@@ -228,6 +229,7 @@ export type Database = {
           recurrence_interval?: number | null
           recurrence_type?: Database["public"]["Enums"]["recurrence_type"]
           status?: Database["public"]["Enums"]["charge_status"]
+          sync_attempts?: number | null
           updated_at?: string
         }
         Update: {
@@ -271,6 +273,7 @@ export type Database = {
           recurrence_interval?: number | null
           recurrence_type?: Database["public"]["Enums"]["recurrence_type"]
           status?: Database["public"]["Enums"]["charge_status"]
+          sync_attempts?: number | null
           updated_at?: string
         }
         Relationships: [

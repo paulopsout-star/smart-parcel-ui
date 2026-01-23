@@ -20,8 +20,14 @@ const statusCodeMap: Record<number, string> = {
   50: "cnpj_nao_cadastrado", // MissingRegistryBankslipCNPJ - CNPJ não cadastrado
 };
 
+// Status considerados terminais (não devem ser re-verificados após 5 tentativas)
+const TERMINAL_STATUSES = ["failed", "expired", "cancelled", "payment_denied"];
+
 // Período de verificação: últimos 90 dias
 const SYNC_DAYS_WINDOW = 90;
+
+// Máximo de tentativas de re-verificação para status terminais
+const MAX_SYNC_ATTEMPTS = 5;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -41,25 +47,57 @@ serve(async (req) => {
     dateLimit.setDate(dateLimit.getDate() - SYNC_DAYS_WINDOW);
     const dateLimitISO = dateLimit.toISOString();
 
+    // Calcular data limite para cobranças terminais (últimas 48h)
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    const twoDaysAgoISO = twoDaysAgo.toISOString();
+
     console.log(`[sync-payment-status] Buscando cobranças com pre_payment_key dos últimos ${SYNC_DAYS_WINDOW} dias (desde ${dateLimitISO})`);
 
-    // Buscar cobranças com pre_payment_key - limitar a 30 para evitar timeout
-    // Priorizar cobranças não-terminais (pending, processing, pre_authorized, boleto_linked, awaiting_validation, validating)
-    const { data: charges, error: chargesError } = await supabase
+    // Buscar cobranças ativas (não-terminais) - limitar a 25 para deixar espaço para terminais
+    const { data: activeCharges, error: activeChargesError } = await supabase
       .from("charges")
-      .select("id, pre_payment_key, status, company_id, payer_name, amount, boleto_linked_at, completed_at")
+      .select("id, pre_payment_key, status, company_id, payer_name, amount, boleto_linked_at, completed_at, sync_attempts")
       .not("pre_payment_key", "is", null)
-      .not("status", "in", '("completed","cancelled","payment_denied","failed")')
+      .not("status", "in", '("completed","cancelled","payment_denied","failed","expired")')
       .gte("created_at", dateLimitISO)
       .order("created_at", { ascending: false })
-      .limit(30);
+      .limit(25);
 
-    if (chargesError) {
-      console.error("[sync-payment-status] Erro ao buscar cobranças:", chargesError);
-      throw chargesError;
+    if (activeChargesError) {
+      console.error("[sync-payment-status] Erro ao buscar cobranças ativas:", activeChargesError);
+      throw activeChargesError;
     }
 
-    if (!charges || charges.length === 0) {
+    // Buscar cobranças terminais das últimas 48h com sync_attempts < 5
+    const { data: terminalCharges, error: terminalChargesError } = await supabase
+      .from("charges")
+      .select("id, pre_payment_key, status, company_id, payer_name, amount, boleto_linked_at, completed_at, sync_attempts")
+      .not("pre_payment_key", "is", null)
+      .in("status", ["failed", "expired"])
+      .lt("sync_attempts", MAX_SYNC_ATTEMPTS)
+      .gte("created_at", twoDaysAgoISO)
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (terminalChargesError) {
+      console.error("[sync-payment-status] Erro ao buscar cobranças terminais:", terminalChargesError);
+      // Continuar mesmo com erro, usando apenas cobranças ativas
+    }
+
+    // Combinar listas sem duplicatas
+    const allCharges = [...(activeCharges || [])];
+    if (terminalCharges) {
+      for (const tc of terminalCharges) {
+        if (!allCharges.find(c => c.id === tc.id)) {
+          allCharges.push(tc);
+        }
+      }
+    }
+
+    console.log(`[sync-payment-status] Total: ${allCharges.length} cobranças (${activeCharges?.length || 0} ativas + ${terminalCharges?.length || 0} terminais para re-verificar)`);
+
+    if (allCharges.length === 0) {
       console.log("[sync-payment-status] Nenhuma cobrança com pre_payment_key encontrada no período");
       return new Response(
         JSON.stringify({ 
@@ -67,13 +105,12 @@ serve(async (req) => {
           message: "Nenhuma cobrança com cartão para sincronizar no período",
           processed: 0,
           updated: 0,
+          terminal_rechecked: 0,
           duration_ms: Date.now() - startTime
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    console.log(`[sync-payment-status] Encontradas ${charges.length} cobranças para verificar`);
 
     // CORREÇÃO: Detectar e corrigir cobranças com status inconsistente
     // (status = 'pre_authorized' mas pre_payment_key = NULL)
@@ -111,13 +148,24 @@ serve(async (req) => {
       newStatus: string | null;
       apiStatusCode: number | null;
       updated: boolean;
+      syncAttempts?: number;
       error?: string;
     }> = [];
 
+    let terminalRechecked = 0;
+
     // Processar cada cobrança
-    for (const charge of charges) {
+    for (const charge of allCharges) {
       try {
-        console.log(`[sync-payment-status] Verificando charge ${charge.id} (${charge.payer_name})`);
+        const isTerminalCharge = TERMINAL_STATUSES.includes(charge.status);
+        const currentSyncAttempts = charge.sync_attempts || 0;
+        
+        if (isTerminalCharge) {
+          terminalRechecked++;
+          console.log(`[sync-payment-status] Re-verificando cobrança terminal ${charge.id} (${charge.payer_name}), tentativa ${currentSyncAttempts + 1}/${MAX_SYNC_ATTEMPTS}`);
+        } else {
+          console.log(`[sync-payment-status] Verificando charge ${charge.id} (${charge.payer_name})`);
+        }
 
         // Chamar quitaplus-prepayment-status
         const statusResponse = await fetch(
@@ -141,6 +189,7 @@ serve(async (req) => {
             newStatus: null,
             apiStatusCode: null,
             updated: false,
+            syncAttempts: currentSyncAttempts,
             error: `API error: ${statusResponse.status}`,
           });
           continue;
@@ -154,8 +203,10 @@ serve(async (req) => {
 
         // Verificar se precisa atualizar
         if (newStatus !== charge.status) {
+          // STATUS MUDOU - atualizar e resetar contador
           const updateData: Record<string, unknown> = {
             status: newStatus,
+            sync_attempts: 0, // RESET contador quando status muda
             updated_at: new Date().toISOString(),
           };
 
@@ -180,10 +231,11 @@ serve(async (req) => {
               newStatus,
               apiStatusCode,
               updated: false,
+              syncAttempts: currentSyncAttempts,
               error: updateError.message,
             });
           } else {
-            console.log(`[sync-payment-status] ✅ Charge ${charge.id} atualizado: ${charge.status} → ${newStatus}`);
+            console.log(`[sync-payment-status] ✅ Charge ${charge.id} atualizado: ${charge.status} → ${newStatus} (sync_attempts resetado)`);
 
             // Registrar em charge_executions
             await supabase.from("charge_executions").insert({
@@ -195,6 +247,8 @@ serve(async (req) => {
                 previous_status: charge.status,
                 api_status_code: apiStatusCode,
                 synced_at: new Date().toISOString(),
+                sync_attempts_before: currentSyncAttempts,
+                sync_attempts_after: 0,
               },
             });
 
@@ -204,16 +258,50 @@ serve(async (req) => {
               newStatus,
               apiStatusCode,
               updated: true,
+              syncAttempts: 0,
             });
           }
         } else {
-          results.push({
-            chargeId: charge.id,
-            oldStatus: charge.status,
-            newStatus,
-            apiStatusCode,
-            updated: false,
-          });
+          // STATUS NÃO MUDOU - incrementar contador SE for terminal
+          if (isTerminalCharge) {
+            const newSyncAttempts = currentSyncAttempts + 1;
+            
+            const { error: incError } = await supabase
+              .from("charges")
+              .update({ 
+                sync_attempts: newSyncAttempts,
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", charge.id);
+            
+            if (incError) {
+              console.error(`[sync-payment-status] Erro ao incrementar sync_attempts para ${charge.id}:`, incError);
+            } else {
+              console.log(`[sync-payment-status] Charge ${charge.id} manteve status ${charge.status}, tentativa ${newSyncAttempts}/${MAX_SYNC_ATTEMPTS}`);
+              
+              if (newSyncAttempts >= MAX_SYNC_ATTEMPTS) {
+                console.log(`[sync-payment-status] ⚠️ Charge ${charge.id} atingiu limite de ${MAX_SYNC_ATTEMPTS} tentativas, não será mais re-verificada`);
+              }
+            }
+
+            results.push({
+              chargeId: charge.id,
+              oldStatus: charge.status,
+              newStatus,
+              apiStatusCode,
+              updated: false,
+              syncAttempts: newSyncAttempts,
+            });
+          } else {
+            results.push({
+              chargeId: charge.id,
+              oldStatus: charge.status,
+              newStatus,
+              apiStatusCode,
+              updated: false,
+              syncAttempts: currentSyncAttempts,
+            });
+          }
         }
 
         // Rate limiting: aguardar 500ms entre chamadas (reduzido para evitar timeout)
@@ -234,13 +322,14 @@ serve(async (req) => {
     const updatedCount = results.filter((r) => r.updated).length;
     const duration = Date.now() - startTime;
 
-    console.log(`[sync-payment-status] Sincronização concluída: ${updatedCount}/${charges.length} atualizados em ${duration}ms`);
+    console.log(`[sync-payment-status] Sincronização concluída: ${updatedCount}/${allCharges.length} atualizados (${terminalRechecked} terminais re-verificadas) em ${duration}ms`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        processed: charges.length,
+        processed: allCharges.length,
         updated: updatedCount,
+        terminal_rechecked: terminalRechecked,
         duration_ms: duration,
         results,
       }),
