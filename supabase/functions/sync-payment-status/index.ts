@@ -21,7 +21,8 @@ const statusCodeMap: Record<number, string> = {
 };
 
 // Status considerados terminais (não devem ser re-verificados após 5 tentativas)
-const TERMINAL_STATUSES = ["failed", "expired", "cancelled", "payment_denied"];
+// Nota: "expired" não existe no enum charge_status, usando apenas valores válidos
+const TERMINAL_STATUSES = ["failed", "cancelled", "payment_denied"];
 
 // Período de verificação: últimos 90 dias
 const SYNC_DAYS_WINDOW = 90;
@@ -59,7 +60,7 @@ serve(async (req) => {
       .from("charges")
       .select("id, pre_payment_key, status, company_id, payer_name, amount, boleto_linked_at, completed_at, sync_attempts")
       .not("pre_payment_key", "is", null)
-      .not("status", "in", '("completed","cancelled","payment_denied","failed","expired")')
+      .not("status", "in", '("completed","cancelled","payment_denied","failed")')
       .gte("created_at", dateLimitISO)
       .order("created_at", { ascending: false })
       .limit(25);
@@ -70,11 +71,12 @@ serve(async (req) => {
     }
 
     // Buscar cobranças terminais das últimas 48h com sync_attempts < 5
+    // Nota: apenas "failed" é re-verificável (cancelled/payment_denied são finais)
     const { data: terminalCharges, error: terminalChargesError } = await supabase
       .from("charges")
       .select("id, pre_payment_key, status, company_id, payer_name, amount, boleto_linked_at, completed_at, sync_attempts")
       .not("pre_payment_key", "is", null)
-      .in("status", ["failed", "expired"])
+      .eq("status", "failed")
       .lt("sync_attempts", MAX_SYNC_ATTEMPTS)
       .gte("created_at", twoDaysAgoISO)
       .order("created_at", { ascending: false })
