@@ -6,12 +6,12 @@ const corsHeaders = {
 };
 
 // Mapeamento statusCode Quita+ → status interno
-// IMPORTANTE: StatusCode 1 (Received) agora mapeia para 'analyzing' (pagamento em análise)
-// StatusCode 2 (Canceled) deve mapear para 'cancelled' para consistência com charges
+// IMPORTANTE: Mapeamento correto segundo documentação API Quita+
+// StatusCode 3 (BarcodeAssigned) = boleto_linked (NÃO expired!)
 const statusCodeMap: Record<number, string> = {
   1: 'analyzing',         // Received - pagamento recebido, em análise pela operadora
-  2: 'cancelled',         // Canceled - prazo expirou ou valor diferente → CANCELLED (não failed)
-  3: 'expired',           // Expired
+  2: 'cancelled',         // Canceled - prazo expirou ou valor diferente
+  3: 'boleto_linked',     // BarcodeAssigned - boleto vinculado ao pagamento ✅ CORRIGIDO
   4: 'validating',        // Settled - analisado pelo robô
   5: 'failed',            // PaymentDenied - risco não aprovou
   6: 'approved',          // PaymentValidated - risco aprovou
