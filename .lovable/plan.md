@@ -1,66 +1,128 @@
 
-# Plano de Correção: Taxa PIX em Cobranças Simples
+# Plano de Correcao: Exibicao de Valor Original e Taxas para PIX Avulso
 
-## Problema Identificado
+## Problemas Identificados
 
-No ChargeHistory, a exibição da taxa PIX usa o campo errado:
+Com base na analise do banco de dados e do codigo, identifiquei dois problemas distintos:
 
-```typescript
-// Linha 266 - ATUAL (incorreto)
-const pixTotal = pixSplit?.amount_cents || (pixBase + pixFeeCalculated);
-```
+### Problema 1: Valor exibido incorretamente
 
-Para cobranças PIX 100% (payment_method = 'pix'), os dados estao **corretos** no banco:
-- `amount_cents` = valor original (ex: 22108)
-- `display_amount_cents` = valor com taxa 5% (ex: 23213)
+**Situacao Atual:**
+- Usuario cadastra R$ 100,00
+- Sistema salva `amount = 10500` (R$ 105,00 com taxa)
+- Sistema salva `metadata.original_amount = 10000` (R$ 100,00 original)
+- Sistema salva `fee_amount = 500` (R$ 5,00 de taxa)
 
-Mas o codigo usa `amount_cents` como total, resultando em taxa = 0.
+**Exibicao Atual (incorreta):**
+- Card "VALOR" mostra R$ 105,00 (valor com taxa)
 
-## Correcao Proposta
+**Exibicao Esperada:**
+- Card "VALOR" deve mostrar R$ 100,00 (valor original informado pelo usuario)
 
-### 1. Alterar calculo no ChargeHistory.tsx (linha 266)
+### Problema 2: Modal de metodos de pagamento nao aparece
+
+**Situacao Atual:**
+- Para PIX avulso, nao existem splits ate o cliente pagar
+- A condicao de exibicao do PaymentMethodsSummary exclui PIX avulso sem splits
+
+**Comportamento Esperado:**
+- Mesmo sem splits, o modal deve exibir valor original e taxas para PIX avulso
+
+---
+
+## Correcoes Propostas
+
+### Correcao 1: Exibir valor original no header da cobranca
+
+**Arquivo:** `src/pages/ChargeHistory.tsx`
+**Local:** Linha 1725 (InfoCard de Valor)
 
 **De:**
 ```typescript
-const pixTotal = pixSplit?.amount_cents || (pixBase + pixFeeCalculated);
+<InfoCard icon={CreditCard} label="Valor" value={formatCurrency(selectedCharge.amount)} variant="primary" />
 ```
 
 **Para:**
 ```typescript
-// Priorizar display_amount_cents (valor COM taxa)
-// Se nao existir, calcular: valor pago / 1.05 = base, diferenca = taxa
-const pixTotal = pixSplit?.display_amount_cents 
-  || pixSplit?.amount_cents 
-  || (pixBase + pixFeeCalculated);
+// Para PIX avulso: usar valor original (sem taxa) 
+// Para outros metodos: usar amount normal
+const displayAmount = selectedCharge.payment_method === 'pix' && selectedCharge.fee_amount
+  ? selectedCharge.amount - selectedCharge.fee_amount  // Subtrair taxa para mostrar original
+  : selectedCharge.amount;
+
+<InfoCard icon={CreditCard} label="Valor" value={formatCurrency(displayAmount)} variant="primary" />
 ```
 
-### 2. Ajustar calculo do valor base (linhas 262-270)
+### Correcao 2: Exibir modal de metodos de pagamento para PIX avulso
 
+**Arquivo:** `src/pages/ChargeHistory.tsx`
+**Local:** Linha 1859 (condicao de exibicao do PaymentMethodsSummary)
+
+**De:**
 ```typescript
-// Calculos para PIX - sempre calcular 5% de taxa
-const PIX_FEE_RATE = 0.05;
+{(selectedCharge.payment_method === 'cartao_pix' || (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
+```
 
-// Se ha split com display_amount_cents, usar os valores corretos
-if (pixSplit?.display_amount_cents) {
-  // display_amount_cents = valor com taxa (total pago)
-  // amount_cents = valor original (base)
-  const pixTotal = pixSplit.display_amount_cents;
-  const pixBase = pixSplit.amount_cents;
-  const pixFee = pixTotal - pixBase;
-  const pixFeePercent = ((pixFee / pixBase) * 100).toFixed(1);
-} else if (pixSplit?.amount_cents) {
-  // Caso antigo: apenas amount_cents existe e JA inclui taxa
-  // Reverter: base = total / 1.05
-  const pixTotal = pixSplit.amount_cents;
-  const pixBase = Math.round(pixTotal / (1 + PIX_FEE_RATE));
-  const pixFee = pixTotal - pixBase;
-  const pixFeePercent = ((pixFee / pixBase) * 100).toFixed(1);
+**Para:**
+```typescript
+{(selectedCharge.payment_method === 'cartao_pix' || 
+  selectedCharge.payment_method === 'pix' ||  // Incluir PIX avulso
+  (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
+```
+
+### Correcao 3: Ajustar PaymentMethodsSummary para PIX avulso sem splits
+
+**Arquivo:** `src/pages/ChargeHistory.tsx`
+**Local:** Linhas 341-344 (condicao de retorno null)
+
+**De:**
+```typescript
+// Se nao ha splits e nao e pagamento combinado
+if (splits.length === 0 && charge.payment_method !== 'cartao_pix') {
+  return null;
+}
+```
+
+**Para:**
+```typescript
+// Se nao ha splits e nao e pagamento combinado nem PIX avulso
+if (splits.length === 0 && charge.payment_method !== 'cartao_pix' && charge.payment_method !== 'pix') {
+  return null;
+}
+```
+
+### Correcao 4: Calcular valores PIX a partir do charge quando nao ha splits
+
+**Arquivo:** `src/pages/ChargeHistory.tsx`
+**Local:** Linhas 285-291 (calculo do pixBase quando nao ha split)
+
+**De:**
+```typescript
 } else {
   // Sem split: calcular a partir do charge
-  const pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
-  const pixFee = Math.round(pixBase * PIX_FEE_RATE);
-  const pixTotal = pixBase + pixFee;
-  const pixFeePercent = '5.0';
+  pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
+  pixFee = Math.round(pixBase * PIX_FEE_RATE);
+  pixTotal = pixBase + pixFee;
+  pixFeePercent = '5.0';
+}
+```
+
+**Para:**
+```typescript
+} else {
+  // Sem split: calcular a partir do charge
+  // Para PIX avulso: amount JA inclui taxa, reverter
+  if (charge.payment_method === 'pix' && charge.fee_amount) {
+    pixTotal = charge.amount;  // Valor com taxa
+    pixBase = charge.amount - charge.fee_amount;  // Valor original
+    pixFee = charge.fee_amount;
+    pixFeePercent = charge.fee_percentage?.toFixed(1) || '5.0';
+  } else {
+    pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
+    pixFee = Math.round(pixBase * PIX_FEE_RATE);
+    pixTotal = pixBase + pixFee;
+    pixFeePercent = '5.0';
+  }
 }
 ```
 
@@ -68,42 +130,38 @@ if (pixSplit?.display_amount_cents) {
 
 ## Secao Tecnica
 
-### Arquivo a Modificar
+### Arquivos a Modificar
 
 | Arquivo | Linhas | Alteracao |
 |---------|--------|-----------|
-| `src/pages/ChargeHistory.tsx` | 260-270 | Refatorar logica de calculo PIX para priorizar `display_amount_cents` e reverter 5% quando apenas `amount_cents` existe |
+| `src/pages/ChargeHistory.tsx` | 1725 | Exibir valor original (sem taxa) para PIX avulso |
+| `src/pages/ChargeHistory.tsx` | 1859 | Incluir `payment_method === 'pix'` na condicao de exibicao |
+| `src/pages/ChargeHistory.tsx` | 341-344 | Permitir renderizacao do PaymentMethodsSummary para PIX avulso |
+| `src/pages/ChargeHistory.tsx` | 285-291 | Usar `fee_amount` do charge para calculo preciso |
 
-### Logica de Reversao (para dados antigos)
+### Dados Disponiveis na Tabela charges
 
-Para cobranças pagas onde `display_amount_cents` e NULL:
+Para PIX avulso, os campos relevantes sao:
+- `amount`: valor COM taxa (ex: 10500)
+- `fee_amount`: valor da taxa (ex: 500)
+- `fee_percentage`: percentual da taxa (ex: 5.00)
+- `metadata.original_amount`: valor ORIGINAL (ex: 10000)
 
-```typescript
-// amount_cents JA inclui taxa de 5%
-const valorPago = pixSplit.amount_cents;  // ex: 189000
+### Resultado Esperado
 
-// Subtrair 5%: valorOriginal = valorPago / 1.05
-const valorOriginal = Math.round(valorPago / 1.05);  // ex: 180000
+Apos a correcao, ao visualizar uma cobranca PIX avulsa de R$ 100,00:
 
-// Taxa = diferenca
-const taxa = valorPago - valorOriginal;  // ex: 9000
-const percentual = (taxa / valorOriginal) * 100;  // ex: 5.0%
-```
+**Header:**
+- Card "VALOR": R$ 100,00 (valor original)
 
-### Exemplo com Dados Reais
-
-Cobrança combinada `charge_id: 754ff954`:
-- `amount_cents: 179550` (valor ja com taxa)
-- `display_amount_cents: null`
-
-**Calculo corrigido:**
-- Base = 179550 / 1.05 = 171000
-- Taxa = 179550 - 171000 = 8550
-- Percentual = (8550 / 171000) * 100 = 5.0%
+**Modal de Metodos de Pagamento:**
+- Valor original: R$ 100,00
+- Taxa PIX (5%): + R$ 5,00
+- Valor: R$ 105,00
 
 ### Impacto
 
-- Nao altera dados no banco
+- Corrige NOVAS e EXISTENTES cobrancas PIX avulso
+- Usa dados ja salvos (`fee_amount`, `fee_percentage`)
+- Nao altera fluxo de cadastro
 - Nao altera integracao com APIs
-- Apenas corrige exibicao no historico
-- Funciona para dados antigos (sem display_amount_cents) e novos (com display_amount_cents)
