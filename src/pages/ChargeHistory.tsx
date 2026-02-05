@@ -284,10 +284,18 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     pixFeePercent = pixBase > 0 ? ((pixFee / pixBase) * 100).toFixed(1) : '5.0';
   } else {
     // Sem split: calcular a partir do charge
-    pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
-    pixFee = Math.round(pixBase * PIX_FEE_RATE);
-    pixTotal = pixBase + pixFee;
-    pixFeePercent = '5.0';
+    // Para PIX avulso: amount JÁ inclui taxa, reverter usando fee_amount salvo
+    if (charge.payment_method === 'pix' && charge.fee_amount) {
+      pixTotal = charge.amount;  // Valor com taxa
+      pixBase = charge.amount - charge.fee_amount;  // Valor original
+      pixFee = charge.fee_amount;
+      pixFeePercent = charge.fee_percentage?.toFixed(1) || '5.0';
+    } else {
+      pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
+      pixFee = Math.round(pixBase * PIX_FEE_RATE);
+      pixTotal = pixBase + pixFee;
+      pixFeePercent = '5.0';
+    }
   }
 
   // Cálculos para Cartão - usar valor do split se disponível
@@ -338,8 +346,8 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     return split.status === 'concluded';
   };
 
-  // Se não há splits e não é pagamento combinado
-  if (splits.length === 0 && charge.payment_method !== 'cartao_pix') {
+  // Se não há splits e não é pagamento combinado nem PIX avulso
+  if (splits.length === 0 && charge.payment_method !== 'cartao_pix' && charge.payment_method !== 'pix') {
     return null;
   }
 
@@ -1722,7 +1730,12 @@ export default function ChargeHistory() {
                     <InfoCard icon={Mail} label="Email" value={selectedCharge.payer_email} />
                     <InfoCard icon={Phone} label="Telefone" value={formatPhone(selectedCharge.payer_phone)} />
                     <InfoCard icon={FileText} label="CPF/CNPJ" value={formatDocument(selectedCharge.payer_document)} />
-                    <InfoCard icon={CreditCard} label="Valor" value={formatCurrency(selectedCharge.amount)} variant="primary" />
+                    <InfoCard icon={CreditCard} label="Valor" value={formatCurrency(
+                      // Para PIX avulso: mostrar valor original (sem taxa)
+                      selectedCharge.payment_method === 'pix' && selectedCharge.fee_amount
+                        ? selectedCharge.amount - selectedCharge.fee_amount
+                        : selectedCharge.amount
+                    )} variant="primary" />
                   </div>
                   
                   {/* Link de Pagamento */}
@@ -1856,7 +1869,7 @@ export default function ChargeHistory() {
                   </div>
 
                   {/* Métodos de Pagamento Detalhados */}
-                  {(selectedCharge.payment_method === 'cartao_pix' || (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
+                  {(selectedCharge.payment_method === 'cartao_pix' || selectedCharge.payment_method === 'pix' || (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
                     <div className="space-y-2">
                       <h4 className="font-medium text-ds-text-strong">Métodos de Pagamento</h4>
                       <PaymentMethodsSummary charge={selectedCharge} isAdmin={isAdmin} />
