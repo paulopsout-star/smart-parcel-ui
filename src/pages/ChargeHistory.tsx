@@ -258,16 +258,37 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
   const isPartial = displayStatus === 'partial';
 
   // Cálculos para PIX - sempre calcular 5% de taxa
-  // Para PIX avulso (100% PIX), usar charge.amount; para combinado, usar pix_amount
-  const pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
   const PIX_FEE_RATE = 0.05; // 5%
-  const pixFeeCalculated = Math.round(pixBase * PIX_FEE_RATE);
-  // Se há split, usar o valor real; senão, calcular com taxa de 5%
-  const pixTotal = pixSplit?.amount_cents || (pixBase + pixFeeCalculated);
-  const pixFee = pixTotal - pixBase;
-  const pixFeePercent = pixBase > 0 
-    ? ((pixFee / pixBase) * 100).toFixed(1) 
-    : '5.0';
+  
+  // Lógica corrigida para calcular taxa PIX:
+  // - Se display_amount_cents existe: display_amount_cents = total com taxa, amount_cents = base
+  // - Se apenas amount_cents existe: amount_cents JÁ inclui taxa, reverter para obter base
+  // - Se nenhum split: calcular a partir do charge
+  let pixBase: number;
+  let pixTotal: number;
+  let pixFee: number;
+  let pixFeePercent: string;
+  
+  if (pixSplit?.display_amount_cents) {
+    // Cenário ideal: ambos campos preenchidos corretamente
+    pixTotal = pixSplit.display_amount_cents;
+    pixBase = pixSplit.amount_cents;
+    pixFee = pixTotal - pixBase;
+    pixFeePercent = pixBase > 0 ? ((pixFee / pixBase) * 100).toFixed(1) : '5.0';
+  } else if (pixSplit?.amount_cents) {
+    // Cenário legado: apenas amount_cents existe e JÁ inclui taxa
+    // Reverter: base = total / 1.05
+    pixTotal = pixSplit.amount_cents;
+    pixBase = Math.round(pixTotal / (1 + PIX_FEE_RATE));
+    pixFee = pixTotal - pixBase;
+    pixFeePercent = pixBase > 0 ? ((pixFee / pixBase) * 100).toFixed(1) : '5.0';
+  } else {
+    // Sem split: calcular a partir do charge
+    pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
+    pixFee = Math.round(pixBase * PIX_FEE_RATE);
+    pixTotal = pixBase + pixFee;
+    pixFeePercent = '5.0';
+  }
 
   // Cálculos para Cartão - usar valor do split se disponível
   // Para pagamentos 100% cartão, usar charge.amount como base quando card_amount for null
