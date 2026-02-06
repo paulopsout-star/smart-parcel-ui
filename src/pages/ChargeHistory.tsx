@@ -1993,7 +1993,8 @@ export default function ChargeHistory() {
                   {isAdmin && 
                    selectedCharge.payment_method === 'cartao_pix' &&
                    selectedCharge.pre_payment_key &&
-                   !selectedCharge.boleto_admin_linha_digitavel && (
+                   !selectedCharge.boleto_admin_linha_digitavel &&
+                   selectedCharge.splits?.some((s: any) => s.method === 'credit_card' && s.status === 'analyzing') && (
                     <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
                       <h4 className="font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2">
                         <Link2 className="h-4 w-4" />
