@@ -1,167 +1,57 @@
 
-# Plano de Correcao: Exibicao de Valor Original e Taxas para PIX Avulso
 
-## Problemas Identificados
+# Correcao: Regra do Botao "Vincular Boleto Manualmente"
 
-Com base na analise do banco de dados e do codigo, identifiquei dois problemas distintos:
+## Problema
 
-### Problema 1: Valor exibido incorretamente
+O botao "Vincular Boleto Manualmente" so aparece quando a charge possui `pre_payment_key`, mas a regra correta e: **o botao deve aparecer quando o split de cartao esta com status "Received" (statusCode 1 da API Quita+)**, que internamente e mapeado como `analyzing`.
 
-**Situacao Atual:**
-- Usuario cadastra R$ 100,00
-- Sistema salva `amount = 10500` (R$ 105,00 com taxa)
-- Sistema salva `metadata.original_amount = 10000` (R$ 100,00 original)
-- Sistema salva `fee_amount = 500` (R$ 5,00 de taxa)
+## Dados do Banco (confirmacao)
 
-**Exibicao Atual (incorreta):**
-- Card "VALOR" mostra R$ 105,00 (valor com taxa)
+Existem 6 cobranças combinadas com splits de cartao no status `analyzing` que deveriam exibir o botao:
+- LEONARDO PEREIRA BARBOZA
+- Manoel De Santana Gomes
+- Paulo Pereira Souto
+- SANDRA REGINA SILVA BEZERRA
+- Dewson Oliveira Candial
+- ANA CRISTINA DE PAIVA LIMA
 
-**Exibicao Esperada:**
-- Card "VALOR" deve mostrar R$ 100,00 (valor original informado pelo usuario)
+Nenhuma delas exibe o botao atualmente porque a condicao verifica apenas `pre_payment_key` na charge, sem checar o status real do split.
 
-### Problema 2: Modal de metodos de pagamento nao aparece
+## Correcao Proposta
 
-**Situacao Atual:**
-- Para PIX avulso, nao existem splits ate o cliente pagar
-- A condicao de exibicao do PaymentMethodsSummary exclui PIX avulso sem splits
-
-**Comportamento Esperado:**
-- Mesmo sem splits, o modal deve exibir valor original e taxas para PIX avulso
-
----
-
-## Correcoes Propostas
-
-### Correcao 1: Exibir valor original no header da cobranca
-
-**Arquivo:** `src/pages/ChargeHistory.tsx`
-**Local:** Linha 1725 (InfoCard de Valor)
+### Arquivo: `src/pages/ChargeHistory.tsx` (Linhas 1993-1996)
 
 **De:**
 ```typescript
-<InfoCard icon={CreditCard} label="Valor" value={formatCurrency(selectedCharge.amount)} variant="primary" />
+{isAdmin && 
+ selectedCharge.payment_method === 'cartao_pix' &&
+ selectedCharge.pre_payment_key &&
+ !selectedCharge.boleto_admin_linha_digitavel && (
 ```
 
 **Para:**
 ```typescript
-// Para PIX avulso: usar valor original (sem taxa) 
-// Para outros metodos: usar amount normal
-const displayAmount = selectedCharge.payment_method === 'pix' && selectedCharge.fee_amount
-  ? selectedCharge.amount - selectedCharge.fee_amount  // Subtrair taxa para mostrar original
-  : selectedCharge.amount;
-
-<InfoCard icon={CreditCard} label="Valor" value={formatCurrency(displayAmount)} variant="primary" />
+{isAdmin && 
+ selectedCharge.payment_method === 'cartao_pix' &&
+ selectedCharge.pre_payment_key &&
+ !selectedCharge.boleto_admin_linha_digitavel &&
+ selectedCharge.splits?.some(s => s.method === 'credit_card' && s.status === 'analyzing') && (
 ```
 
-### Correcao 2: Exibir modal de metodos de pagamento para PIX avulso
+## Logica da Nova Regra
 
-**Arquivo:** `src/pages/ChargeHistory.tsx`
-**Local:** Linha 1859 (condicao de exibicao do PaymentMethodsSummary)
+A condicao agora verifica 4 criterios:
+1. Usuario e admin
+2. Metodo de pagamento e `cartao_pix` (combinado)
+3. Existe `pre_payment_key` (cartao foi pre-autorizado)
+4. Boleto admin ainda nao foi vinculado
+5. **NOVA:** Existe um split de cartao com status `analyzing` (Received na API Quita+)
 
-**De:**
-```typescript
-{(selectedCharge.payment_method === 'cartao_pix' || (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
-```
+Isso garante que o botao so aparece quando a pre-autorizacao foi recebida pela Quita+ e esta aguardando a vinculacao do boleto. Cobranças com status `boleto_linked`, `concluded`, `cancelled` ou `failed` nao exibem o botao.
 
-**Para:**
-```typescript
-{(selectedCharge.payment_method === 'cartao_pix' || 
-  selectedCharge.payment_method === 'pix' ||  // Incluir PIX avulso
-  (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
-```
+## Resultado Esperado
 
-### Correcao 3: Ajustar PaymentMethodsSummary para PIX avulso sem splits
+- As 6 cobranças listadas acima passarao a exibir o campo de "Vincular Boleto Manualmente" nos detalhes.
+- Cobranças ja vinculadas (`boleto_linked`) ou canceladas continuam sem o botao.
 
-**Arquivo:** `src/pages/ChargeHistory.tsx`
-**Local:** Linhas 341-344 (condicao de retorno null)
-
-**De:**
-```typescript
-// Se nao ha splits e nao e pagamento combinado
-if (splits.length === 0 && charge.payment_method !== 'cartao_pix') {
-  return null;
-}
-```
-
-**Para:**
-```typescript
-// Se nao ha splits e nao e pagamento combinado nem PIX avulso
-if (splits.length === 0 && charge.payment_method !== 'cartao_pix' && charge.payment_method !== 'pix') {
-  return null;
-}
-```
-
-### Correcao 4: Calcular valores PIX a partir do charge quando nao ha splits
-
-**Arquivo:** `src/pages/ChargeHistory.tsx`
-**Local:** Linhas 285-291 (calculo do pixBase quando nao ha split)
-
-**De:**
-```typescript
-} else {
-  // Sem split: calcular a partir do charge
-  pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
-  pixFee = Math.round(pixBase * PIX_FEE_RATE);
-  pixTotal = pixBase + pixFee;
-  pixFeePercent = '5.0';
-}
-```
-
-**Para:**
-```typescript
-} else {
-  // Sem split: calcular a partir do charge
-  // Para PIX avulso: amount JA inclui taxa, reverter
-  if (charge.payment_method === 'pix' && charge.fee_amount) {
-    pixTotal = charge.amount;  // Valor com taxa
-    pixBase = charge.amount - charge.fee_amount;  // Valor original
-    pixFee = charge.fee_amount;
-    pixFeePercent = charge.fee_percentage?.toFixed(1) || '5.0';
-  } else {
-    pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
-    pixFee = Math.round(pixBase * PIX_FEE_RATE);
-    pixTotal = pixBase + pixFee;
-    pixFeePercent = '5.0';
-  }
-}
-```
-
----
-
-## Secao Tecnica
-
-### Arquivos a Modificar
-
-| Arquivo | Linhas | Alteracao |
-|---------|--------|-----------|
-| `src/pages/ChargeHistory.tsx` | 1725 | Exibir valor original (sem taxa) para PIX avulso |
-| `src/pages/ChargeHistory.tsx` | 1859 | Incluir `payment_method === 'pix'` na condicao de exibicao |
-| `src/pages/ChargeHistory.tsx` | 341-344 | Permitir renderizacao do PaymentMethodsSummary para PIX avulso |
-| `src/pages/ChargeHistory.tsx` | 285-291 | Usar `fee_amount` do charge para calculo preciso |
-
-### Dados Disponiveis na Tabela charges
-
-Para PIX avulso, os campos relevantes sao:
-- `amount`: valor COM taxa (ex: 10500)
-- `fee_amount`: valor da taxa (ex: 500)
-- `fee_percentage`: percentual da taxa (ex: 5.00)
-- `metadata.original_amount`: valor ORIGINAL (ex: 10000)
-
-### Resultado Esperado
-
-Apos a correcao, ao visualizar uma cobranca PIX avulsa de R$ 100,00:
-
-**Header:**
-- Card "VALOR": R$ 100,00 (valor original)
-
-**Modal de Metodos de Pagamento:**
-- Valor original: R$ 100,00
-- Taxa PIX (5%): + R$ 5,00
-- Valor: R$ 105,00
-
-### Impacto
-
-- Corrige NOVAS e EXISTENTES cobrancas PIX avulso
-- Usa dados ja salvos (`fee_amount`, `fee_percentage`)
-- Nao altera fluxo de cadastro
-- Nao altera integracao com APIs
