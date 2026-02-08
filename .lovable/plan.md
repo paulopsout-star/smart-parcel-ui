@@ -1,57 +1,64 @@
 
 
-# Correcao: Regra do Botao "Vincular Boleto Manualmente"
+# Alteracao de Status Visual do Cartao em Pagamentos Combinados
 
-## Problema
+## Objetivo
 
-O botao "Vincular Boleto Manualmente" so aparece quando a charge possui `pre_payment_key`, mas a regra correta e: **o botao deve aparecer quando o split de cartao esta com status "Received" (statusCode 1 da API Quita+)**, que internamente e mapeado como `analyzing`.
+Alterar **apenas a exibicao** do status do split de cartao de credito no historico de cobrancas para pagamentos combinados (`cartao_pix`). Nenhuma regra de negocio, fluxo ou integracao sera modificada.
 
-## Dados do Banco (confirmacao)
+## O que muda
 
-Existem 6 cobranças combinadas com splits de cartao no status `analyzing` que deveriam exibir o botao:
-- LEONARDO PEREIRA BARBOZA
-- Manoel De Santana Gomes
-- Paulo Pereira Souto
-- SANDRA REGINA SILVA BEZERRA
-- Dewson Oliveira Candial
-- ANA CRISTINA DE PAIVA LIMA
+No card de "Cartao de Credito" dentro dos detalhes da cobranca (ChargeHistory), quando o split de cartao estiver com status `analyzing` (pre-pagamento recebido pela Quita+):
 
-Nenhuma delas exibe o botao atualmente porque a condicao verifica apenas `pre_payment_key` na charge, sem checar o status real do split.
+**Antes:**
+- Badge: "Pendente" (amarelo) -- para todos os usuarios
 
-## Correcao Proposta
+**Depois:**
+- Badge: "Pre pagamento autorizado" (azul/info) -- para todos os usuarios
+- Mensagem adicional (somente admin): "Aguardando o vinculo do boleto"
 
-### Arquivo: `src/pages/ChargeHistory.tsx` (Linhas 1993-1996)
+## Detalhes Tecnicos
 
-**De:**
-```typescript
-{isAdmin && 
- selectedCharge.payment_method === 'cartao_pix' &&
- selectedCharge.pre_payment_key &&
- !selectedCharge.boleto_admin_linha_digitavel && (
+### Arquivo: `src/pages/ChargeHistory.tsx`
+
+**Trecho afetado:** Funcao `getSplitBadgeConfig()` (linhas 1889-1912)
+
+Atualmente, o fallback final (linha 1911) retorna `"Pendente"` para qualquer status que nao seja `failed`, `cancelled`, `concluded` ou terminal. O status `analyzing` cai nesse fallback.
+
+**Alteracao proposta:**
+
+Antes do return final "Pendente" (linha 1911), adicionar uma verificacao:
+
+```text
+// Se o split de cartao esta em 'analyzing' (pre-pagamento autorizado)
+if (split.method === 'credit_card' && split.status === 'analyzing') {
+  return { variant: 'info' as const, label: 'Pre pagamento autorizado' };
+}
 ```
 
-**Para:**
-```typescript
-{isAdmin && 
- selectedCharge.payment_method === 'cartao_pix' &&
- selectedCharge.pre_payment_key &&
- !selectedCharge.boleto_admin_linha_digitavel &&
- selectedCharge.splits?.some(s => s.method === 'credit_card' && s.status === 'analyzing') && (
+Alem disso, logo abaixo do Badge no card do split (linha 1924), adicionar uma mensagem condicional visivel **apenas para admins**:
+
+```text
+{isAdmin && split.method === 'credit_card' && split.status === 'analyzing' && (
+  <span className="text-xs text-blue-600 dark:text-blue-400">
+    Aguardando o vinculo do boleto
+  </span>
+)}
 ```
 
-## Logica da Nova Regra
+### Resumo das mudancas
 
-A condicao agora verifica 4 criterios:
-1. Usuario e admin
-2. Metodo de pagamento e `cartao_pix` (combinado)
-3. Existe `pre_payment_key` (cartao foi pre-autorizado)
-4. Boleto admin ainda nao foi vinculado
-5. **NOVA:** Existe um split de cartao com status `analyzing` (Received na API Quita+)
+| Local | Mudanca |
+|---|---|
+| `getSplitBadgeConfig()` (L1908-1911) | Novo caso para `analyzing` retornando badge "Pre pagamento autorizado" com variante `info` (azul) |
+| Card do split (L1922-1924) | Mensagem "Aguardando o vinculo do boleto" visivel apenas para admin |
 
-Isso garante que o botao so aparece quando a pre-autorizacao foi recebida pela Quita+ e esta aguardando a vinculacao do boleto. Cobranças com status `boleto_linked`, `concluded`, `cancelled` ou `failed` nao exibem o botao.
+### O que NAO muda
 
-## Resultado Esperado
-
-- As 6 cobranças listadas acima passarao a exibir o campo de "Vincular Boleto Manualmente" nos detalhes.
-- Cobranças ja vinculadas (`boleto_linked`) ou canceladas continuam sem o botao.
+- Nenhuma regra de negocio
+- Nenhum fluxo de pagamento
+- Nenhuma edge function
+- Nenhum mapeamento de status no banco
+- Nenhuma outra tela ou componente
+- O status `analyzing` continua sendo usado internamente da mesma forma
 
