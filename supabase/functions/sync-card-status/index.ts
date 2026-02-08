@@ -9,16 +9,16 @@ const corsHeaders = {
 // IMPORTANTE: Mapeamento correto segundo documentação API Quita+
 // StatusCode 2 (Canceled) = cancelled, StatusCode 3 (BarcodeAssigned) = boleto_linked
 const statusCodeMap: Record<number, string> = {
-  1: 'pending',           // Received - pré-pagamento criado
-  2: 'cancelled',         // Canceled - prazo expirou ou valor diferente
-  3: 'boleto_linked',     // BarcodeAssigned - boleto vinculado ao pagamento ✅ CORRIGIDO
-  4: 'processing',        // Settled - analisado pelo robô
-  5: 'failed',            // PaymentDenied - risco não aprovou
-  6: 'processing',        // PaymentValidated - risco aprovou (aguardando pagamento)
-  7: 'processing',        // AwaitingPayerValidation - aguardando PIN
-  8: 'processing',        // ValidatingPayment - risco analisando
-  9: 'concluded',         // Paid - boleto foi pago
-  50: 'failed',           // MissingRegistryBankslipCNPJ - CNPJ não cadastrado
+  1: 'analyzing',              // Received - pré-pagamento criado
+  2: 'cancelled',              // Canceled - prazo expirou ou valor diferente
+  3: 'boleto_linked',          // BarcodeAssigned - boleto vinculado ao pagamento
+  4: 'validating',             // Settled - analisado pelo robô
+  5: 'failed',                 // PaymentDenied - risco não aprovou
+  6: 'approved',               // PaymentValidated - risco aprovou
+  7: 'awaiting_validation',    // AwaitingPayerValidation - aguardando PIN
+  8: 'validating',             // ValidatingPayment - risco analisando
+  9: 'concluded',              // Paid - boleto foi pago
+  50: 'failed',                // MissingRegistryBankslipCNPJ - CNPJ não cadastrado
 };
 
 // Rate limiting: esperar 1 segundo entre chamadas à API
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
       .from('payment_splits')
       .select('id, charge_id, payment_link_id, pre_payment_key, status, authorization_code, method')
       .eq('method', 'credit_card')
-      .in('status', ['pending', 'processing'])
+      .in('status', ['pending', 'processing', 'analyzing', 'boleto_linked', 'approved', 'awaiting_validation', 'validating'])
       .not('pre_payment_key', 'is', null)
       .gte('created_at', cutoffDate)
       .limit(30);
