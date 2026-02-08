@@ -1908,6 +1908,12 @@ export default function ChargeHistory() {
                                 // Status normal do split
                                 if (split.status === 'failed') return { variant: 'destructive' as const, label: '✗ Recusado' };
                                 if (split.status === 'cancelled') return { variant: 'secondary' as const, label: '✗ Cancelado' };
+                                
+                                // Se o split de cartão está em 'analyzing' (pré-pagamento autorizado)
+                                if (split.method === 'credit_card' && split.status === 'analyzing') {
+                                  return { variant: 'info' as const, label: 'Pré pagamento autorizado' };
+                                }
+                                
                                 return { variant: 'warning' as const, label: '⏳ Pendente' };
                               };
                               
@@ -1919,9 +1925,16 @@ export default function ChargeHistory() {
                                   <span className="font-medium text-sm">
                                     {split.method === 'pix' ? '💳 PIX' : '💳 Cartão de Crédito'}
                                   </span>
-                                  <Badge variant={badgeConfig.variant}>
-                                    {badgeConfig.label}
-                                  </Badge>
+                                  <div className="flex flex-col items-end gap-0.5">
+                                    <Badge variant={badgeConfig.variant}>
+                                      {badgeConfig.label}
+                                    </Badge>
+                                    {isAdmin && split.method === 'credit_card' && split.status === 'analyzing' && (
+                                      <span className="text-xs text-blue-600 dark:text-blue-400">
+                                        Aguardando o vínculo do boleto
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               <div className="grid grid-cols-2 gap-2 text-xs text-ds-text-muted">
                                 <div>
