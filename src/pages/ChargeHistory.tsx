@@ -1931,7 +1931,9 @@ export default function ChargeHistory() {
                                     </Badge>
                                     {isAdmin && split.method === 'credit_card' && split.status === 'analyzing' && (
                                       <span className="text-xs text-blue-600 dark:text-blue-400">
-                                        Aguardando o vínculo do boleto
+                                        {selectedCharge?.has_boleto_link
+                                          ? 'Boleto vinculado - Aguardando conclusão'
+                                          : 'Aguardando o vínculo do boleto'}
                                       </span>
                                     )}
                                   </div>
