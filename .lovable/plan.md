@@ -1,89 +1,97 @@
 
+# Filtrar Dashboard para exibir apenas dados do mes atual
 
-# Correcao Manual de 13 Registros Historicos com Status Incorreto
+## Problema atual
 
-## Diagnostico
+A pagina Dashboard (`src/pages/Dashboard.tsx`) busca **todas** as cobrancas e splits do banco de dados sem nenhum filtro de data. Isso faz com que os cards de resumo mostrem totais acumulados de todos os tempos em vez de apenas o mes corrente.
 
-Foram identificados **13 charges** do tipo `cartao_pix` cujo status atual nao reflete o estado real dos seus splits. Todos sao resultado do bug anterior onde `sync-payment-status` sobrescrevia o status sem considerar os splits.
+## Solucao
 
-## Registros a Corrigir
+Alterar a funcao `loadDashboardStats` em `src/pages/Dashboard.tsx` para filtrar os dados pelo mes atual.
 
-### Grupo 1: Ambos splits `concluded` -- charge deve ser `completed` (1 registro)
+### Alteracoes no arquivo `src/pages/Dashboard.tsx`
 
-| ID | Cliente | Status Atual | PIX | Cartao | Correcao |
-|---|---|---|---|---|---|
-| `0a47656b` | Iago Augusto Campos Rodrigues | `cancelled` | concluded | concluded | `completed` |
+**1. Calcular inicio e fim do mes atual**
 
-Este e o caso mais grave: pagamento **totalmente concluido** mas marcado como cancelado.
+No inicio da funcao `loadDashboardStats`, criar as datas de referencia:
 
-### Grupo 2: PIX `concluded` + Cartao intermediario -- charge deve ser `processing` (12 registros)
-
-| ID | Cliente | Status Atual | PIX | Cartao | Correcao |
-|---|---|---|---|---|---|
-| `8f36fc38` | LUCIANO ASSUNCAO DA SILVA | `pending` | concluded | pending | `processing` |
-| `f4aac4a6` | Thais Lopes Cunha | `pending` | concluded | pending | `processing` |
-| `569abbe6` | Paulo Pereira Souto | `pending` | concluded | pending | `processing` |
-| `526a9f56` | Paulo Pereira Souto | `pending` | concluded | pending | `processing` |
-| `d442b2f3` | BEATRIZ PEREIRA DE SOUSA | `cancelled` | concluded | analyzing | `processing` |
-| `ff27c6d4` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
-| `c97f60c5` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
-| `cda831b6` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
-| `7df32f8d` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
-| `18339005` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
-| `aad2b927` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
-| `d67eb497` | Anderlan Lahuri Dias Aires Karaja Silva | `cancelled` | concluded | boleto_linked | `processing` |
-
-## Detalhes Tecnicos
-
-### Operacao 1: Corrigir Iago Augusto (cancelled para completed)
-
-Atualizar o charge para `completed` e preencher `completed_at` com a data do ultimo split concluido (2026-01-08 01:05:34).
-
-```sql
-UPDATE charges
-SET status = 'completed',
-    completed_at = '2026-01-08T01:05:34.394+00',
-    updated_at = now()
-WHERE id = '0a47656b-1764-44d0-bda8-678822ab18ea';
+```text
+const now = new Date();
+const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
 ```
 
-### Operacao 2: Corrigir 12 charges para processing
+**2. Adicionar filtro de data na query de charges**
 
-```sql
-UPDATE charges
-SET status = 'processing',
-    updated_at = now()
-WHERE id IN (
-  '8f36fc38-4dc8-428c-a5fa-2c18fb9ff831',
-  'f4aac4a6-3be2-4ab5-8397-781e7d1693f2',
-  '569abbe6-0b14-4f48-8489-f645c81768d9',
-  '526a9f56-0dc2-475e-a355-ff7b828eedc7',
-  'd442b2f3-0d74-41db-885a-74d786e12de9',
-  'ff27c6d4-5b53-4045-ad66-0145138ff73f',
-  'c97f60c5-fed4-490e-9f84-3945a9b6ce4d',
-  'cda831b6-acde-4f4e-9e93-10b899ecbb8a',
-  '7df32f8d-0a51-431b-9801-77ad0013f715',
-  '18339005-7197-4f40-af28-3c4e84df4e89',
-  'aad2b927-6bae-4f16-80e9-cc307b13f154',
-  'd67eb497-03ac-412f-a1bb-54d7f1e323cc'
-);
+A query atual:
+```text
+supabase.from('charges').select('*')
 ```
 
-### Operacao 3: Validacao pos-correcao
+Passa a ser:
+```text
+supabase.from('charges').select('*')
+  .gte('created_at', startOfMonth)
+  .lte('created_at', endOfMonth)
+```
 
-Reexecutar a query de verificacao para confirmar que nenhum charge `cartao_pix` tem status divergente dos seus splits.
+**3. Adicionar filtro de data na query de payment_splits**
+
+A query atual:
+```text
+supabase.from('payment_splits')
+  .select('charge_id, method, status, amount_cents')
+  .not('charge_id', 'is', null)
+```
+
+Passa a ser:
+```text
+supabase.from('payment_splits')
+  .select('charge_id, method, status, amount_cents')
+  .not('charge_id', 'is', null)
+  .gte('created_at', startOfMonth)
+  .lte('created_at', endOfMonth)
+```
+
+**4. Atualizar descricoes dos cards para refletir o periodo**
+
+Adicionar uma variavel com o nome do mes atual para exibir nas descricoes:
+
+```text
+const monthName = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+// Exemplo: "fevereiro de 2026"
+```
+
+Atualizar as descricoes dos StatCards:
+
+| Card | Descricao atual | Nova descricao |
+|---|---|---|
+| Total de Cobrancas | "Todas as cobrancas" | "Cobrancas em {mes}" |
+| Cobrancas Ativas | "Pendentes ou processando" | "Pendentes ou processando em {mes}" |
+| Concluidas | "Pagas com sucesso" | "Pagas com sucesso em {mes}" |
+| Valor Total | "Soma de todas as cobrancas" | "Valor total em {mes}" |
+| Pagamentos Concluidos | "Total de valores pagos com sucesso" | "Valores pagos em {mes}" |
+| Combinados Pendentes | "PIX ou cartao pago, outro pendente" | "Combinados pendentes em {mes}" |
+
+**5. Atualizar titulo da secao Resumo**
+
+O titulo "Resumo" passa a incluir o mes:
+
+```text
+Resumo - Fevereiro 2026
+```
 
 ### O que NAO muda
 
-- Nenhum arquivo de codigo (frontend ou edge functions)
-- Nenhum schema de banco de dados
-- Os splits permanecem inalterados (ja estao corretos)
-- Apenas o campo `status` (e `completed_at` no caso do Iago) das charges e atualizado
+- Nenhum outro arquivo (edge functions, componentes, etc.)
+- A logica de calculo das estatisticas permanece identica
+- O layout e design dos cards nao muda
+- As Acoes Rapidas nao sao afetadas
+- O StatCard component nao e alterado
 
 ### Resultado esperado
 
-- Iago Augusto aparecera como **Concluido** (verde) no historico, refletindo que ambos PIX e Cartao foram pagos
-- Os 12 charges com PIX pago aparecerao como **Em Processamento** (amarelo), indicando corretamente que falta a conclusao do cartao
-- Nenhum charge `cartao_pix` tera mais discrepancia entre seu status e o estado real dos splits
-- O sync-payment-status corrigido anteriormente impedira que este problema se repita
-
+- Os 6 cards de resumo exibem dados exclusivamente do mes corrente
+- As descricoes indicam claramente o periodo exibido
+- O titulo da secao confirma o mes de referencia
+- A cada virada de mes, os dados se resetam automaticamente
