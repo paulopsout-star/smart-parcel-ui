@@ -1,98 +1,89 @@
 
 
-# Correcao do sync-payment-status: Eliminar conflito com sync-card-status
+# Correcao Manual de 13 Registros Historicos com Status Incorreto
 
-## Problema
+## Diagnostico
 
-O `sync-payment-status` opera sobre a tabela `charges` e atualiza o status diretamente com base na API Quita+. Para pagamentos combinados (`cartao_pix`), isso cria um conflito destrutivo:
+Foram identificados **13 charges** do tipo `cartao_pix` cujo status atual nao reflete o estado real dos seus splits. Todos sao resultado do bug anterior onde `sync-payment-status` sobrescrevia o status sem considerar os splits.
 
-1. `sync-card-status` atualiza o split de cartao, depois **deriva** o status do charge a partir de TODOS os splits (PIX + Cartao)
-2. `sync-payment-status` roda logo depois e **sobrescreve** o charge status diretamente com o statusCode da API, ignorando completamente o split de PIX
+## Registros a Corrigir
 
-Caso comprovado: KELMEY teve o charge corretamente derivado como `processing` (PIX pago + Cartao em analise), mas o sync-payment-status sobrescreveu para `pre_authorized` 26 segundos depois.
+### Grupo 1: Ambos splits `concluded` -- charge deve ser `completed` (1 registro)
 
-Alem disso, o statusCode 50 mapeia para `cnpj_nao_cadastrado`, que nao existe no enum `charge_status`.
+| ID | Cliente | Status Atual | PIX | Cartao | Correcao |
+|---|---|---|---|---|---|
+| `0a47656b` | Iago Augusto Campos Rodrigues | `cancelled` | concluded | concluded | `completed` |
 
-## Solucao
+Este e o caso mais grave: pagamento **totalmente concluido** mas marcado como cancelado.
 
-Duas alteracoes no arquivo `supabase/functions/sync-payment-status/index.ts`:
+### Grupo 2: PIX `concluded` + Cartao intermediario -- charge deve ser `processing` (12 registros)
 
-### Alteracao 1: Corrigir statusCode 50
+| ID | Cliente | Status Atual | PIX | Cartao | Correcao |
+|---|---|---|---|---|---|
+| `8f36fc38` | LUCIANO ASSUNCAO DA SILVA | `pending` | concluded | pending | `processing` |
+| `f4aac4a6` | Thais Lopes Cunha | `pending` | concluded | pending | `processing` |
+| `569abbe6` | Paulo Pereira Souto | `pending` | concluded | pending | `processing` |
+| `526a9f56` | Paulo Pereira Souto | `pending` | concluded | pending | `processing` |
+| `d442b2f3` | BEATRIZ PEREIRA DE SOUSA | `cancelled` | concluded | analyzing | `processing` |
+| `ff27c6d4` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
+| `c97f60c5` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
+| `cda831b6` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
+| `7df32f8d` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
+| `18339005` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
+| `aad2b927` | Paulo Pereira Souto | `cancelled` | concluded | analyzing | `processing` |
+| `d67eb497` | Anderlan Lahuri Dias Aires Karaja Silva | `cancelled` | concluded | boleto_linked | `processing` |
 
-```text
-Antes:  50: "cnpj_nao_cadastrado"
-Depois: 50: "failed"
+## Detalhes Tecnicos
+
+### Operacao 1: Corrigir Iago Augusto (cancelled para completed)
+
+Atualizar o charge para `completed` e preencher `completed_at` com a data do ultimo split concluido (2026-01-08 01:05:34).
+
+```sql
+UPDATE charges
+SET status = 'completed',
+    completed_at = '2026-01-08T01:05:34.394+00',
+    updated_at = now()
+WHERE id = '0a47656b-1764-44d0-bda8-678822ab18ea';
 ```
 
-### Alteracao 2: Para pagamentos combinados, derivar status do charge a partir dos splits
+### Operacao 2: Corrigir 12 charges para processing
 
-Apos obter o status da API e atualizar o charge, verificar se o charge tem `payment_method = 'cartao_pix'`. Se sim, em vez de usar o mapeamento direto:
-
-1. Atualizar o split de cartao correspondente (na tabela `payment_splits`) com o status equivalente da API (usando mapeamento de splits: 1=analyzing, 9=concluded, etc.)
-2. Buscar TODOS os splits do charge
-3. Derivar o status do charge a partir dos splits (mesma logica do sync-card-status):
-   - Todos concluded -> `completed`
-   - Algum cancelled e nenhum concluded -> `cancelled`
-   - Algum failed e nenhum concluded -> `failed`
-   - Algum concluded (parcial) -> `processing`
-   - Algum analyzing -> `processing`
-   - Senao -> `pending`
-
-Para charges com `payment_method != 'cartao_pix'` (cartao puro), manter o comportamento atual de mapeamento direto.
-
-### Mapeamento adicional necessario (split-level)
-
-Adicionar um segundo mapeamento para atualizar splits quando o charge e combinado:
-
-```text
-const splitStatusCodeMap: Record<number, string> = {
-  1: "analyzing",
-  2: "cancelled",
-  3: "boleto_linked",
-  4: "validating",
-  5: "failed",
-  6: "approved",
-  7: "awaiting_validation",
-  8: "validating",
-  9: "concluded",
-  50: "failed",
-};
+```sql
+UPDATE charges
+SET status = 'processing',
+    updated_at = now()
+WHERE id IN (
+  '8f36fc38-4dc8-428c-a5fa-2c18fb9ff831',
+  'f4aac4a6-3be2-4ab5-8397-781e7d1693f2',
+  '569abbe6-0b14-4f48-8489-f645c81768d9',
+  '526a9f56-0dc2-475e-a355-ff7b828eedc7',
+  'd442b2f3-0d74-41db-885a-74d786e12de9',
+  'ff27c6d4-5b53-4045-ad66-0145138ff73f',
+  'c97f60c5-fed4-490e-9f84-3945a9b6ce4d',
+  'cda831b6-acde-4f4e-9e93-10b899ecbb8a',
+  '7df32f8d-0a51-431b-9801-77ad0013f715',
+  '18339005-7197-4f40-af28-3c4e84df4e89',
+  'aad2b927-6bae-4f16-80e9-cc307b13f154',
+  'd67eb497-03ac-412f-a1bb-54d7f1e323cc'
+);
 ```
 
-### Fluxo atualizado para charges combinados
+### Operacao 3: Validacao pos-correcao
 
-```text
-1. Obter statusCode da API
-2. Se payment_method == 'cartao_pix':
-   a. Buscar split de credit_card com o pre_payment_key do charge
-   b. Atualizar split com splitStatusCodeMap[statusCode]
-   c. Buscar TODOS os splits do charge
-   d. Derivar charge status a partir dos splits
-   e. Atualizar charge com status derivado
-3. Se payment_method != 'cartao_pix':
-   a. Atualizar charge com statusCodeMap[statusCode] (comportamento atual)
-```
-
-### Resumo das alteracoes
-
-| Local no arquivo | O que muda |
-|---|---|
-| Linha 20 (statusCodeMap) | `50: "cnpj_nao_cadastrado"` -> `50: "failed"` |
-| Apos statusCodeMap (nova constante) | Adicionar `splitStatusCodeMap` para mapeamento de splits |
-| Selects de charges (linhas 59-66) | Incluir `payment_method` no select |
-| Bloco de atualizacao (linhas 207-265) | Para `cartao_pix`: atualizar split + derivar charge status. Para demais: manter logica atual |
+Reexecutar a query de verificacao para confirmar que nenhum charge `cartao_pix` tem status divergente dos seus splits.
 
 ### O que NAO muda
 
-- Nenhum outro edge function (sync-card-status, conclude-card-payment, etc.)
-- Nenhum componente de frontend
-- A logica de charge_executions permanece (registrando a origem como sync-payment-status)
-- A correcao de charges inconsistentes (pre_authorized sem pre_payment_key) permanece
-- O rate limiting e filtros de data permanecem
+- Nenhum arquivo de codigo (frontend ou edge functions)
+- Nenhum schema de banco de dados
+- Os splits permanecem inalterados (ja estao corretos)
+- Apenas o campo `status` (e `completed_at` no caso do Iago) das charges e atualizado
 
 ### Resultado esperado
 
-- Para pagamentos combinados: os dois sync functions passam a trabalhar de forma cooperativa em vez de conflitante
-- O status do charge sempre reflete o estado real de TODOS os splits
-- StatusCode 50 nao causa mais erro de constraint no banco
+- Iago Augusto aparecera como **Concluido** (verde) no historico, refletindo que ambos PIX e Cartao foram pagos
+- Os 12 charges com PIX pago aparecerao como **Em Processamento** (amarelo), indicando corretamente que falta a conclusao do cartao
+- Nenhum charge `cartao_pix` tera mais discrepancia entre seu status e o estado real dos splits
+- O sync-payment-status corrigido anteriormente impedira que este problema se repita
 
