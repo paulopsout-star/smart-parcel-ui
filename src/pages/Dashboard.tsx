@@ -75,25 +75,37 @@ export default function Dashboard() {
     }
   };
 
+  const now = new Date();
+  const monthName = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const monthTitle = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+    .replace(/^./, (c) => c.toUpperCase());
+
   const loadDashboardStats = async () => {
     if (!profile?.company_id) return;
     
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+
     try {
-      // Buscar cobranças
+      // Buscar cobranças do mês atual
       const { data: charges, error: chargesError } = await supabase
         .from('charges')
-        .select('*');
+        .select('*')
+        .gte('created_at', startOfMonth)
+        .lte('created_at', endOfMonth);
 
       if (chargesError) {
         console.error('Error loading charges:', chargesError);
         return;
       }
 
-      // Buscar payment_splits para identificar combinados pendentes
+      // Buscar payment_splits do mês atual
       const { data: splits, error: splitsError } = await supabase
         .from('payment_splits')
         .select('charge_id, method, status, amount_cents')
-        .not('charge_id', 'is', null);
+        .not('charge_id', 'is', null)
+        .gte('created_at', startOfMonth)
+        .lte('created_at', endOfMonth);
 
       if (splitsError) {
         console.error('Error loading splits:', splitsError);
@@ -220,47 +232,47 @@ export default function Dashboard() {
         {/* Stats Grid */}
         <section>
           <h2 className="text-sm font-medium text-ds-text-muted uppercase tracking-wide mb-4">
-            Resumo
+            Resumo — {monthTitle}
           </h2>
           <div className="grid grid-cols-6 gap-3 lg:gap-4">
             <StatCard
               icon={CreditCard}
               label="Total de Cobranças"
               value={stats.totalCharges}
-              description="Todas as cobranças"
+              description={`Cobranças em ${monthName}`}
             />
             <StatCard
               icon={TrendingUp}
               label="Cobranças Ativas"
               value={stats.activeCharges}
-              description="Pendentes ou processando"
+              description={`Pendentes ou processando em ${monthName}`}
               delta={stats.activeCharges > 0 ? { value: 12, type: 'increase' } : undefined}
             />
             <StatCard
               icon={CheckCircle}
               label="Concluídas"
               value={stats.completedCharges}
-              description="Pagas com sucesso"
+              description={`Pagas com sucesso em ${monthName}`}
             />
             <StatCard
               icon={TrendingUp}
               label="Valor Total"
               value={formatCurrency(stats.totalAmount)}
-              description="Soma de todas as cobranças"
+              description={`Valor total em ${monthName}`}
               variant="highlight"
             />
             <StatCard
               icon={Wallet}
               label="Pagamentos Concluídos"
               value={formatCurrency(stats.completedAmount)}
-              description="Total de valores pagos com sucesso"
+              description={`Valores pagos em ${monthName}`}
               variant="highlight"
             />
             <StatCard
               icon={CreditCard}
               label="Combinados Pendentes"
               value={stats.combinedPendingCount}
-              description="PIX ou cartão pago, outro pendente"
+              description={`Combinados pendentes em ${monthName}`}
             />
           </div>
         </section>
