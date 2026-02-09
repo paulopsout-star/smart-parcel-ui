@@ -76,7 +76,6 @@ export default function Dashboard() {
   };
 
   const now = new Date();
-  const monthName = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   const monthTitle = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     .replace(/^./, (c) => c.toUpperCase());
 
@@ -239,40 +238,40 @@ export default function Dashboard() {
               icon={CreditCard}
               label="Total de Cobranças"
               value={stats.totalCharges}
-              description={`Cobranças em ${monthName}`}
+              description="Todas as cobranças do período"
             />
             <StatCard
               icon={TrendingUp}
               label="Cobranças Ativas"
               value={stats.activeCharges}
-              description={`Pendentes ou processando em ${monthName}`}
+              description="Pendentes ou processando"
               delta={stats.activeCharges > 0 ? { value: 12, type: 'increase' } : undefined}
             />
             <StatCard
               icon={CheckCircle}
               label="Concluídas"
               value={stats.completedCharges}
-              description={`Pagas com sucesso em ${monthName}`}
+              description="Pagas com sucesso"
             />
             <StatCard
               icon={TrendingUp}
               label="Valor Total"
               value={formatCurrency(stats.totalAmount)}
-              description={`Valor total em ${monthName}`}
+              description="Soma de todas as cobranças"
               variant="highlight"
             />
             <StatCard
               icon={Wallet}
               label="Pagamentos Concluídos"
               value={formatCurrency(stats.completedAmount)}
-              description={`Valores pagos em ${monthName}`}
+              description="Total de valores pagos"
               variant="highlight"
             />
             <StatCard
               icon={CreditCard}
               label="Combinados Pendentes"
               value={stats.combinedPendingCount}
-              description={`Combinados pendentes em ${monthName}`}
+              description="PIX ou cartão pago, outro pendente"
             />
           </div>
         </section>
