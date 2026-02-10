@@ -1,32 +1,38 @@
 
 
-# Remover descricao de mes/ano dos StatCards
+# Adicionar colunas "Valor Original PIX" e "Valor Original Cartao" no relatorio exportado
 
 ## O que muda
 
-Remover o texto de descricao (description) que inclui mes e ano de cada um dos 6 StatCards na secao "Resumo". O titulo da secao "Resumo — Fevereiro De 2026" ja informa o periodo, tornando a repeticao desnecessaria nos cards individuais.
+Na funcao `generateExportData` do `ChargeHistory.tsx`, serao adicionadas 2 novas colunas no relatorio CSV/Excel:
 
-## Alteracao
+- **Valor Original PIX (R$)** -- o `amount_cents` do split PIX (valor base sem taxa)
+- **Valor Original Cartao (R$)** -- o `amount_cents` do split de cartao (valor base sem juros)
 
-**Arquivo:** `src/pages/Dashboard.tsx`
+## Detalhes tecnicos
 
-Remover a prop `description` dos 6 StatCards, ou substituir por descricoes curtas e genericas sem referencia ao mes:
+**Arquivo:** `src/pages/ChargeHistory.tsx`
 
-| Card | Descricao atual | Nova descricao |
-|---|---|---|
-| Total de Cobrancas | "Cobrancas em fevereiro de 2026" | "Todas as cobrancas do periodo" |
-| Cobrancas Ativas | "Pendentes ou processando em fevereiro de 2026" | "Pendentes ou processando" |
-| Concluidas | "Pagas com sucesso em fevereiro de 2026" | "Pagas com sucesso" |
-| Valor Total | "Valor total em fevereiro de 2026" | "Soma de todas as cobrancas" |
-| Pagamentos Concluidos | "Valores pagos em fevereiro de 2026" | "Total de valores pagos" |
-| Combinados Pendentes | "Combinados pendentes em fevereiro de 2026" | "PIX ou cartao pago, outro pendente" |
+**Alteracao na funcao `generateExportData` (linhas 1422-1443):**
 
-Tambem remover as variaveis `monthName` e `monthTitle` que nao serao mais usadas nas descricoes (manter `monthTitle` apenas para o titulo da secao "Resumo").
+1. Adicionar 2 headers apos "Valor (R$)":
+   - `'Valor Original PIX (R$)'`
+   - `'Valor Original Cartão (R$)'`
+
+2. Para cada charge, extrair os splits:
+   - `pixSplit = charge.splits?.find(s => s.method === 'pix')`
+   - `cardSplit = charge.splits?.find(s => s.method === 'credit_card')`
+
+3. Gerar os valores formatados:
+   - PIX: `pixSplit ? (pixSplit.amount_cents / 100).toFixed(2).replace('.', ',') : '-'`
+   - Cartao: `cardSplit ? (cardSplit.amount_cents / 100).toFixed(2).replace('.', ',') : '-'`
+
+4. Inserir as 2 colunas na posicao correta no array de cada row (apos o campo "Valor").
 
 ## O que NAO muda
 
-- O titulo da secao "Resumo — Fevereiro De 2026" permanece (ja indica o periodo)
-- Os filtros de data nas queries continuam funcionando (apenas mes atual)
-- Layout, design e logica dos cards permanecem identicos
-- Nenhum outro arquivo e alterado
+- Nenhuma tela/UI e alterada (apenas o conteudo do arquivo exportado)
+- As demais colunas permanecem identicas
+- A logica de filtros e a funcao de download nao sao alteradas
+- Os dados dos splits ja estao carregados no componente (via query existente)
 
