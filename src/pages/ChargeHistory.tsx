@@ -1422,22 +1422,30 @@ export default function ChargeHistory() {
   const generateExportData = () => {
     const headers = [
       'ID', 'Data Criação', 'Pagador', 'Email', 'Telefone', 'CPF/CNPJ',
-      'Valor (R$)', 'Descrição', 'Método Pagamento', 'Status', 'Empresa'
+      'Valor (R$)', 'Valor Original PIX (R$)', 'Valor Original Cartão (R$)',
+      'Descrição', 'Método Pagamento', 'Status', 'Empresa'
     ];
 
-    const rows = filteredCharges.map(charge => [
-      charge.id,
-      format(new Date(charge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }),
-      charge.payer_name,
-      charge.payer_email,
-      formatPhone(charge.payer_phone),
-      charge.payer_document,
-      (charge.amount / 100).toFixed(2).replace('.', ','),
-      charge.description || '',
-      getPaymentMethodLabel(charge.payment_method),
-      getStatusLabel(charge.status),
-      charge.company?.name || ''
-    ]);
+    const rows = filteredCharges.map(charge => {
+      const pixSplit = charge.splits?.find((s: any) => s.method === 'pix');
+      const cardSplit = charge.splits?.find((s: any) => s.method === 'credit_card');
+
+      return [
+        charge.id,
+        format(new Date(charge.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }),
+        charge.payer_name,
+        charge.payer_email,
+        formatPhone(charge.payer_phone),
+        charge.payer_document,
+        (charge.amount / 100).toFixed(2).replace('.', ','),
+        pixSplit ? (pixSplit.amount_cents / 100).toFixed(2).replace('.', ',') : '-',
+        cardSplit ? (cardSplit.amount_cents / 100).toFixed(2).replace('.', ',') : '-',
+        charge.description || '',
+        getPaymentMethodLabel(charge.payment_method),
+        getStatusLabel(charge.status),
+        charge.company?.name || ''
+      ];
+    });
 
     return { headers, rows };
   };
