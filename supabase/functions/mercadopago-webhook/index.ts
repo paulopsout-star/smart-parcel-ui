@@ -2,108 +2,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Validate Mercado Pago webhook signature (HMAC-SHA256)
-async function validateSignature(
-  req: Request,
-  secret: string
-): Promise<boolean> {
-  const xSignature = req.headers.get("x-signature");
-  const xRequestId = req.headers.get("x-request-id");
-
-  if (!xSignature || !xRequestId) {
-    console.log("Missing x-signature or x-request-id headers");
-    return false;
-  }
-
-  // Extract data.id from query params
-  const url = new URL(req.url);
-  const dataId = url.searchParams.get("data.id");
-
-  // Parse x-signature (format: ts=...,v1=...)
-  const parts = xSignature.split(",");
-  let ts = "";
-  let hash = "";
-
-  for (const part of parts) {
-    const [key, value] = part.split("=");
-    if (key?.trim() === "ts") ts = value?.trim() || "";
-    if (key?.trim() === "v1") hash = value?.trim() || "";
-  }
-
-  if (!ts || !hash) {
-    console.log("Could not extract ts or hash from x-signature");
-    return false;
-  }
-
-  // Build manifest per MP documentation
-  const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
-
-  // Calculate HMAC-SHA256
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(manifest));
-
-  // Convert to hex
-  const calculatedHash = Array.from(new Uint8Array(signature))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-
-  const isValid = calculatedHash === hash;
-
-  if (!isValid) {
-    console.log("Signature mismatch:", {
-      expected: hash,
-      calculated: calculatedHash,
-      manifest,
-    });
-  }
-
-  return isValid;
-}
-
-interface WebhookPayload {
-  action: string;
-  api_version: string;
-  data: {
-    id: string;
-  };
-  date_created: string;
-  id: string;
-  live_mode: boolean;
-  type: string;
-  user_id: string;
-}
-
-interface MercadoPagoPayment {
-  id: number;
-  status: string;
-  status_detail: string;
-  date_approved: string | null;
-  external_reference: string | null;
-  transaction_amount: number;
-}
-
-// Map Mercado Pago status to internal status
-function mapMpStatusToInternal(mpStatus: string): string {
-  switch (mpStatus) {
-    case "approved":
+// Map AbacatePay status to internal status
+function mapAbacateStatusToInternal(status: string): string {
+  switch (status) {
+    case "PAID":
       return "concluded";
-    case "pending":
-    case "in_process":
+    case "PENDING":
       return "pending";
-    case "rejected":
-    case "cancelled":
-    case "refunded":
-    case "charged_back":
+    case "EXPIRED":
+    case "CANCELLED":
+    case "REFUNDED":
       return "failed";
     default:
       return "pending";
@@ -118,79 +29,41 @@ Deno.serve(async (req) => {
   // Accept GET requests for webhook validation
   if (req.method === "GET") {
     console.log("Webhook validation request received");
-    return new Response("OK", { 
-      status: 200, 
-      headers: { ...corsHeaders, "Content-Type": "text/plain" } 
+    return new Response("OK", {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "text/plain" },
     });
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const mercadoPagoToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
-    const webhookSecret = Deno.env.get("MERCADOPAGO_WEBHOOK_SECRET");
+    const abacateApiKey = Deno.env.get("ABACATEPAY_API_KEY");
 
-    if (!mercadoPagoToken) {
-      console.error("MERCADOPAGO_ACCESS_TOKEN not configured");
+    if (!abacateApiKey) {
+      console.error("ABACATEPAY_API_KEY not configured");
       return new Response("Configuration error", { status: 500, headers: corsHeaders });
-    }
-
-    // Validate webhook signature if secret is configured
-    if (webhookSecret) {
-      const isValid = await validateSignature(req, webhookSecret);
-      if (!isValid) {
-        console.error("Invalid webhook signature - rejecting request");
-        return new Response("Invalid signature", { status: 401, headers: corsHeaders });
-      }
-      console.log("Webhook signature validated successfully");
-    } else {
-      console.warn("MERCADOPAGO_WEBHOOK_SECRET not configured - skipping signature validation");
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Parse webhook payload
-    const payload: WebhookPayload = await req.json();
-    console.log("Webhook received:", JSON.stringify(payload, null, 2));
+    // Parse webhook payload from AbacatePay
+    const payload = await req.json();
+    console.log("AbacatePay webhook received:", JSON.stringify(payload, null, 2));
 
-    // Only process payment notifications
-    if (payload.type !== "payment") {
-      console.log("Ignoring non-payment notification:", payload.type);
+    // Extract payment ID from the webhook payload
+    // AbacatePay webhook format may vary - handle flexibly
+    const paymentId = payload?.data?.id || payload?.id || payload?.pixQrCodeId;
+    if (!paymentId) {
+      console.log("No payment ID in webhook payload, ignoring");
       return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
-    const paymentId = payload.data?.id;
-    if (!paymentId) {
-      console.error("No payment ID in webhook");
-      return new Response("Missing payment ID", { status: 400, headers: corsHeaders });
-    }
-
-    // Fetch payment details from Mercado Pago
-    const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-      headers: {
-        "Authorization": `Bearer ${mercadoPagoToken}`,
-      },
-    });
-
-    if (!mpResponse.ok) {
-      const errorData = await mpResponse.json();
-      console.error("Error fetching payment:", errorData);
-      return new Response("Error fetching payment", { status: 500, headers: corsHeaders });
-    }
-
-    const mpPayment: MercadoPagoPayment = await mpResponse.json();
-    console.log("Payment details:", JSON.stringify({
-      id: mpPayment.id,
-      status: mpPayment.status,
-      status_detail: mpPayment.status_detail,
-      amount: mpPayment.transaction_amount,
-    }, null, 2));
-
-    // Find the payment_split by mp_payment_id
+    // Find the payment_split by mp_payment_id (legacy column, stores AbacatePay ID)
     const { data: splits, error: findError } = await supabase
       .from("payment_splits")
       .select("id, charge_id, payment_link_id, status, method")
-      .eq("mp_payment_id", String(mpPayment.id))
+      .eq("mp_payment_id", String(paymentId))
       .limit(1);
 
     if (findError) {
@@ -199,26 +72,40 @@ Deno.serve(async (req) => {
     }
 
     if (!splits || splits.length === 0) {
-      console.log("No payment_split found for mp_payment_id:", mpPayment.id);
-      // Not an error - could be a payment we didn't create
+      console.log("No payment_split found for payment_id:", paymentId);
       return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
     const split = splits[0];
     console.log("Found split:", split.id, "current status:", split.status);
 
-    const internalStatus = mapMpStatusToInternal(mpPayment.status);
-    const isApproved = mpPayment.status === "approved";
+    // Get current status from AbacatePay API for accuracy
+    const abacateResponse = await fetch(
+      `https://api.abacatepay.com/v1/pixQrCode/check?id=${paymentId}`,
+      {
+        headers: { "Authorization": `Bearer ${abacateApiKey}` },
+      }
+    );
+
+    if (!abacateResponse.ok) {
+      const errText = await abacateResponse.text();
+      console.error("Error checking AbacatePay status:", errText);
+      return new Response("Error checking status", { status: 500, headers: corsHeaders });
+    }
+
+    const abacateData = await abacateResponse.json();
+    const abacateStatus = abacateData?.data?.status || "PENDING";
+    const internalStatus = mapAbacateStatusToInternal(abacateStatus);
+    const isPaid = abacateStatus === "PAID";
 
     // Update the payment_split
     const updateData: Record<string, unknown> = {
-      mp_status: mpPayment.status,
-      mp_status_detail: mpPayment.status_detail,
+      mp_status: abacateStatus,
       status: internalStatus,
     };
 
-    if (isApproved) {
-      updateData.pix_paid_at = mpPayment.date_approved || new Date().toISOString();
+    if (isPaid) {
+      updateData.pix_paid_at = new Date().toISOString();
       updateData.processed_at = new Date().toISOString();
     }
 
@@ -234,8 +121,8 @@ Deno.serve(async (req) => {
 
     console.log("Updated split", split.id, "to status:", internalStatus);
 
-    // If PIX is approved, check if all splits are done
-    if (isApproved && split.charge_id) {
+    // If paid, check if all splits are done
+    if (isPaid && split.charge_id) {
       const { data: allSplits } = await supabase
         .from("payment_splits")
         .select("id, status, method")
@@ -247,7 +134,7 @@ Deno.serve(async (req) => {
           console.log("All splits concluded, updating charge status");
           await supabase
             .from("charges")
-            .update({ 
+            .update({
               status: "completed",
               completed_at: new Date().toISOString(),
             })
