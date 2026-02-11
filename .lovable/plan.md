@@ -1,20 +1,14 @@
 
 
-# Corrigir QR Code PIX quebrado (prefixo base64 duplicado)
+# Corrigir QR Code PIX quebrado em PaymentPix.tsx
 
 ## Problema
 
-O AbacatePay retorna `brCodeBase64` com o prefixo completo `data:image/png;base64,...`, mas o frontend adiciona esse mesmo prefixo novamente ao montar o `src` da imagem, resultando em uma string invalida que o navegador nao consegue renderizar.
+A mesma correção aplicada em `CheckoutPix.tsx` precisa ser aplicada em `src/pages/PaymentPix.tsx` (linha 415), que ainda usa o formato antigo sem verificar o prefixo `data:`.
 
-## Solucao
+## O que sera feito
 
-Corrigir o frontend para detectar se o base64 ja contem o prefixo `data:` e usalo diretamente, sem duplicar.
-
-## Detalhes tecnicos
-
-### Arquivo: `src/pages/CheckoutPix.tsx`
-
-Alterar a linha do `<img>` (aproximadamente linha 236) de:
+Alterar a linha 415 de `PaymentPix.tsx` de:
 
 ```tsx
 src={`data:image/png;base64,${pixData.qr_code_base64}`}
@@ -28,12 +22,15 @@ src={pixData.qr_code_base64.startsWith('data:')
   : `data:image/png;base64,${pixData.qr_code_base64}`}
 ```
 
-Isso garante compatibilidade tanto com o formato atual do AbacatePay (que inclui o prefixo) quanto com eventuais respostas futuras sem prefixo.
+## Detalhes tecnicos
+
+- **Arquivo:** `src/pages/PaymentPix.tsx`, linha 415
+- **Causa:** O AbacatePay retorna `brCodeBase64` já com o prefixo `data:image/png;base64,`, mas o frontend adiciona novamente, gerando uma string inválida
+- **Correção identica** a que já foi aplicada em `CheckoutPix.tsx`
 
 ## O que NAO muda
 
-- Nenhuma Edge Function e alterada
-- Nenhum layout/design e modificado
-- Nenhuma integracao e alterada
-- Apenas 1 linha de codigo no frontend e ajustada
+- Nenhuma Edge Function alterada
+- Nenhum layout/design modificado
+- Apenas 1 linha de codigo ajustada
 
