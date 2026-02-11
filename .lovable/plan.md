@@ -1,25 +1,39 @@
 
 
-# Atualizar chave de integracao AbacatePay
+# Corrigir QR Code PIX quebrado (prefixo base64 duplicado)
 
-## O que sera feito
+## Problema
 
-Atualizar o valor do secret `ABACATEPAY_API_KEY` no Supabase com a nova chave fornecida por voce.
+O AbacatePay retorna `brCodeBase64` com o prefixo completo `data:image/png;base64,...`, mas o frontend adiciona esse mesmo prefixo novamente ao montar o `src` da imagem, resultando em uma string invalida que o navegador nao consegue renderizar.
+
+## Solucao
+
+Corrigir o frontend para detectar se o base64 ja contem o prefixo `data:` e usalo diretamente, sem duplicar.
 
 ## Detalhes tecnicos
 
-- **Secret a atualizar:** `ABACATEPAY_API_KEY`
-- **Metodo:** Usar a ferramenta de secrets do Lovable para solicitar o novo valor
-- **Impacto:** Todas as 4 Edge Functions que usam essa chave (`mercadopago-pix-create`, `mercadopago-pix-status`, `sync-mercadopago-status`, `mercadopago-webhook`) passarao a usar a nova chave automaticamente
-- **Downtime:** Nenhum. A troca e instantanea
+### Arquivo: `src/pages/CheckoutPix.tsx`
+
+Alterar a linha do `<img>` (aproximadamente linha 236) de:
+
+```tsx
+src={`data:image/png;base64,${pixData.qr_code_base64}`}
+```
+
+Para:
+
+```tsx
+src={pixData.qr_code_base64.startsWith('data:') 
+  ? pixData.qr_code_base64 
+  : `data:image/png;base64,${pixData.qr_code_base64}`}
+```
+
+Isso garante compatibilidade tanto com o formato atual do AbacatePay (que inclui o prefixo) quanto com eventuais respostas futuras sem prefixo.
 
 ## O que NAO muda
 
-- Nenhum codigo e alterado
-- Nenhuma Edge Function precisa ser reimplantada
-- Nenhuma tela/UI e modificada
-
-## Apos a atualizacao
-
-- Recomendado testar a criacao de um PIX para validar que a nova chave esta funcionando
+- Nenhuma Edge Function e alterada
+- Nenhum layout/design e modificado
+- Nenhuma integracao e alterada
+- Apenas 1 linha de codigo no frontend e ajustada
 
