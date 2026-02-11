@@ -2,28 +2,19 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-interface MercadoPagoPayment {
-  id: number;
-  status: string;
-  status_detail: string;
-  date_approved: string | null;
-}
-
-// Map Mercado Pago status to internal status
-function mapMpStatusToInternal(mpStatus: string): string {
-  switch (mpStatus) {
-    case "approved":
+// Map AbacatePay status to internal status
+function mapAbacateStatusToInternal(status: string): string {
+  switch (status) {
+    case "PAID":
       return "concluded";
-    case "pending":
-    case "in_process":
+    case "PENDING":
       return "pending";
-    case "rejected":
-    case "cancelled":
-    case "refunded":
-    case "charged_back":
+    case "EXPIRED":
+    case "CANCELLED":
+    case "REFUNDED":
       return "failed";
     default:
       return "pending";
@@ -38,11 +29,11 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const mercadoPagoToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
+    const abacateApiKey = Deno.env.get("ABACATEPAY_API_KEY");
 
-    if (!mercadoPagoToken) {
+    if (!abacateApiKey) {
       return new Response(
-        JSON.stringify({ error: "Mercado Pago não configurado" }),
+        JSON.stringify({ error: "AbacatePay não configurado" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -75,43 +66,44 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`Syncing ${pendingSplits.length} pending PIX payments`);
+    console.log(`Syncing ${pendingSplits.length} pending PIX payments via AbacatePay`);
 
     let synced = 0;
     let approved = 0;
     let failed = 0;
     const errors: string[] = [];
-    const updatedCharges = new Set<string>(); // Track updated charge IDs
+    const updatedCharges = new Set<string>();
 
     for (const split of pendingSplits) {
       try {
-        const mpResponse = await fetch(
-          `https://api.mercadopago.com/v1/payments/${split.mp_payment_id}`,
+        const abacateResponse = await fetch(
+          `https://api.abacatepay.com/v1/pixQrCode/check?id=${split.mp_payment_id}`,
           {
             headers: {
-              "Authorization": `Bearer ${mercadoPagoToken}`,
+              "Authorization": `Bearer ${abacateApiKey}`,
             },
           }
         );
 
-        if (!mpResponse.ok) {
-          console.error(`Error fetching payment ${split.mp_payment_id}:`, mpResponse.status);
-          errors.push(`Split ${split.id}: API error ${mpResponse.status}`);
+        if (!abacateResponse.ok) {
+          console.error(`Error fetching payment ${split.mp_payment_id}:`, abacateResponse.status);
+          errors.push(`Split ${split.id}: API error ${abacateResponse.status}`);
+          await abacateResponse.text(); // consume body
           continue;
         }
 
-        const mpPayment: MercadoPagoPayment = await mpResponse.json();
-        const internalStatus = mapMpStatusToInternal(mpPayment.status);
-        const isApproved = mpPayment.status === "approved";
+        const abacateData = await abacateResponse.json();
+        const abacateStatus = abacateData?.data?.status || "PENDING";
+        const internalStatus = mapAbacateStatusToInternal(abacateStatus);
+        const isPaid = abacateStatus === "PAID";
 
         const updateData: Record<string, unknown> = {
-          mp_status: mpPayment.status,
-          mp_status_detail: mpPayment.status_detail,
+          mp_status: abacateStatus,
           status: internalStatus,
         };
 
-        if (isApproved) {
-          updateData.pix_paid_at = mpPayment.date_approved || new Date().toISOString();
+        if (isPaid) {
+          updateData.pix_paid_at = new Date().toISOString();
           updateData.processed_at = new Date().toISOString();
           approved++;
         } else if (internalStatus === "failed") {
@@ -124,9 +116,8 @@ Deno.serve(async (req) => {
           .eq("id", split.id);
 
         synced++;
-        console.log(`Synced split ${split.id}: ${mpPayment.status}`);
+        console.log(`Synced split ${split.id}: ${abacateStatus}`);
 
-        // Track updated charge ID for frontend merge
         if (split.charge_id) {
           updatedCharges.add(split.charge_id);
         }
@@ -142,7 +133,7 @@ Deno.serve(async (req) => {
     // Update charge statuses for approved payments
     if (approved > 0) {
       const chargeIds = [...new Set(pendingSplits.filter(s => s.charge_id).map(s => s.charge_id))];
-      
+
       for (const chargeId of chargeIds) {
         const { data: allSplits } = await supabase
           .from("payment_splits")
@@ -152,7 +143,7 @@ Deno.serve(async (req) => {
         if (allSplits && allSplits.every(s => s.status === "concluded")) {
           await supabase
             .from("charges")
-            .update({ 
+            .update({
               status: "completed",
               completed_at: new Date().toISOString(),
             })
@@ -171,18 +162,17 @@ Deno.serve(async (req) => {
 
     if (orphanedCharges && orphanedCharges.length > 0) {
       console.log(`Checking ${orphanedCharges.length} potentially orphaned PIX charges`);
-      
+
       for (const charge of orphanedCharges) {
         const { data: chargeSplits } = await supabase
           .from("payment_splits")
           .select("id, status")
           .eq("charge_id", charge.id);
 
-        // Only fix if there are splits and ALL are concluded
         if (chargeSplits && chargeSplits.length > 0 && chargeSplits.every(s => s.status === "concluded")) {
           await supabase
             .from("charges")
-            .update({ 
+            .update({
               status: "completed",
               completed_at: new Date().toISOString(),
             })
@@ -199,7 +189,7 @@ Deno.serve(async (req) => {
         approved,
         failed,
         errors: errors.length > 0 ? errors : undefined,
-        updatedChargeIds: Array.from(updatedCharges), // Return updated charge IDs for frontend merge
+        updatedChargeIds: Array.from(updatedCharges),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
