@@ -412,7 +412,9 @@ export default function PaymentPix() {
         <div className="flex justify-center">
           <div className="bg-white p-4 rounded-2xl shadow-sm border">
             <img
-              src={`data:image/png;base64,${pixData.qr_code_base64}`}
+              src={pixData.qr_code_base64.startsWith('data:') 
+                ? pixData.qr_code_base64 
+                : `data:image/png;base64,${pixData.qr_code_base64}`}
               alt="QR Code PIX"
               className="w-56 h-56 sm:w-64 sm:h-64"
             />
