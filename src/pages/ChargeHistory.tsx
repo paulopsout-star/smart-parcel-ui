@@ -284,11 +284,11 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     pixFeePercent = pixBase > 0 ? ((pixFee / pixBase) * 100).toFixed(1) : '5.0';
   } else {
     // Sem split: calcular a partir do charge
-    // Para PIX avulso: amount JÁ inclui taxa, reverter usando fee_amount salvo
+    // Para PIX avulso: amount é o valor base (original da dívida), fee_amount é a taxa
     if (charge.payment_method === 'pix' && charge.fee_amount) {
-      pixTotal = charge.amount;  // Valor com taxa
-      pixBase = charge.amount - charge.fee_amount;  // Valor original
+      pixBase = charge.amount;  // Valor original (sem taxa)
       pixFee = charge.fee_amount;
+      pixTotal = charge.amount + charge.fee_amount;  // Valor com taxa
       pixFeePercent = charge.fee_percentage?.toFixed(1) || '5.0';
     } else {
       pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
@@ -575,10 +575,7 @@ const ChargeListRow = ({ charge, onViewDetails, isAdmin }: ChargeListRowProps) =
       
       {/* Valor */}
       <TableCell className="text-right font-semibold text-ds-text-strong">
-        {formatCurrency(
-          charge.payment_method === 'pix' && charge.fee_amount
-            ? charge.amount - charge.fee_amount
-            : charge.amount
+        {formatCurrency(charge.amount
         )}
       </TableCell>
       
