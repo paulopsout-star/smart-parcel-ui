@@ -28,9 +28,16 @@ export function useCompanySettings() {
       
       if (refreshError || !refreshData.session) {
         console.error('[useCompanySettings] ❌ Falha ao renovar sessão:', refreshError);
-        // Limpar cache e forçar re-login
-        queryClient.invalidateQueries({ queryKey: ['company-settings'] });
-        throw new Error('Sessão expirada - faça login novamente');
+        // Limpar tokens locais para evitar sessão zumbi
+        const keys = Object.keys(localStorage);
+        keys.forEach(key => {
+          if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+            localStorage.removeItem(key);
+          }
+        });
+        // Redirecionar para login
+        window.location.href = '/login';
+        throw new Error('Sessão expirada');
       }
       
       console.log('[useCompanySettings] ✅ Sessão renovada com sucesso');

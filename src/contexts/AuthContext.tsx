@@ -166,6 +166,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
+
+    // Mesmo com erro (ex: 403 session not found), limpar estado local
+    if (error) {
+      console.warn('[AuthContext] signOut com erro, limpando estado local:', error.message);
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          localStorage.removeItem(key);
+        }
+      });
+    }
+
+    // Sempre limpar estado React
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+
     return { error };
   };
 
