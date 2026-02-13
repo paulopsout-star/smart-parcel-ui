@@ -1,45 +1,45 @@
 
-# Correção da Taxa Dupla no PIX - Causa Real
+
+# Correção do Valor Exibido no Painel (Histórico de Cobranças)
 
 ## Problema
 
-A correção anterior atualizou `charges.amount` para 1.450.000, porém **não atualizou** `payment_links.amount`, que continua em **1.525.000** (R$ 15.250).
+A coluna "Valor" no histórico de cobranças exibe `charge.amount` diretamente. Para cobranças PIX, esse campo já contém o valor COM a taxa de 5% incluída. O correto é exibir o valor **original da dívida** (sem taxa).
 
-O fluxo atual:
-1. `CheckoutPix.tsx` chama `public-payment-link?id=994ce854...`
-2. A Edge Function encontra o registro em `payment_links` (que tem prioridade) e retorna `amount_cents: 1.525.000`
-3. `CheckoutPix.tsx` recebe `charge.amount = 1.525.000` e aplica +5%: `1.525.000 x 1.05 = 1.601.250` (~R$ 16.012)
-4. Resultado: valor exibido errado (R$ 15.986,25 com arredondamentos)
+Exemplo atual:
+- Exibido: R$ 15.225,00 (valor com taxa)
+- Correto: R$ 14.500,00 (valor original)
+
+## Causa
+
+Linha 578 de `ChargeHistory.tsx` usa `formatCurrency(charge.amount)` sem descontar `fee_amount` para cobranças PIX.
+
+A mesma correção já existe na view de detalhes (linhas 1742-1745), mas não foi aplicada na listagem.
 
 ## Solução
 
-### Passo 1: Corrigir `payment_links.amount` no banco
-Atualizar o registro `994ce854-dcb2-4766-b839-929802e2e116` em `payment_links`:
-- `amount`: de 1.525.000 para **1.450.000** (R$ 14.500 - valor base)
+Alterar a exibição da coluna "Valor" (linha 578) para usar a mesma lógica da view de detalhes:
 
-Isso sera feito via Edge Function temporaria (criar, executar, deletar).
+- Se `payment_method === 'pix'` e `fee_amount` existe: exibir `charge.amount - charge.fee_amount`
+- Caso contrário: exibir `charge.amount` normalmente
 
-### Passo 2: Limpar splits antigos (se existirem)
-Deletar quaisquer splits com valores incorretos que possam ter sido criados durante testes anteriores, para que o sistema crie um novo com os valores corretos.
+## Detalhes Técnicos
 
-### Resultado esperado
-- `public-payment-link` retorna `amount_cents: 1.450.000`
-- `CheckoutPix.tsx` aplica 5%: `1.450.000 x 1.05 = 1.522.500`
-- Valor exibido: **R$ 15.225,00** (correto)
+### Arquivo alterado:
+- `src/pages/ChargeHistory.tsx` (linha 578)
 
-## Detalhes Tecnicos
-
-### Dados atuais no banco:
-- `charges.amount` = 1.450.000 (ja corrigido)
-- `payment_links.amount` = 1.525.000 (ERRADO - precisa corrigir)
-
-### Calculo correto:
+### Lógica:
 ```text
-payment_links.amount = 1,450,000 (R$ 14.500,00)
-PIX fee 5% = 72,500 (R$ 725,00)
-Total = 1,522,500 (R$ 15.225,00)
+Antes:  formatCurrency(charge.amount)
+Depois: formatCurrency(
+          charge.payment_method === 'pix' && charge.fee_amount
+            ? charge.amount - charge.fee_amount
+            : charge.amount
+        )
 ```
 
-### Arquivos:
-1. `supabase/functions/fix-payment-link-amount/index.ts` - Edge Function temporaria (criar e deletar)
-2. Nenhuma alteracao em codigo frontend (a logica do CheckoutPix.tsx ja esta correta, o problema era apenas o dado no banco)
+### O que NÃO muda:
+- Nenhuma alteração em Edge Functions ou integrações
+- Nenhuma alteração de layout/UI (apenas o valor numérico exibido)
+- A view de detalhes (Sheet) já exibe corretamente e permanece igual
+
