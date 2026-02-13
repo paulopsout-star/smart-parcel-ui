@@ -29,6 +29,8 @@ interface ChargeData {
   description: string | null;
   checkout_link_id: string | null;
   status: string;
+  fee_amount: number | null;
+  payment_method: string | null;
 }
 
 const PIX_FEE_PERCENT = 0.05; // 5% fee
@@ -99,6 +101,8 @@ function CheckoutPixContent() {
           description: checkoutData.description || checkoutData.title || null,
           checkout_link_id: id,
           status: 'pending',
+          fee_amount: checkoutData.fee_amount ?? null,
+          payment_method: checkoutData.payment_method ?? null,
         };
 
         // Check if already completed
@@ -157,8 +161,12 @@ function CheckoutPixContent() {
 
     setCreating(true);
     try {
-      // Calculate amount with 5% fee
-      const baseCents = charge.amount;
+      // Para cobranças antigas com fee_amount pré-inflado, usar amount - fee_amount como base
+      // Para cobranças novas (sem fee_amount), usar amount diretamente
+      const hasPreInflatedAmount = charge.fee_amount && charge.fee_amount > 0;
+      const baseCents = hasPreInflatedAmount
+        ? charge.amount - charge.fee_amount
+        : charge.amount;
       const feeCents = Math.round(baseCents * PIX_FEE_PERCENT);
       const totalCents = baseCents + feeCents;
 
