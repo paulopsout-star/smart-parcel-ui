@@ -575,7 +575,11 @@ const ChargeListRow = ({ charge, onViewDetails, isAdmin }: ChargeListRowProps) =
       
       {/* Valor */}
       <TableCell className="text-right font-semibold text-ds-text-strong">
-        {formatCurrency(charge.amount)}
+        {formatCurrency(
+          charge.payment_method === 'pix' && charge.fee_amount
+            ? charge.amount - charge.fee_amount
+            : charge.amount
+        )}
       </TableCell>
       
       {/* Tipo de Pagamento */}
