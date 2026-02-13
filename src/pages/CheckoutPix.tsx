@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, CheckCircle2, Clock, Copy, QrCode, RefreshCw } from 'lucide-react';
+// supabase client still needed for functions.invoke in createPixPayment and status check
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -52,7 +53,7 @@ function CheckoutPixContent() {
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(false);
 
-  // Fetch charge data
+  // Fetch charge data via public edge function (no RLS issues)
   useEffect(() => {
     async function fetchData() {
       if (!id) {
@@ -62,19 +63,43 @@ function CheckoutPixContent() {
       }
 
       try {
-        // Try to find charge by checkout_link_id or id
-        const { data: chargeData, error: chargeError } = await supabase
-          .from('charges')
-          .select('*')
-          .or(`checkout_link_id.eq.${id},id.eq.${id}`)
-          .single();
+        // Fetch charge data via public-payment-link edge function (GET, no auth needed for public route)
+        const supabaseUrl = 'https://gsbbrkbeyxsqqjqhptrn.supabase.co';
+        const anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdzYmJya2JleXhzcXFqcWhwdHJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyODk5NTQsImV4cCI6MjA3Mzg2NTk1NH0.I5l0SDwsAN_rsSdoZiE9GAndkn3tkqX44O5ypu0cu7w';
+        
+        const response = await fetch(`${supabaseUrl}/functions/v1/public-payment-link?id=${encodeURIComponent(id)}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${anonKey}`,
+            'apikey': anonKey,
+          },
+        });
 
-        if (chargeError || !chargeData) {
-          console.error('Charge not found:', chargeError);
+        if (!response.ok) {
+          console.error('public-payment-link error:', response.status);
           setError('Cobrança não encontrada');
           setLoading(false);
           return;
         }
+
+        const checkoutData = await response.json();
+
+        if (!checkoutData || checkoutData.error) {
+          setError('Cobrança não encontrada');
+          setLoading(false);
+          return;
+        }
+
+        const chargeData: ChargeData = {
+          id: checkoutData.charge_id || checkoutData.id,
+          amount: checkoutData.amount_cents,
+          payer_name: checkoutData.payer_name || 'Cliente',
+          payer_email: checkoutData.payer_email || '',
+          payer_document: checkoutData.payer_document || '',
+          description: checkoutData.description || checkoutData.title || null,
+          checkout_link_id: id,
+          status: 'pending',
+        };
 
         // Check if already completed
         if (chargeData.status === 'completed') {
@@ -82,19 +107,22 @@ function CheckoutPixContent() {
           return;
         }
 
-        setCharge(chargeData as ChargeData);
+        setCharge(chargeData);
 
-        // Check if there's an existing PIX split
-        const { data: existingSplit } = await supabase
+        // Check if there's an existing PIX split (payment_splits has public read RLS)
+        const { data: existingSplits } = await supabase
           .from('payment_splits')
           .select('*')
           .eq('charge_id', chargeData.id)
           .eq('method', 'pix')
-          .single();
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        const existingSplit = existingSplits?.[0];
 
         if (existingSplit) {
           setSplitId(existingSplit.id);
-          
+
           if (existingSplit.status === 'concluded' || existingSplit.pix_paid_at) {
             navigate(`/thank-you?chargeId=${chargeData.id}&method=pix&amount=${chargeData.amount}`, { replace: true });
             return;
@@ -104,7 +132,7 @@ function CheckoutPixContent() {
             setPixData({
               payment_id: existingSplit.mp_payment_id,
               qr_code: existingSplit.mp_qr_code,
-              qr_code_base64: existingSplit.mp_qr_code_base64,
+              qr_code_base64: existingSplit.mp_qr_code_base64 || '',
               ticket_url: existingSplit.mp_ticket_url || undefined,
               status: existingSplit.mp_status || 'pending',
               amount_cents: existingSplit.display_amount_cents || existingSplit.amount_cents,
