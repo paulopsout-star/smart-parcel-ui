@@ -1,74 +1,69 @@
 
 
-# Correção Definitiva da Taxa Dupla no PIX
+# Análise e Correção da Taxa Dupla no PIX
 
-## Problema
+## Diagnóstico
 
-A taxa de 5% do PIX está sendo aplicada **duas vezes**:
+A correção implementada funciona **perfeitamente para novas cobranças**, mas **falha para cobranças antigas** que já tinham o `amount` inflado no banco.
 
-1. **Na criação** (`NewCharge.tsx`, linhas 279-283): calcula 5% e soma ao `charges.amount`
-2. **No checkout** (`CheckoutPix.tsx`, linhas 160-163): calcula 5% novamente sobre o valor já inflado
+**Evidência:**
+- Cobrança nova (LUCIANO, 2026-02-13 17:38):
+  - `charges.amount`: 55.157 (R$ 551,57 - **sem taxa**)
+  - Split `display_amount_cents`: 57.915 (R$ 579,15 - taxa aplicada uma única vez) ✅
 
-## Solução: Remover a taxa da criação, manter apenas no checkout
+- Cobrança antiga (JOAO VITOR, 2026-02-13 15:24):
+  - `charges.amount`: 1.522.500 (R$ 15.225,00 - **COM taxa**)
+  - Split `display_amount_cents`: 1.598.625 (R$ 15.986,25 - **taxa aplicada de novo**) ❌
 
-A taxa deve ser aplicada **somente no checkout** (`CheckoutPix.tsx`), pois é no momento do pagamento que o cliente precisa ver o valor final. O `charges.amount` deve armazenar sempre o **valor original da dívida**.
+**Root cause:** Cobranças criadas antes da correção têm `amount` pré-inflado. Quando o CheckoutPix calcula `amount × 1.05`, aplica a taxa sobre um valor que já contém taxa.
 
-### Alteração 1: `src/pages/NewCharge.tsx` (linhas 279-283)
+## Solução
 
-Remover o cálculo e soma da taxa para PIX. O `charges.amount` passará a gravar o valor original.
+Modificar `src/pages/CheckoutPix.tsx` para **detectar se `fee_amount` existe** e usar como base o valor original calculado (`amount - fee_amount`), em vez de usar `amount` diretamente.
 
-**Antes:**
-```text
-if (data.payment_method === 'pix') {
-  feeAmount = Math.round(amountInCents * 0.05);
-  feePercentage = 5.00;
-  amountInCents = amountInCents + feeAmount;
-}
+### Lógica Proposta
+
+```typescript
+const createPixPayment = useCallback(async () => {
+  if (!charge || pixData) return;
+
+  setCreating(true);
+  try {
+    // Para cobranças antigas com fee_amount, usar amount - fee_amount como base
+    // Para cobranças novas (sem fee_amount), usar amount diretamente
+    const hasPreInflatedAmount = charge.payment_method === 'pix' && charge.fee_amount && charge.fee_amount > 0;
+    const baseCents = hasPreInflatedAmount 
+      ? charge.amount - charge.fee_amount 
+      : charge.amount;
+    
+    const feeCents = Math.round(baseCents * PIX_FEE_PERCENT);
+    const totalCents = baseCents + feeCents;
+    
+    // Resto do código permanece igual
+    ...
 ```
 
-**Depois:**
-```text
-if (data.payment_method === 'pix') {
-  feeAmount = Math.round(amountInCents * 0.05);
-  feePercentage = 5.00;
-  // NÃO soma ao amountInCents - taxa aplicada apenas no checkout
-}
-```
-
-Isso faz com que `charges.amount` = valor original e `charges.fee_amount` = valor da taxa (para referência), sem alterar o amount.
-
-### Alteração 2: `src/pages/ChargeHistory.tsx` (linha 577-581)
-
-Reverter a correção anterior, pois agora `charges.amount` já conterá o valor original (sem taxa). A subtração de `fee_amount` não será mais necessária.
-
-**Antes (correção recente):**
-```text
-formatCurrency(
-  charge.payment_method === 'pix' && charge.fee_amount
-    ? charge.amount - charge.fee_amount
-    : charge.amount
-)
-```
-
-**Depois:**
-```text
-formatCurrency(charge.amount)
-```
-
-### Alteração 3: `src/pages/CheckoutPix.tsx` - Nenhuma alteração
-
-O código do checkout **permanece como está**, pois a lógica de aplicar 5% sobre o valor base está correta. Com `charges.amount` agora armazenando o valor original, o cálculo será:
-- Base: R$ 14.500,00 (valor original, sem taxa)
-- +5%: R$ 725,00
-- Total: R$ 15.225,00 (correto)
+### Arquivos Afetados
+- `src/pages/CheckoutPix.tsx` (linhas 160-163)
 
 ### O que NÃO muda
 - Nenhuma Edge Function alterada
+- Nenhuma alteração de banco de dados
 - Nenhuma alteração de layout/UI
-- `CheckoutPix.tsx` permanece igual
-- View de detalhes do `ChargeHistory.tsx` precisa ser verificada para consistência
+- `NewCharge.tsx` permanece igual (já corrigido)
+- `ChargeHistory.tsx` permanece igual (já corrigido)
 
-### Impacto em cobranças existentes
-- Cobranças PIX **já criadas** continuam com `amount` inflado no banco. A correção se aplica apenas a **novas cobranças**.
-- Para cobranças existentes (como JOAO VITOR), o `charges.amount` já foi corrigido manualmente para 1.450.000 anteriormente.
+### Resultado Esperado
+
+**Cobranças novas (sem fee_amount):**
+- Base: R$ 551,57 (charge.amount)
+- +5%: R$ 27,58
+- Total: R$ 579,15 ✅
+
+**Cobranças antigas (com fee_amount pré-inflado):**
+- charge.amount: R$ 15.225,00 (inflado)
+- charge.fee_amount: R$ 725,00 (taxa original)
+- Base calculada: R$ 15.225,00 - R$ 725,00 = R$ 14.500,00
+- +5%: R$ 725,00
+- Total: R$ 15.225,00 ✅
 
