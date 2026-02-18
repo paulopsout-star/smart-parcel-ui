@@ -100,42 +100,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const clearLocalStorage = () => {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('sb-'))
+      .forEach(k => localStorage.removeItem(k));
+  };
+
   useEffect(() => {
-    // Set up auth state listener
+    // ÚNICO ponto de inicialização: onAuthStateChange
+    // O evento INITIAL_SESSION valida o token com o servidor antes de disparar.
+    // Se o token for inválido, dispara SIGNED_OUT automaticamente.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          // Fetch profile after auth state change
-          setTimeout(async () => {
-            const userProfile = await fetchProfile(session.user.id);
-            setProfile(userProfile);
-            setLoading(false);
-          }, 0);
-        } else {
+        console.log('[AuthContext] event:', event, '| session:', session?.user?.id ?? 'null');
+
+        if (event === 'SIGNED_OUT' || !session) {
+          clearLocalStorage();
+          setUser(null);
+          setSession(null);
           setProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        if (
+          event === 'SIGNED_IN' ||
+          event === 'TOKEN_REFRESHED' ||
+          event === 'INITIAL_SESSION' ||
+          event === 'USER_UPDATED'
+        ) {
+          setSession(session);
+          setUser(session.user);
+          const userProfile = await fetchProfile(session.user.id);
+          setProfile(userProfile);
           setLoading(false);
         }
       }
     );
-
-    // Check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        setTimeout(async () => {
-          const userProfile = await fetchProfile(session.user.id);
-          setProfile(userProfile);
-          setLoading(false);
-        }, 0);
-      } else {
-        setLoading(false);
-      }
-    });
 
     return () => subscription.unsubscribe();
   }, []);
@@ -165,17 +166,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    // Limpar localStorage ANTES do signOut para evitar race condition
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('sb-'))
+      .forEach(k => localStorage.removeItem(k));
+
     const { error } = await supabase.auth.signOut();
 
-    // Mesmo com erro (ex: 403 session not found), limpar estado local
     if (error) {
-      console.warn('[AuthContext] signOut com erro, limpando estado local:', error.message);
-      const keys = Object.keys(localStorage);
-      keys.forEach(key => {
-        if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-          localStorage.removeItem(key);
-        }
-      });
+      console.warn('[AuthContext] signOut com erro (esperado se sessão já expirou):', error.message);
     }
 
     // Sempre limpar estado React
