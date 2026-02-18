@@ -8,10 +8,16 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Limpar qualquer sessão residual do localStorage ao carregar o SDK
+// (garante que tokens de sessões anteriores não sejam reutilizados)
+Object.keys(localStorage)
+  .filter(k => k.startsWith('sb-'))
+  .forEach(k => localStorage.removeItem(k));
+
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
-    persistSession: true,
-    autoRefreshToken: true,
+    persistSession: false,   // Sessões NUNCA são salvas no localStorage
+    autoRefreshToken: true,  // Refresh funciona enquanto a aba estiver aberta
+    detectSessionInUrl: true, // Necessário para magic links / reset de senha
   }
 });
