@@ -11,26 +11,23 @@ export function useSessionTimeout() {
   const warningRef = useRef<NodeJS.Timeout>();
 
   const forceLocalLogout = useCallback(async () => {
+    // Limpar TODOS os dados do Supabase no localStorage antes de qualquer coisa
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('sb-'))
+      .forEach(k => localStorage.removeItem(k));
+
     try {
       await signOut();
     } catch (e) {
-      console.warn('[SessionTimeout] signOut falhou, limpando local:', e);
+      console.warn('[SessionTimeout] signOut falhou:', e);
     }
-
-    // SEMPRE limpar localStorage do Supabase, independente do resultado
-    const keys = Object.keys(localStorage);
-    keys.forEach(key => {
-      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-        localStorage.removeItem(key);
-      }
-    });
 
     toast({
       title: "Sessão expirada",
       description: "Você foi desconectado por inatividade.",
     });
 
-    // Forçar navegação para login (hard redirect para evitar estado stale)
+    // Hard redirect para evitar estado stale
     window.location.href = '/login';
   }, [signOut]);
 
