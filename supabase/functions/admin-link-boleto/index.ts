@@ -173,13 +173,10 @@ serve(async (req) => {
     console.log('[admin-link-boleto] Chamando quitaplus-link-boleto...');
 
     // Chamar função de vínculo
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const linkResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-link-boleto`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({
         prePaymentKey: charge.pre_payment_key,

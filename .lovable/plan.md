@@ -1,105 +1,69 @@
 
-# Correção: Headers de Autenticação nas Chamadas Internas entre Edge Functions
 
-## Causa Raiz do Erro
+# Análise e Correção da Taxa Dupla no PIX
 
-Quando a Edge Function `quitaplus-prepayment` chama internamente `quitaplus-token` e `quitaplus-link-boleto` via `fetch`, ela **não inclui o header `apikey`**. Mesmo com `verify_jwt = false`, o gateway do Supabase exige o `apikey` para autenticar chamadas HTTP entre funções. Sem ele, o gateway retorna um erro não-2xx, que o código trata com `throw new Error(...)` e o frontend recebe como "Edge Function returned a non-2xx status code".
+## Diagnóstico
 
-Mesma falha potencial existe em `admin-link-boleto` → `quitaplus-link-boleto`.
+A correção implementada funciona **perfeitamente para novas cobranças**, mas **falha para cobranças antigas** que já tinham o `amount` inflado no banco.
 
-## Escopo Aprovado
+**Evidência:**
+- Cobrança nova (LUCIANO, 2026-02-13 17:38):
+  - `charges.amount`: 55.157 (R$ 551,57 - **sem taxa**)
+  - Split `display_amount_cents`: 57.915 (R$ 579,15 - taxa aplicada uma única vez) ✅
 
-Escopo: INTEGRAÇÃO
-Arquivos: `supabase/functions/quitaplus-prepayment/index.ts`, `supabase/functions/admin-link-boleto/index.ts`
+- Cobrança antiga (JOAO VITOR, 2026-02-13 15:24):
+  - `charges.amount`: 1.522.500 (R$ 15.225,00 - **COM taxa**)
+  - Split `display_amount_cents`: 1.598.625 (R$ 15.986,25 - **taxa aplicada de novo**) ❌
 
-## Alterações
+**Root cause:** Cobranças criadas antes da correção têm `amount` pré-inflado. Quando o CheckoutPix calcula `amount × 1.05`, aplica a taxa sobre um valor que já contém taxa.
 
-### 1. `supabase/functions/quitaplus-prepayment/index.ts`
+## Solução
 
-**Chamada para `quitaplus-token` (linhas 126-132):**
+Modificar `src/pages/CheckoutPix.tsx` para **detectar se `fee_amount` existe** e usar como base o valor original calculado (`amount - fee_amount`), em vez de usar `amount` diretamente.
 
-Antes:
+### Lógica Proposta
+
 ```typescript
-const tokenResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-token`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({}),
-});
+const createPixPayment = useCallback(async () => {
+  if (!charge || pixData) return;
+
+  setCreating(true);
+  try {
+    // Para cobranças antigas com fee_amount, usar amount - fee_amount como base
+    // Para cobranças novas (sem fee_amount), usar amount diretamente
+    const hasPreInflatedAmount = charge.payment_method === 'pix' && charge.fee_amount && charge.fee_amount > 0;
+    const baseCents = hasPreInflatedAmount 
+      ? charge.amount - charge.fee_amount 
+      : charge.amount;
+    
+    const feeCents = Math.round(baseCents * PIX_FEE_PERCENT);
+    const totalCents = baseCents + feeCents;
+    
+    // Resto do código permanece igual
+    ...
 ```
 
-Depois:
-```typescript
-const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-const tokenResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-token`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'apikey': supabaseAnonKey,
-    'Authorization': `Bearer ${supabaseAnonKey}`,
-  },
-  body: JSON.stringify({}),
-});
-```
+### Arquivos Afetados
+- `src/pages/CheckoutPix.tsx` (linhas 160-163)
 
-**Chamada para `quitaplus-link-boleto` (linhas 469-483):**
+### O que NÃO muda
+- Nenhuma Edge Function alterada
+- Nenhuma alteração de banco de dados
+- Nenhuma alteração de layout/UI
+- `NewCharge.tsx` permanece igual (já corrigido)
+- `ChargeHistory.tsx` permanece igual (já corrigido)
 
-Antes:
-```typescript
-const linkResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-link-boleto`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  ...
-```
+### Resultado Esperado
 
-Depois:
-```typescript
-const linkResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-link-boleto`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'apikey': supabaseAnonKey,
-    'Authorization': `Bearer ${supabaseAnonKey}`,
-  },
-  ...
-```
+**Cobranças novas (sem fee_amount):**
+- Base: R$ 551,57 (charge.amount)
+- +5%: R$ 27,58
+- Total: R$ 579,15 ✅
 
-### 2. `supabase/functions/admin-link-boleto/index.ts`
+**Cobranças antigas (com fee_amount pré-inflado):**
+- charge.amount: R$ 15.225,00 (inflado)
+- charge.fee_amount: R$ 725,00 (taxa original)
+- Base calculada: R$ 15.225,00 - R$ 725,00 = R$ 14.500,00
+- +5%: R$ 725,00
+- Total: R$ 15.225,00 ✅
 
-**Chamada para `quitaplus-link-boleto` (linhas 176-180):**
-
-Antes:
-```typescript
-const linkResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-link-boleto`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-```
-
-Depois:
-```typescript
-const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-const linkResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-link-boleto`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'apikey': supabaseAnonKey,
-    'Authorization': `Bearer ${supabaseAnonKey}`,
-  },
-```
-
-## Resultado Esperado
-
-- Pagamento com cartão passa a funcionar: `quitaplus-prepayment` → `quitaplus-token` retorna o accessToken corretamente
-- Vínculo de boleto automático (cartão simples) também funciona: `quitaplus-prepayment` → `quitaplus-link-boleto`
-- Vínculo manual pelo admin também funciona: `admin-link-boleto` → `quitaplus-link-boleto`
-
-## O que NÃO muda
-- Nenhuma lógica de negócio alterada
-- Nenhum schema ou dado no banco alterado
-- Nenhuma tela/UI alterada
-- `SUPABASE_ANON_KEY` já está disponível como variável de ambiente em todas as Edge Functions do Supabase automaticamente

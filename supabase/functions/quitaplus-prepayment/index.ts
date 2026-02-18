@@ -123,13 +123,10 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Obter token de autenticação
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
     const tokenResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'apikey': supabaseAnonKey,
-        'Authorization': `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({}),
     });
@@ -473,8 +470,6 @@ DETALHES TÉCNICOS:
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'apikey': supabaseAnonKey,
-                'Authorization': `Bearer ${supabaseAnonKey}`,
               },
               body: JSON.stringify({
                 prePaymentKey: prePaymentKey,
