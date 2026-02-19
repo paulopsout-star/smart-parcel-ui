@@ -944,7 +944,8 @@ export default function ChargeHistory() {
             created_at
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       if (error) throw error;
       
@@ -1188,16 +1189,6 @@ export default function ChargeHistory() {
 
     setLinkingBoleto(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast({
-          title: "Sessão expirada",
-          description: "Faça login novamente.",
-          variant: "destructive",
-        });
-        return;
-      }
-
       const { data, error } = await supabase.functions.invoke('admin-link-boleto', {
         body: {
           chargeId: charge.id,
