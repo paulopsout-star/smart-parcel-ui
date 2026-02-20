@@ -695,7 +695,7 @@ const ExecutionsDialogContent = ({
 };
 
 export default function ChargeHistory() {
-  const { isOperador, isAdmin } = useAuth();
+  const { isOperador, isAdmin, profile } = useAuth();
   const [charges, setCharges] = useState<Charge[]>([]);
   const [filteredCharges, setFilteredCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -921,7 +921,32 @@ export default function ChargeHistory() {
       const { data, error } = await supabase
         .from('charges')
         .select(`
-          *,
+          id,
+          payer_name,
+          payer_email,
+          payer_phone,
+          payer_document,
+          amount,
+          description,
+          status,
+          recurrence_type,
+          has_boleto_link,
+          created_at,
+          next_charge_date,
+          checkout_url,
+          checkout_link_id,
+          payment_method,
+          pix_amount,
+          card_amount,
+          fee_amount,
+          fee_percentage,
+          pre_payment_key,
+          boleto_linha_digitavel,
+          boleto_admin_linha_digitavel,
+          creditor_document,
+          creditor_name,
+          company_id,
+          metadata,
           company:companies(id, name),
           executions:charge_executions(
             id,
@@ -1340,7 +1365,7 @@ export default function ChargeHistory() {
     
     window.addEventListener('openCheckoutModal', handleOpenCheckoutModal as EventListener);
     return () => window.removeEventListener('openCheckoutModal', handleOpenCheckoutModal as EventListener);
-  }, [isAdmin]);
+  }, [profile?.company_id]);
 
   // Polling automático: sincronizar a cada 5 minutos se houver cobranças pendentes
   useEffect(() => {
@@ -1350,7 +1375,7 @@ export default function ChargeHistory() {
         console.log('[ChargeHistory] Sincronização inicial...');
         syncPaymentStatuses(true);
       }
-    }, 2000); // Aguardar 2s para garantir que charges foram carregados
+    }, 10000); // Aguardar 10s para a UI estabilizar antes de sincronizar
 
     // Configurar intervalo de sincronização automática
     autoSyncRef.current = setInterval(() => {

@@ -89,7 +89,7 @@ export default function Dashboard() {
       // Buscar cobranças do mês atual
       const { data: charges, error: chargesError } = await supabase
         .from('charges')
-        .select('*')
+        .select('id, status, amount, created_at')
         .gte('created_at', startOfMonth)
         .lte('created_at', endOfMonth);
 

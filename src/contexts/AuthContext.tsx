@@ -164,17 +164,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = profile?.role === 'admin' && profile?.is_active;
   const isOperador = (profile?.role === 'operador' || profile?.role === 'admin') && profile?.is_active;
 
-  // Debug logging detalhado
-  console.log('🔍 [AuthContext Render] Estado atual:', {
-    user_id: user?.id || 'null',
-    profile_id: profile?.id || 'null',
-    profile_name: profile?.full_name || 'null',
-    profile_role: profile?.role || 'null',
-    profile_is_active: profile?.is_active ?? 'null',
-    isAdmin,
-    isOperador,
-    loading
-  });
 
   const value = {
     user,
