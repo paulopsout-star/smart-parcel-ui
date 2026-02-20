@@ -1,95 +1,79 @@
 
-# Diagnóstico: Lentidão no Carregamento do Histórico de Cobranças
 
-## Causa Raiz (3 problemas encadeados)
+# Otimizacoes de Performance -- Fase 2
 
-### Problema 1 — Validação de sessão síncrona bloqueia o carregamento (principal)
+As correcoes da Fase 1 (Promise.all no fetchProfile, .limit(100), remocao do getSession()) ja foram aplicadas. Porem, os clientes continuam reclamando de lentidao. A analise revela **5 gargalos adicionais** que se acumulam.
 
-Com `persistSession: false`, o Supabase não guarda o token localmente. A cada abertura ou refresh da página, o `onAuthStateChange` precisa aguardar o evento `INITIAL_SESSION`, que faz uma chamada de rede ao servidor Supabase para validar — isso pode levar **2 a 4 segundos** dependendo da latência.
+---
 
-Durante esse período:
-- `loading = true` no `AuthContext`
-- `ProtectedRoute` exibe um spinner sem contexto
-- `ChargeHistory` ainda não iniciou o `fetchCharges()`
-- O usuário vê tela em branco ou spinner por 2-4s, depois ainda espera mais 1-2s para carregar as cobranças
+## Problemas Identificados
 
-Total: até **6 segundos** de espera antes de ver qualquer dado.
+### 1. Console.log em CADA render do AuthContext (impacto em toda a plataforma)
 
-### Problema 2 — `fetchCharges` só é chamado após `isAdmin` estar resolvido
+Na linha 172 do `AuthContext.tsx`, existe um `console.log` que executa em **todo render** de qualquer componente que use `useAuth()`. Isso significa centenas de chamadas por sessao, poluindo console e causando micro-atrasos.
 
 ```typescript
-useEffect(() => {
-  fetchCharges();    // Aguarda isAdmin estar disponível
-  fetchCompanies();
-}, [isAdmin]);       // ← Só dispara quando profile está carregado
+// Executa em CADA render de QUALQUER componente com useAuth()
+console.log('🔍 [AuthContext Render] Estado atual:', { ... });
 ```
 
-Isso cria uma cascata sequencial:
-1. Esperar `INITIAL_SESSION` do servidor (~2-4s)
-2. Esperar `fetchProfile` (2 queries ao banco: profiles + user_roles)
-3. Só então `fetchCharges` inicia
+**Correcao:** Remover esse log de debug (ou envolver em `if (import.meta.env.DEV)`).
 
-### Problema 3 — `getSession()` residual vai quebrar para admin
+### 2. Dashboard faz `select('*')` em charges sem colunas especificas
 
-Em `handleAdminLinkBoleto` (linha 1191), existe:
-```typescript
-const { data: { session } } = await supabase.auth.getSession();
-if (!session) { ... }
-```
-
-Com `persistSession: false`, `getSession()` sempre retornará `null`, impedindo que o admin vincule boletos manualmente. Este código precisa ser removido, pois a função `admin-link-boleto` já valida autenticação internamente via JWT.
-
-## Solução
-
-### 1. Adicionar um `loading` visual de tela inteira imediato (feedback instantâneo)
-
-Enquanto o `AuthContext` valida a sessão, mostrar um skeleton ou splash com a logo da plataforma em vez de um spinner sem contexto. Isso não muda a velocidade real, mas elimina a percepção de "tela travada".
-
-### 2. Paralelizar `fetchProfile` para reduzir latência
-
-Em vez de fazer 2 queries sequenciais (primeiro `profiles`, depois `user_roles`), executar ambas em paralelo com `Promise.all`. Isso reduz o tempo de `fetchProfile` de ~800ms para ~400ms.
+O Dashboard carrega `select('*')` para calcular estatisticas, trazendo TODAS as colunas de charges (incluindo metadata, boleto_linha_digitavel, etc.) quando so precisa de `id, status, amount, created_at`. Payload desnecessariamente grande.
 
 ```typescript
-// Antes (sequencial):
-const profileData = await supabase.from('profiles').select(...)
-const roleData = await supabase.from('user_roles').select(...)
+// Atual - traz tudo
+.select('*')
 
-// Depois (paralelo):
-const [profileResult, roleResult] = await Promise.all([
-  supabase.from('profiles').select(...),
-  supabase.from('user_roles').select(...),
-])
+// Otimizado - traz so o necessario
+.select('id, status, amount, created_at')
 ```
 
-### 3. Remover o `getSession()` residual no `handleAdminLinkBoleto`
+**Correcao:** Substituir `select('*')` por `select('id, status, amount, created_at')` no Dashboard.
 
-Remover as linhas 1191-1199 de `ChargeHistory.tsx` que chamam `getSession()`. A Edge Function `admin-link-boleto` já valida autenticação pelo JWT enviado automaticamente pelo cliente Supabase — essa verificação manual é redundante e vai quebrar com `persistSession: false`.
+### 3. ChargeHistory: `fetchCharges` com `select('*')` + JOINs pesados
 
-### 4. Adicionar paginação ou limite na query de cobranças
+A query principal do Historico traz `select('*', ...)` com JOINs em `companies`, `charge_executions` e `payment_splits`. O `*` carrega todas as 30+ colunas de charges quando a tabela principal so precisa de ~15 para a UI.
 
-A query `fetchCharges` busca **todas** as cobranças sem limite. Para operadores com muitos registros, isso gera payloads grandes e lentidão na renderização. Adicionar limite inicial de 100 registros mais recentes com a possibilidade de carregar mais.
+**Correcao:** Substituir `select('*', ...)` por colunas especificas.
 
-```typescript
-.order('created_at', { ascending: false })
-.limit(100)  // ← adicionar
-```
+### 4. Sincronizacao automatica dispara 2s apos carregar + a cada 5 min
+
+Apos `fetchCharges`, o segundo `useEffect` agenda uma sincronizacao em 2 segundos, invocando **3 Edge Functions em paralelo** (`sync-payment-status`, `sync-mercadopago-status`, `sync-card-status`). Isso compete com o carregamento inicial, causando lentidao percebida.
+
+**Correcao:** Aumentar o delay inicial de 2s para 10s, dando tempo para a UI estabilizar antes de iniciar sincronizacao em background.
+
+### 5. `useEffect` com dependencia `[isAdmin]` re-executa fetchCharges
+
+O useEffect principal depende de `[isAdmin]`, que muda de `undefined` para `true/false` quando o profile carrega. Isso pode causar dupla execucao do `fetchCharges` (uma com isAdmin=false, outra com isAdmin=true).
+
+**Correcao:** Substituir a dependencia `[isAdmin]` por `[profile?.company_id]` -- isso garante que fetchCharges execute uma unica vez quando o profile esta pronto.
+
+---
 
 ## Arquivos Afetados
 
-- `src/contexts/AuthContext.tsx` — paralelizar `fetchProfile` (Promise.all)
-- `src/pages/ChargeHistory.tsx` — remover `getSession()` residual, adicionar `.limit(100)` na query
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/contexts/AuthContext.tsx` | Remover console.log de render |
+| `src/pages/Dashboard.tsx` | Substituir `select('*')` por colunas minimas |
+| `src/pages/ChargeHistory.tsx` | Substituir `select('*')` por colunas especificas; mudar dep de useEffect; aumentar delay da sync inicial |
 
-## O que NÃO muda
+## O que NAO muda
 
 - Nenhuma Edge Function alterada
-- Nenhuma lógica de negócio ou filtros alterados
-- Layout e UI permanecem idênticos
-- Funcionalidade de exportação CSV/Excel inalterada
-- Sistema de sincronização automática inalterado
+- Nenhum layout/UI/componente alterado
+- Nenhum contrato de integracao modificado
+- Funcionalidades de filtro, exportacao e sincronizacao preservadas
+- RLS policies inalteradas
 
 ## Resultado Esperado
 
-- `fetchProfile` reduzido de ~800ms para ~400ms (paralelização)
-- Carregamento inicial de cobranças mais rápido (limite de 100 registros)
-- Vinculação de boleto admin funciona corretamente (remoção do `getSession()` quebrado)
-- Feedback visual imediato eliminando a percepção de "tela travada"
+- Eliminacao de logs de debug que poluem cada render (~centenas por sessao)
+- Payload do Dashboard reduzido em ~70% (de 30+ colunas para 4)
+- Payload do ChargeHistory reduzido em ~40% (colunas especificas)
+- Carregamento inicial sem competir com sync automatica (delay de 10s)
+- fetchCharges executa apenas 1 vez no mount (nao 2x)
+
