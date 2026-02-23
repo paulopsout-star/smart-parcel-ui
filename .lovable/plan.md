@@ -1,79 +1,65 @@
 
 
-# Otimizacoes de Performance -- Fase 2
+# Correcao: Botao "Criando..." travado na Nova Cobranca
 
-As correcoes da Fase 1 (Promise.all no fetchProfile, .limit(100), remocao do getSession()) ja foram aplicadas. Porem, os clientes continuam reclamando de lentidao. A analise revela **5 gargalos adicionais** que se acumulam.
+## Causa Raiz
 
----
+Dois gargalos identificados que se acumulam:
 
-## Problemas Identificados
+### 1. useCompanySettings chama getSession() DUAS vezes por fetch
 
-### 1. Console.log em CADA render do AuthContext (impacto em toda a plataforma)
+O hook `useCompanySettings` (linhas 23 e 47) chama `supabase.auth.getSession()` em cada execucao da query. Este e o MESMO problema que corrigimos no AuthContext na Fase 1. Cada chamada custa 500ms-2s, totalizando 1-4s de atraso so para carregar configuracoes da empresa. Se o settings nao carrega rapido, o formulario pode nao estar pronto quando o usuario clica "Criar".
 
-Na linha 172 do `AuthContext.tsx`, existe um `console.log` que executa em **todo render** de qualquer componente que use `useAuth()`. Isso significa centenas de chamadas por sessao, poluindo console e causando micro-atrasos.
+### 2. charge-links edge function sem timeout
 
-```typescript
-// Executa em CADA render de QUALQUER componente com useAuth()
-console.log('🔍 [AuthContext Render] Estado atual:', { ... });
-```
-
-**Correcao:** Remover esse log de debug (ou envolver em `if (import.meta.env.DEV)`).
-
-### 2. Dashboard faz `select('*')` em charges sem colunas especificas
-
-O Dashboard carrega `select('*')` para calcular estatisticas, trazendo TODAS as colunas de charges (incluindo metadata, boleto_linha_digitavel, etc.) quando so precisa de `id, status, amount, created_at`. Payload desnecessariamente grande.
-
-```typescript
-// Atual - traz tudo
-.select('*')
-
-// Otimizado - traz so o necessario
-.select('id, status, amount, created_at')
-```
-
-**Correcao:** Substituir `select('*')` por `select('id, status, amount, created_at')` no Dashboard.
-
-### 3. ChargeHistory: `fetchCharges` com `select('*')` + JOINs pesados
-
-A query principal do Historico traz `select('*', ...)` com JOINs em `companies`, `charge_executions` e `payment_splits`. O `*` carrega todas as 30+ colunas de charges quando a tabela principal so precisa de ~15 para a UI.
-
-**Correcao:** Substituir `select('*', ...)` por colunas especificas.
-
-### 4. Sincronizacao automatica dispara 2s apos carregar + a cada 5 min
-
-Apos `fetchCharges`, o segundo `useEffect` agenda uma sincronizacao em 2 segundos, invocando **3 Edge Functions em paralelo** (`sync-payment-status`, `sync-mercadopago-status`, `sync-card-status`). Isso compete com o carregamento inicial, causando lentidao percebida.
-
-**Correcao:** Aumentar o delay inicial de 2s para 10s, dando tempo para a UI estabilizar antes de iniciar sincronizacao em background.
-
-### 5. `useEffect` com dependencia `[isAdmin]` re-executa fetchCharges
-
-O useEffect principal depende de `[isAdmin]`, que muda de `undefined` para `true/false` quando o profile carrega. Isso pode causar dupla execucao do `fetchCharges` (uma com isAdmin=false, outra com isAdmin=true).
-
-**Correcao:** Substituir a dependencia `[isAdmin]` por `[profile?.company_id]` -- isso garante que fetchCharges execute uma unica vez quando o profile esta pronto.
+Apos inserir a cobranca no banco com sucesso, o front chama `supabase.functions.invoke('charge-links')` na linha 400. Esta chamada:
+- Nao tem timeout (pode levar 30+ segundos em cold start)
+- O `setIsLoading(false)` so executa no `finally`, apos a Promise resolver
+- O usuario ve "Criando..." sem saber se esta progredindo ou travou
 
 ---
 
-## Arquivos Afetados
+## Solucao Proposta
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/contexts/AuthContext.tsx` | Remover console.log de render |
-| `src/pages/Dashboard.tsx` | Substituir `select('*')` por colunas minimas |
-| `src/pages/ChargeHistory.tsx` | Substituir `select('*')` por colunas especificas; mudar dep de useEffect; aumentar delay da sync inicial |
+### Arquivo 1: `src/hooks/useCompanySettings.ts`
+
+Remover as duas chamadas a `getSession()` e usar o token que ja esta disponivel no cliente Supabase (gerenciado pelo AuthContext). O Supabase client JS ja inclui o token automaticamente em `functions.invoke`.
+
+**Antes (linhas 19-101):**
+- Linha 23: `await supabase.auth.getSession()` (1a chamada desnecessaria)
+- Linhas 26-43: Logica de refresh manual
+- Linha 47: `await supabase.auth.getSession()` (2a chamada desnecessaria)
+- Linhas 48-54: Extracao manual do token
+
+**Depois:**
+- Remover TODA a logica de getSession/refreshSession
+- Chamar `supabase.functions.invoke('company-settings')` diretamente (o client ja gerencia o token)
+- Manter retry com invalidateQueries em caso de 401
+- Resultado: eliminacao de ~4s de latencia no carregamento do formulario
+
+### Arquivo 2: `src/pages/NewCharge.tsx`
+
+Adicionar timeout de 15 segundos na chamada `charge-links` usando `AbortController`, e melhorar o feedback ao usuario.
+
+**Mudancas:**
+- Envolver a chamada `supabase.functions.invoke('charge-links')` em uma Promise.race com timeout de 15s
+- Se timeout: mostrar toast informando que a cobranca foi criada mas o link sera gerado depois, e redirecionar para `/charges`
+- Adicionar texto de progresso variavel no botao: "Criando cobranca..." -> "Gerando link..."
+
+---
 
 ## O que NAO muda
 
-- Nenhuma Edge Function alterada
-- Nenhum layout/UI/componente alterado
+- Nenhuma Edge Function alterada (charge-links, company-settings etc.)
+- Nenhum layout/UI alterado (cores, posicoes, tamanhos)
 - Nenhum contrato de integracao modificado
-- Funcionalidades de filtro, exportacao e sincronizacao preservadas
 - RLS policies inalteradas
+- Fluxo funcional preservado (inserir charge -> gerar link -> mostrar modal)
 
 ## Resultado Esperado
 
-- Eliminacao de logs de debug que poluem cada render (~centenas por sessao)
-- Payload do Dashboard reduzido em ~70% (de 30+ colunas para 4)
-- Payload do ChargeHistory reduzido em ~40% (colunas especificas)
-- Carregamento inicial sem competir com sync automatica (delay de 10s)
-- fetchCharges executa apenas 1 vez no mount (nao 2x)
+- Formulario de cobranca carrega 2-4s mais rapido (sem getSession duplo)
+- Botao "Criando..." nunca fica preso por mais de 15s
+- Usuario recebe feedback claro do progresso
+- Se o link demorar, a cobranca ja esta salva e o link pode ser gerado depois pelo historico
 
