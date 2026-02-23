@@ -19,79 +19,17 @@ export function useCompanySettings() {
   const fetchSettings = useCallback(async (): Promise<CompanySettings> => {
     if (!user) throw new Error('User not authenticated');
 
-    // SEMPRE buscar sessão fresca - ignorar qualquer cache
-    const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !currentSession) {
-      console.warn('[useCompanySettings] ⚠️ Sessão inválida, tentando refresh...');
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-      
-      if (refreshError || !refreshData.session) {
-        console.error('[useCompanySettings] ❌ Falha ao renovar sessão:', refreshError);
-        // Limpar tokens locais para evitar sessão zumbi
-        const keys = Object.keys(localStorage);
-        keys.forEach(key => {
-          if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-            localStorage.removeItem(key);
-          }
-        });
-        // Redirecionar para login
-        window.location.href = '/login';
-        throw new Error('Sessão expirada');
-      }
-      
-      console.log('[useCompanySettings] ✅ Sessão renovada com sucesso');
-    }
-    
-    // Buscar sessão novamente após possível refresh
-    const { data: { session: freshSession } } = await supabase.auth.getSession();
-    const accessToken = freshSession?.access_token;
-    
-    if (!accessToken) {
-      console.error('[useCompanySettings] ❌ Sem access token disponível');
-      queryClient.invalidateQueries({ queryKey: ['company-settings'] });
-      throw new Error('Token de acesso indisponível');
-    }
-
-    console.log('[useCompanySettings] 🔑 Usando token:', accessToken.substring(0, 20) + '...');
-
-    // Invoke com headers explícitos para garantir token fresco
+    // O Supabase client JS já inclui o token automaticamente em functions.invoke
     const { data, error } = await supabase.functions.invoke<CompanySettings>('company-settings', {
       body: {},
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
     });
 
     if (error) {
-      // Se 401, invalidar cache e tentar refresh uma vez
+      // Se 401, invalidar cache para retry automático do React Query
       if (error.message?.includes('401') && retryCount.current < 1) {
         retryCount.current++;
-        console.warn('[useCompanySettings] ⚠️ 401 recebido, renovando sessão...');
-        
-        // Invalidar cache
+        console.warn('[useCompanySettings] ⚠️ 401 recebido, invalidando cache...');
         queryClient.invalidateQueries({ queryKey: ['company-settings'] });
-        
-        const { data: newSessionData } = await supabase.auth.refreshSession();
-        const newToken = newSessionData.session?.access_token;
-        
-        if (!newToken) {
-          throw new Error('Falha ao obter novo token');
-        }
-        
-        console.log('[useCompanySettings] 🔄 Retry com novo token');
-        
-        // Retry com novo token
-        const retryResult = await supabase.functions.invoke<CompanySettings>('company-settings', {
-          body: {},
-          headers: {
-            Authorization: `Bearer ${newToken}`,
-          },
-        });
-        if (retryResult.error) throw retryResult.error;
-        if (!retryResult.data) throw new Error('Nenhum dado retornado');
-        retryCount.current = 0;
-        return retryResult.data;
       }
       throw error;
     }

@@ -117,6 +117,7 @@ interface FormData {
 
 export default function NewCharge() {
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState<'creating' | 'generating'>('creating');
   const [error, setError] = useState("");
   const [hasPayoutAccount, setHasPayoutAccount] = useState(false);
   const [checkingPayoutAccount, setCheckingPayoutAccount] = useState(false);
@@ -269,6 +270,7 @@ export default function NewCharge() {
     }
     
     setIsLoading(true);
+    setLoadingStage('creating');
     setError("");
 
     try {
@@ -396,10 +398,18 @@ export default function NewCharge() {
       if (!data.has_boleto) {
         try {
           console.log('[NewCharge] Gerando link de checkout via charge-links...');
+          setLoadingStage('generating');
           
-          const { data: linkData, error: linkError } = await supabase.functions.invoke('charge-links', {
+          // Timeout de 15s para evitar botão travado em cold start
+          const linkPromise = supabase.functions.invoke('charge-links', {
             body: { chargeId: charge.id, action: 'create' }
           });
+          
+          const timeoutPromise = new Promise<never>((_, reject) => 
+            setTimeout(() => reject(new Error('TIMEOUT')), 15000)
+          );
+          
+          const { data: linkData, error: linkError } = await Promise.race([linkPromise, timeoutPromise]);
           
           if (linkError) {
             console.error('[NewCharge] Erro ao invocar charge-links:', linkError);
@@ -432,10 +442,13 @@ export default function NewCharge() {
           
         } catch (linkError: any) {
           console.error('[NewCharge] Erro ao criar link:', linkError);
+          const isTimeout = linkError.message === 'TIMEOUT';
           toast({
-            title: "Cobrança criada",
-            description: "Houve um problema ao gerar o link de checkout. Tente novamente pelo histórico.",
-            variant: 'destructive'
+            title: isTimeout ? "Cobrança criada!" : "Cobrança criada",
+            description: isTimeout 
+              ? "O link de checkout está sendo gerado. Acesse pelo histórico em instantes."
+              : "Houve um problema ao gerar o link de checkout. Tente novamente pelo histórico.",
+            variant: isTimeout ? 'default' : 'destructive'
           });
           navigate('/charges');
           return;
@@ -853,7 +866,7 @@ export default function NewCharge() {
                       className="w-full"
                       disabled={isLoading || settingsLoading}
                     >
-                      {isLoading ? "Criando..." : "Criar Cobrança"}
+                      {isLoading ? (loadingStage === 'generating' ? "Gerando link..." : "Criando cobrança...") : "Criar Cobrança"}
                     </Button>
                     
                     <Button
