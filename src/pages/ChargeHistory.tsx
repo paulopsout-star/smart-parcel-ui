@@ -1214,18 +1214,33 @@ export default function ChargeHistory() {
 
     setLinkingBoleto(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-link-boleto', {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT')), 20000)
+      );
+
+      const invokePromise = supabase.functions.invoke('admin-link-boleto', {
         body: {
           chargeId: charge.id,
           linhaDigitavel: sanitized,
         },
       });
 
-      if (error || !data?.success) {
-        const errorMsg = error?.message || data?.error || 'Erro desconhecido';
+      const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
+
+      if (error) {
+        const errorMsg = error?.message || 'Erro desconhecido';
         toast({
           title: "Erro ao vincular boleto",
           description: errorMsg,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data && data.success === false) {
+        toast({
+          title: data.error || "Erro ao vincular boleto",
+          description: data.message || 'Erro desconhecido',
           variant: "destructive",
         });
         return;
@@ -1239,11 +1254,14 @@ export default function ChargeHistory() {
       setAdminLinhaDigitavel('');
       setSelectedCharge(null);
       await fetchCharges();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao vincular boleto:', err);
+      const isTimeout = err?.message === 'TIMEOUT';
       toast({
-        title: "Erro inesperado",
-        description: "Falha ao vincular boleto. Tente novamente.",
+        title: isTimeout ? "Tempo esgotado" : "Erro inesperado",
+        description: isTimeout
+          ? "A operação demorou demais (>20s). Tente novamente em alguns instantes."
+          : "Falha ao vincular boleto. Tente novamente.",
         variant: "destructive",
       });
     } finally {
