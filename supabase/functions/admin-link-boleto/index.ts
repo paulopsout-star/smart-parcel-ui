@@ -25,8 +25,8 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: 'Não autorizado', message: 'Token de autenticação ausente' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Não autorizado', message: 'Token de autenticação ausente' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -36,8 +36,8 @@ serve(async (req) => {
     
     if (authError || !user) {
       return new Response(
-        JSON.stringify({ error: 'Não autorizado', message: 'Token inválido' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Não autorizado', message: 'Token inválido' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -50,8 +50,8 @@ serve(async (req) => {
 
     if (roleError || roleData?.role !== 'admin') {
       return new Response(
-        JSON.stringify({ error: 'Acesso negado', message: 'Apenas administradores podem vincular boletos manualmente' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Acesso negado', message: 'Apenas administradores podem vincular boletos manualmente' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -63,10 +63,11 @@ serve(async (req) => {
     if (sanitizedLinha.length < 47 || sanitizedLinha.length > 48) {
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: 'Linha digitável inválida', 
           message: 'A linha digitável deve ter 47 ou 48 dígitos' 
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -79,8 +80,8 @@ serve(async (req) => {
 
     if (chargeError || !charge) {
       return new Response(
-        JSON.stringify({ error: 'Cobrança não encontrada', message: 'ID inválido' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Cobrança não encontrada', message: 'ID inválido' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -88,10 +89,11 @@ serve(async (req) => {
     if (charge.payment_method !== 'cartao_pix') {
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: 'Tipo de pagamento inválido', 
           message: 'Vinculação manual só é permitida para pagamentos combinados (PIX + Cartão)' 
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -99,10 +101,11 @@ serve(async (req) => {
     if (!charge.pre_payment_key) {
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: 'Cartão não aprovado', 
           message: 'O cartão precisa ser aprovado antes de vincular o boleto' 
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -110,10 +113,11 @@ serve(async (req) => {
     if (charge.boleto_admin_linha_digitavel) {
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: 'Já vinculado', 
           message: 'Esta cobrança já possui um boleto vinculado manualmente' 
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
