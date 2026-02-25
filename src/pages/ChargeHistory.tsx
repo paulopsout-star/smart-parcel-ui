@@ -1295,7 +1295,7 @@ export default function ChargeHistory() {
       }
     };
 
-    if (linkQuery.isLoading) {
+    if (linkQuery.isLoading && !linkQuery.isFetched) {
       return (
         <div className="flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin text-primary" />
@@ -1304,7 +1304,7 @@ export default function ChargeHistory() {
       );
     }
 
-    if (linkQuery.data === null || !linkQuery.data?.url) {
+    if (linkQuery.isError || linkQuery.data === null || !linkQuery.data?.url) {
       return (
         <div className="space-y-3">
           {isCompleted && (

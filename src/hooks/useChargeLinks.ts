@@ -32,49 +32,60 @@ export function useChargeLinks() {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     queryFn: async () => {
-      tried.add(chargeId);
-      
-      // First check DB
-      const { data: dbData } = await supabase
-        .from('charges')
-        .select('checkout_url, checkout_link_id')
-        .eq('id', chargeId)
-        .maybeSingle();
+      try {
+        // First check DB
+        const { data: dbData } = await supabase
+          .from('charges')
+          .select('checkout_url, checkout_link_id')
+          .eq('id', chargeId)
+          .maybeSingle();
 
-      if (dbData?.checkout_url && dbData?.checkout_link_id) {
-        return { url: dbData.checkout_url, linkId: dbData.checkout_link_id };
-      }
+        if (dbData?.checkout_url && dbData?.checkout_link_id) {
+          tried.add(chargeId);
+          return { url: dbData.checkout_url, linkId: dbData.checkout_link_id };
+        }
 
-      // Then try edge function
-      const { data, error } = await supabase.functions.invoke('charge-links', {
-        body: { chargeId, action: 'get' }
-      });
+        // Then try edge function with 15s timeout
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('TIMEOUT')), 15_000)
+        );
 
-      // NOT_FOUND é um estado válido (link ainda não foi gerado)
-      if (data?.code === 'NOT_FOUND') {
+        const edgeResult = await Promise.race([
+          supabase.functions.invoke('charge-links', {
+            body: { chargeId, action: 'get' }
+          }),
+          timeoutPromise
+        ]);
+
+        const { data, error } = edgeResult as { data: any; error: any };
+
+        // NOT_FOUND é um estado válido (link ainda não foi gerado)
+        if (data?.code === 'NOT_FOUND') {
+          tried.add(chargeId);
+          return null;
+        }
+
+        if (error || !data?.link?.url) {
+          console.error('Error fetching link:', error);
+          return null;
+        }
+
+        // Save to DB
+        await supabase
+          .from('charges')
+          .update({
+            checkout_url: data.link.url,
+            checkout_link_id: data.link.linkId
+          })
+          .eq('id', chargeId);
+
+        tried.add(chargeId);
+        return { url: data.link.url, linkId: data.link.linkId };
+      } catch (err) {
+        console.error('Charge link fetch failed (timeout or network):', err);
+        // Return null instead of throwing to avoid infinite loading
         return null;
       }
-
-      // Erros reais ainda fazem throw
-      if (error) {
-        console.error('Error fetching link:', error);
-        throw new Error(error.message || 'Erro ao buscar link');
-      }
-
-      if (!data?.link?.url) {
-        throw new Error('Link inválido');
-      }
-
-      // Save to DB
-      await supabase
-        .from('charges')
-        .update({
-          checkout_url: data.link.url,
-          checkout_link_id: data.link.linkId
-        })
-        .eq('id', chargeId);
-
-      return { url: data.link.url, linkId: data.link.linkId };
     }
   });
 
