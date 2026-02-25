@@ -1,70 +1,57 @@
 
 
-# Diagnóstico: "Vinculando..." trava e não conclui
+# Diagnóstico: "Link de Pagamento — Carregando..." fica travado
 
 ## Causa Raiz
 
-Dois problemas combinados fazem o botão ficar eternamente em "Vinculando...":
+O componente `CheckoutButtons` (linha 1272 de ChargeHistory.tsx) chama `getExistingLink(charge.id)` que internamente invoca a Edge Function `charge-links` com `action: 'get'`. Essa chamada **não tem timeout** — se a Edge Function demorar (cold start de 5-15s, ou falhar silenciosamente), o estado `isLoading` permanece `true` indefinidamente, exibindo "Carregando..." para sempre.
 
-### 1. Cadeia de 3 Edge Functions sem timeout no frontend
+Adicionalmente, o `tried` Set module-level impede re-tentativas automáticas: uma vez que o chargeId entra no Set (linha 35), a query fica com `enabled: false` e nunca mais roda, mesmo que tenha falhado.
 
-O fluxo `admin-link-boleto` encadeia chamadas internas:
-
+Fluxo problemático:
 ```text
-Frontend (sem timeout)
-  └─► admin-link-boleto (cold start ~2-10s)
-        ├─► quitaplus-prepayment-status (cold start ~2-10s)
-        └─► quitaplus-link-boleto (cold start ~2-10s + 3 retries com backoff)
+CheckoutButtons monta
+  → getExistingLink(chargeId) com enabled=true
+    → queryFn dispara
+      → tried.add(chargeId) ← marca ANTES de ter resultado
+      → supabase.functions.invoke('charge-links') ← SEM TIMEOUT
+        → Edge Function cold start (5-15s)
+        → Ou erro de rede/auth silencioso
+      → isLoading=true indefinidamente
 ```
-
-Cada cold start pode levar 2-10 segundos. O `quitaplus-link-boleto` tem **3 tentativas com backoff exponencial** (1s, 2s, 3s entre tentativas). No pior caso, são **30+ segundos** de espera encadeada. O frontend não tem nenhum timeout — simplesmente aguarda indefinidamente.
-
-### 2. O `admin-link-boleto` retorna HTTP 400 para validações, que o Supabase client trata como erro genérico
-
-Quando o `admin-link-boleto` retorna status 400 (por exemplo, "Tipo de pagamento inválido" ou "Cartão não aprovado"), o `supabase.functions.invoke()` lança um erro genérico sem o body JSON detalhado. O frontend pode não conseguir ler a mensagem real de erro, ficando travado no loading sem feedback.
-
----
 
 ## Plano de Correção
 
-### Arquivo: `src/pages/ChargeHistory.tsx` — função `handleAdminLinkBoleto`
+### Arquivo: `src/hooks/useChargeLinks.ts` — função `getExistingLink`
 
-**Mudança 1: Adicionar timeout de 20 segundos**
+**Mudança 1: Adicionar timeout de 15 segundos na queryFn**
 
-Envolver a chamada `supabase.functions.invoke('admin-link-boleto')` em um `Promise.race` com timeout de 20 segundos. Se estourar:
-- Parar o loading (`setLinkingBoleto(false)`)
-- Mostrar toast informando que a operação demorou demais e que o usuário deve tentar novamente
+Envolver a chamada à Edge Function em `Promise.race` com timeout de 15 segundos. Se estourar, retornar `null` (link não disponível) em vez de ficar pendente para sempre. Isso faz o componente sair do estado "Carregando..." e mostrar o botão "Gerar Link" ou "Tentar Novamente".
 
-**Mudança 2: Melhorar tratamento de erro**
+**Mudança 2: Mover `tried.add()` para DEPOIS do resultado**
 
-Ajustar a verificação de erro para ler corretamente tanto `error` do Supabase quanto `data.success === false` (padrão usado pela edge function para erros de negócio retornados com HTTP 200). Mostrar `data.message` quando disponível.
+Atualmente `tried.add(chargeId)` é chamado no início da queryFn (linha 35), antes de ter o resultado. Se a query falhar, o chargeId já está no Set e `enabled` vira `false`, impedindo qualquer re-tentativa. Mover o `tried.add()` para depois do retorno bem-sucedido.
 
-### Arquivo: `supabase/functions/admin-link-boleto/index.ts`
+**Mudança 3: Tratar erro sem travar**
 
-**Mudança 3: Retornar HTTP 200 para todas as respostas de validação**
+No `catch` do timeout ou erro de rede, retornar `null` em vez de lançar exceção. Isso evita que o React Query entre em estado de erro com retry, e permite ao usuário clicar em "Tentar Novamente" manualmente.
 
-As linhas que retornam `status: 400` e `status: 401`/`403` impedem o Supabase client JS de ler o body JSON. Alterar TODAS as respostas de erro de negócio para retornar HTTP 200 com `{ success: false, error: '...', message: '...' }`, seguindo o padrão já documentado na memória do projeto (`edge-function-error-reporting-standard`).
+### Arquivo: `src/pages/ChargeHistory.tsx` — componente `CheckoutButtons`
 
-Respostas afetadas (5 blocos):
-- Linha 33: "Token de autenticação ausente" → HTTP 200 + success: false
-- Linha 38: "Token inválido" → HTTP 200 + success: false  
-- Linha 51: "Acesso negado" → HTTP 200 + success: false
-- Linha 73: "Linha digitável inválida" → HTTP 200 + success: false
-- Linha 98/105: "Tipo inválido" / "Cartão não aprovado" → HTTP 200 + success: false
+**Mudança 4: Tratar estado de erro do linkQuery**
 
----
+Adicionar tratamento para `linkQuery.isError` mostrando mensagem "Erro ao carregar link" com botão "Tentar Novamente", em vez de ficar eternamente em loading.
 
 ## O que NÃO muda
 
-- Nenhum layout/UI alterado (cores, tamanhos, posições)
-- Nenhum contrato de integração com Quita+ modificado
-- Lógica de validação preservada (apenas códigos HTTP ajustados)
-- Fluxo funcional preservado (validar → verificar status → vincular → atualizar DB)
-- Edge functions `quitaplus-link-boleto` e `quitaplus-prepayment-status` inalteradas
+- Layout/UI do componente (cores, posições, tamanhos)
+- Edge Function `charge-links` (nenhuma alteração no backend)
+- Lógica de geração de link (`generateLinkMutation`)
+- Fluxo funcional (buscar DB → buscar edge → salvar)
 
 ## Resultado Esperado
 
-- Botão "Vinculando..." nunca fica preso por mais de 20 segundos
-- Mensagens de erro de validação exibidas corretamente ao admin
-- Em caso de timeout, feedback claro ao usuário
+- "Carregando..." nunca dura mais de 15 segundos
+- Após timeout, o usuário vê "Link indisponível" com botão para tentar novamente
+- O botão "Tentar Novamente" funciona corretamente (sem bloqueio pelo Set `tried`)
 
