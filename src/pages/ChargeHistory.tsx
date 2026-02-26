@@ -719,11 +719,16 @@ export default function ChargeHistory() {
   const [editingCompany, setEditingCompany] = useState(false);
   const [newCompanyId, setNewCompanyId] = useState('');
   const [changingCompany, setChangingCompany] = useState(false);
-  
-  // Estado para alteração manual de status (admin)
-  const [editingStatus, setEditingStatus] = useState(false);
-  const [newManualStatus, setNewManualStatus] = useState('');
-  const [savingStatus, setSavingStatus] = useState(false);
+   
+   // Estado para alteração manual de status (admin)
+   const [editingStatus, setEditingStatus] = useState(false);
+   const [newManualStatus, setNewManualStatus] = useState('');
+   const [savingStatus, setSavingStatus] = useState(false);
+
+   // Estado para alteração de tipo de pagamento (admin)
+   const [editingPaymentMethod, setEditingPaymentMethod] = useState(false);
+   const [newPaymentMethod, setNewPaymentMethod] = useState('');
+   const [savingPaymentMethod, setSavingPaymentMethod] = useState(false);
   
   // Filter state
   const [filters, setFilters] = useState<ChargeFilters>({
@@ -1753,7 +1758,7 @@ export default function ChargeHistory() {
                   <ChargeListRow 
                     key={charge.id} 
                     charge={charge} 
-                    onViewDetails={() => { setSelectedCharge(charge); setEditingStatus(false); }}
+                    onViewDetails={() => { setSelectedCharge(charge); setEditingStatus(false); setEditingPaymentMethod(false); }}
                     isAdmin={isAdmin}
                   />
                 ))}
@@ -1987,8 +1992,131 @@ export default function ChargeHistory() {
                         </div>
                         <p className="text-[11px] text-muted-foreground">⚠️ O status manual não será sobrescrito por sincronizações automáticas.</p>
                       </div>
-                    )}
-                  </div>
+                     )}
+
+                     {/* Admin: Payment method override */}
+                     {isAdmin && !editingPaymentMethod && (
+                       <Button 
+                         variant="outline" 
+                         size="sm" 
+                         className="mt-2"
+                         onClick={() => { setEditingPaymentMethod(true); setNewPaymentMethod(selectedCharge.payment_method || 'cartao'); }}
+                       >
+                         Alterar Tipo de Pagamento
+                       </Button>
+                     )}
+                     {isAdmin && editingPaymentMethod && (() => {
+                       const currentMethod = selectedCharge.payment_method || 'cartao';
+                       const isChanged = newPaymentMethod !== currentMethod;
+                       
+                       // Calculate preview amount
+                       let previewAmount = selectedCharge.amount;
+                       let previewNote = '';
+                       if (currentMethod === 'cartao_pix' && newPaymentMethod === 'pix') {
+                         previewAmount = selectedCharge.pix_amount ?? selectedCharge.amount;
+                         previewNote = `Novo total: R$ ${(previewAmount / 100).toFixed(2)} (valor PIX)`;
+                       } else if (currentMethod === 'cartao_pix' && newPaymentMethod === 'cartao') {
+                         previewAmount = selectedCharge.card_amount ?? selectedCharge.amount;
+                         previewNote = `Novo total: R$ ${(previewAmount / 100).toFixed(2)} (valor Cartão)`;
+                       } else if (newPaymentMethod === 'cartao_pix' && currentMethod !== 'cartao_pix') {
+                         previewNote = 'Valor mantido. Configure o split (PIX + Cartão) posteriormente.';
+                       } else if (isChanged) {
+                         previewNote = `Valor mantido: R$ ${(previewAmount / 100).toFixed(2)}`;
+                       }
+
+                       return (
+                       <div className="mt-2 space-y-2 p-3 rounded-lg border border-ds-border-subtle bg-ds-bg-surface-alt">
+                         <Select value={newPaymentMethod} onValueChange={setNewPaymentMethod}>
+                           <SelectTrigger className="h-8 text-xs">
+                             <SelectValue />
+                           </SelectTrigger>
+                           <SelectContent>
+                             <SelectItem value="cartao">Cartão</SelectItem>
+                             <SelectItem value="pix">PIX</SelectItem>
+                             <SelectItem value="cartao_pix">Cartão + PIX</SelectItem>
+                           </SelectContent>
+                         </Select>
+                         {previewNote && (
+                           <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                             <Info className="w-3 h-3" /> {previewNote}
+                           </p>
+                         )}
+                         <div className="flex gap-2">
+                           <Button size="sm" onClick={async () => {
+                             setSavingPaymentMethod(true);
+                             try {
+                               // Calculate new amount
+                               let newAmount = selectedCharge.amount;
+                               let newPixAmount: number | null = selectedCharge.pix_amount ?? null;
+                               let newCardAmount: number | null = selectedCharge.card_amount ?? null;
+
+                               if (currentMethod === 'cartao_pix' && newPaymentMethod === 'pix') {
+                                 newAmount = selectedCharge.pix_amount ?? selectedCharge.amount;
+                                 newCardAmount = null;
+                               } else if (currentMethod === 'cartao_pix' && newPaymentMethod === 'cartao') {
+                                 newAmount = selectedCharge.card_amount ?? selectedCharge.amount;
+                                 newPixAmount = null;
+                               } else if (newPaymentMethod === 'pix') {
+                                 newPixAmount = newAmount;
+                                 newCardAmount = null;
+                               } else if (newPaymentMethod === 'cartao') {
+                                 newCardAmount = newAmount;
+                                 newPixAmount = null;
+                               }
+
+                               // Update charge
+                               const { error } = await supabase
+                                 .from('charges')
+                                 .update({
+                                   payment_method: newPaymentMethod,
+                                   amount: newAmount,
+                                   pix_amount: newPixAmount,
+                                   card_amount: newCardAmount,
+                                 })
+                                 .eq('id', selectedCharge.id);
+                               if (error) throw error;
+
+                               // Delete pending splits for removed method
+                               if (currentMethod === 'cartao_pix' && newPaymentMethod !== 'cartao_pix') {
+                                 const removedMethod = newPaymentMethod === 'pix' ? 'CARD' : 'PIX';
+                                 await supabase
+                                   .from('payment_splits')
+                                   .delete()
+                                   .eq('charge_id', selectedCharge.id)
+                                   .eq('status', 'pending')
+                                   .eq('method', removedMethod);
+                               }
+
+                               // Update local state
+                               const updated = { 
+                                 ...selectedCharge, 
+                                 payment_method: newPaymentMethod, 
+                                 amount: newAmount,
+                                 pix_amount: newPixAmount,
+                                 card_amount: newCardAmount,
+                               };
+                               setSelectedCharge(updated);
+                               setCharges(prev => prev.map(c => c.id === selectedCharge.id ? { ...c, ...updated } : c));
+                               setEditingPaymentMethod(false);
+                               toast({ title: 'Tipo de pagamento atualizado', description: `Método alterado para ${newPaymentMethod === 'cartao' ? 'Cartão' : newPaymentMethod === 'pix' ? 'PIX' : 'Cartão + PIX'}.` });
+                             } catch (err: any) {
+                               toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+                             } finally {
+                               setSavingPaymentMethod(false);
+                             }
+                           }} disabled={savingPaymentMethod || !isChanged}>
+                             {savingPaymentMethod ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                             Confirmar
+                           </Button>
+                           <Button size="sm" variant="outline" onClick={() => setEditingPaymentMethod(false)} disabled={savingPaymentMethod}>
+                             Cancelar
+                           </Button>
+                         </div>
+                         <p className="text-[11px] text-muted-foreground">⚠️ Splits pendentes do método removido serão excluídos.</p>
+                       </div>
+                       );
+                     })()}
+                   </div>
 
                   {/* Métodos de Pagamento Detalhados */}
                   {(selectedCharge.payment_method === 'cartao_pix' || selectedCharge.payment_method === 'pix' || (selectedCharge.splits && selectedCharge.splits.length > 0)) && (
