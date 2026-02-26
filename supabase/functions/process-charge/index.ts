@@ -73,11 +73,15 @@ serve(async (req) => {
       )
     }
     
-    // Update charge status to processing
-    await supabase
-      .from('charges')
-      .update({ status: 'processing' })
-      .eq('id', chargeId)
+    // Update charge status to processing (only if not manually locked)
+    if (!charge.status_locked_at) {
+      await supabase
+        .from('charges')
+        .update({ status: 'processing' })
+        .eq('id', chargeId)
+    } else {
+      console.log(`Charge ${chargeId} status is manually locked - skipping auto update`)
+    }
     
     let executionResult = {
       status: 'failed' as const,
@@ -138,11 +142,13 @@ serve(async (req) => {
         error_details: null
       }
       
-      // Update charge status to completed
-      await supabase
-        .from('charges')
-        .update({ status: 'completed' })
-        .eq('id', chargeId)
+      // Update charge status to completed (only if not manually locked)
+      if (!charge.status_locked_at) {
+        await supabase
+          .from('charges')
+          .update({ status: 'completed' })
+          .eq('id', chargeId)
+      }
       
       console.log(`Charge ${chargeId} processed successfully`)
       
@@ -192,11 +198,13 @@ serve(async (req) => {
         }
       }
       
-      // Update charge status to failed
-      await supabase
-        .from('charges')
-        .update({ status: 'failed' })
-        .eq('id', chargeId)
+      // Update charge status to failed (only if not manually locked)
+      if (!charge.status_locked_at) {
+        await supabase
+          .from('charges')
+          .update({ status: 'failed' })
+          .eq('id', chargeId)
+      }
     }
     
     // Record execution

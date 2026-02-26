@@ -70,11 +70,12 @@ interface Charge {
   fee_percentage?: number;
   pre_payment_key?: string;
   boleto_linha_digitavel?: string;
-  boleto_admin_linha_digitavel?: string; // Nova coluna para linha digitável do admin
+  boleto_admin_linha_digitavel?: string;
   creditor_document?: string;
   creditor_name?: string;
   company_id?: string;
   company?: Company;
+  status_locked_at?: string;
   metadata?: {
     link_boleto_error?: {
       message: string;
@@ -718,6 +719,11 @@ export default function ChargeHistory() {
   const [editingCompany, setEditingCompany] = useState(false);
   const [newCompanyId, setNewCompanyId] = useState('');
   const [changingCompany, setChangingCompany] = useState(false);
+  
+  // Estado para alteração manual de status (admin)
+  const [editingStatus, setEditingStatus] = useState(false);
+  const [newManualStatus, setNewManualStatus] = useState('');
+  const [savingStatus, setSavingStatus] = useState(false);
   
   // Filter state
   const [filters, setFilters] = useState<ChargeFilters>({
@@ -1747,7 +1753,7 @@ export default function ChargeHistory() {
                   <ChargeListRow 
                     key={charge.id} 
                     charge={charge} 
-                    onViewDetails={() => setSelectedCharge(charge)}
+                    onViewDetails={() => { setSelectedCharge(charge); setEditingStatus(false); }}
                     isAdmin={isAdmin}
                   />
                 ))}
@@ -1904,11 +1910,83 @@ export default function ChargeHistory() {
                   
                   <div className="space-y-2">
                     <h4 className="font-medium text-ds-text-strong">Status</h4>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       {getModernStatusBadge(getComputedStatus(selectedCharge))}
                       <Badge variant="outline">{selectedCharge.recurrence_type}</Badge>
                       {selectedCharge.payment_method && getPaymentMethodBadge(selectedCharge.payment_method)}
+                      {selectedCharge.status_locked_at && (
+                        <Badge variant="warning" className="text-[10px]">🔒 Status manual</Badge>
+                      )}
                     </div>
+                    
+                    {/* Admin: Manual status override */}
+                    {isAdmin && !editingStatus && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="mt-2"
+                        onClick={() => { setEditingStatus(true); setNewManualStatus(selectedCharge.status); }}
+                      >
+                        Alterar Status
+                      </Button>
+                    )}
+                    {isAdmin && editingStatus && (
+                      <div className="mt-2 space-y-2 p-3 rounded-lg border border-ds-border-subtle bg-ds-bg-surface-alt">
+                        <Select value={newManualStatus} onValueChange={setNewManualStatus}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[
+                              { value: 'pending', label: 'Pendente' },
+                              { value: 'processing', label: 'Processando' },
+                              { value: 'completed', label: 'Pago' },
+                              { value: 'failed', label: 'Falhou' },
+                              { value: 'cancelled', label: 'Cancelado' },
+                              { value: 'pre_authorized', label: 'Pré-autorizado' },
+                              { value: 'boleto_linked', label: 'Boleto vinculado' },
+                              { value: 'approved', label: 'Aprovado' },
+                              { value: 'awaiting_validation', label: 'Aguardando validação' },
+                              { value: 'validating', label: 'Validando' },
+                              { value: 'payment_denied', label: 'Pagamento negado' },
+                            ].map(s => (
+                              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={async () => {
+                            setSavingStatus(true);
+                            try {
+                              const { error } = await supabase
+                                .from('charges')
+                                .update({ 
+                                  status: newManualStatus as any,
+                                  status_locked_at: new Date().toISOString()
+                                })
+                                .eq('id', selectedCharge.id);
+                              if (error) throw error;
+                              const lockedAt = new Date().toISOString();
+                              setSelectedCharge({ ...selectedCharge, status: newManualStatus, status_locked_at: lockedAt });
+                              setCharges(prev => prev.map(c => c.id === selectedCharge.id ? { ...c, status: newManualStatus, status_locked_at: lockedAt } : c));
+                              setEditingStatus(false);
+                              toast({ title: 'Status atualizado', description: 'Status alterado manualmente com sucesso.' });
+                            } catch (err: any) {
+                              toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+                            } finally {
+                              setSavingStatus(false);
+                            }
+                          }} disabled={savingStatus || newManualStatus === selectedCharge.status}>
+                            {savingStatus ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                            Confirmar
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingStatus(false)} disabled={savingStatus}>
+                            Cancelar
+                          </Button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">⚠️ O status manual não será sobrescrito por sincronizações automáticas.</p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Métodos de Pagamento Detalhados */}
