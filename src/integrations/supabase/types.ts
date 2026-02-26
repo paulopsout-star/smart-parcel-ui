@@ -1024,6 +1024,7 @@ export type Database = {
         | "awaiting_validation"
         | "validating"
         | "payment_denied"
+        | "refunded"
       payment_method: "PIX" | "CARD" | "QUITA"
       recurrence_type:
         | "pontual"
@@ -1174,6 +1175,7 @@ export const Constants = {
         "awaiting_validation",
         "validating",
         "payment_denied",
+        "refunded",
       ],
       payment_method: ["PIX", "CARD", "QUITA"],
       recurrence_type: [
