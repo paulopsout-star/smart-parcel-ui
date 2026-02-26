@@ -1949,6 +1949,7 @@ export default function ChargeHistory() {
                               { value: 'awaiting_validation', label: 'Aguardando validação' },
                               { value: 'validating', label: 'Validando' },
                               { value: 'payment_denied', label: 'Pagamento negado' },
+                              { value: 'refunded', label: 'Estornado' },
                             ].map(s => (
                               <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                             ))}
