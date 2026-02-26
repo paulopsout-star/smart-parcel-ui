@@ -218,10 +218,21 @@ Deno.serve(async (req) => {
               chargeStatus = 'processing';
             }
 
-            await supabase
+            // Check if status is manually locked by admin
+            const { data: chargeCheck } = await supabase
               .from('charges')
-              .update({ status: chargeStatus })
-              .eq('id', split.charge_id);
+              .select('status_locked_at')
+              .eq('id', split.charge_id)
+              .single();
+
+            if (chargeCheck?.status_locked_at) {
+              console.log('[sync-card-status] Status locked manually for charge', split.charge_id, '- skipping auto update');
+            } else {
+              await supabase
+                .from('charges')
+                .update({ status: chargeStatus })
+                .eq('id', split.charge_id);
+            }
 
             console.log('[sync-card-status] Updated charge', split.charge_id, 'status to:', chargeStatus);
           } else {

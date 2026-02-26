@@ -246,11 +246,22 @@ Deno.serve(async (req) => {
           chargeStatus = 'processing'; // Parcialmente pago
         }
 
-        console.log('[conclude-card-payment] Updating charge status to:', chargeStatus);
-        await supabase
+        // Check if status is manually locked by admin
+        const { data: chargeCheck } = await supabase
           .from('charges')
-          .update({ status: chargeStatus })
-          .eq('id', chargeId);
+          .select('status_locked_at')
+          .eq('id', chargeId)
+          .single();
+
+        if (chargeCheck?.status_locked_at) {
+          console.log('[conclude-card-payment] Status locked manually for charge', chargeId, '- skipping auto update');
+        } else {
+          console.log('[conclude-card-payment] Updating charge status to:', chargeStatus);
+          await supabase
+            .from('charges')
+            .update({ status: chargeStatus })
+            .eq('id', chargeId);
+        }
       } else {
         console.log('[conclude-card-payment] Skipping charge update - no splits found for charge:', chargeId);
       }

@@ -187,14 +187,24 @@ serve(async (req) => {
         const allConcluded = allSplits.every(split => split.status === 'concluded');
         
         if (allConcluded) {
-          // Update charge status to completed
-          const { error: chargeUpdateError } = await supabase
+          // Check if status is manually locked by admin
+          const { data: chargeCheck } = await supabase
             .from('charges')
-            .update({ status: 'completed' })
-            .eq('id', split.charge_id);
+            .select('status_locked_at')
+            .eq('id', split.charge_id)
+            .single();
 
-          if (chargeUpdateError) {
-            console.error('Failed to update charge status:', chargeUpdateError);
+          if (chargeCheck?.status_locked_at) {
+            console.log('Status locked manually for charge', split.charge_id, '- skipping auto update');
+          } else {
+            const { error: chargeUpdateError } = await supabase
+              .from('charges')
+              .update({ status: 'completed' })
+              .eq('id', split.charge_id);
+
+            if (chargeUpdateError) {
+              console.error('Failed to update charge status:', chargeUpdateError);
+            }
           }
         }
       }
