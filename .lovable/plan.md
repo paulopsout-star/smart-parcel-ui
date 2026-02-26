@@ -1,57 +1,45 @@
 
 
-# Diagnóstico: "Link de Pagamento — Carregando..." fica travado
+# Plano: Botão de alteração manual de status (Admin)
 
-## Causa Raiz
+## Resumo
 
-O componente `CheckoutButtons` (linha 1272 de ChargeHistory.tsx) chama `getExistingLink(charge.id)` que internamente invoca a Edge Function `charge-links` com `action: 'get'`. Essa chamada **não tem timeout** — se a Edge Function demorar (cold start de 5-15s, ou falhar silenciosamente), o estado `isLoading` permanece `true` indefinidamente, exibindo "Carregando..." para sempre.
+Adicionar um botão no painel de detalhes da cobrança (Sheet) que permite ao administrador alterar manualmente o status. O status alterado manualmente será "travado" — as Edge Functions de sincronização automática não poderão sobrescrevê-lo.
 
-Adicionalmente, o `tried` Set module-level impede re-tentativas automáticas: uma vez que o chargeId entra no Set (linha 35), a query fica com `enabled: false` e nunca mais roda, mesmo que tenha falhado.
+## Mudanças
 
-Fluxo problemático:
-```text
-CheckoutButtons monta
-  → getExistingLink(chargeId) com enabled=true
-    → queryFn dispara
-      → tried.add(chargeId) ← marca ANTES de ter resultado
-      → supabase.functions.invoke('charge-links') ← SEM TIMEOUT
-        → Edge Function cold start (5-15s)
-        → Ou erro de rede/auth silencioso
-      → isLoading=true indefinidamente
-```
+### 1. Migração: adicionar coluna `status_locked_at` na tabela `charges`
 
-## Plano de Correção
+Adicionar coluna `status_locked_at TIMESTAMPTZ DEFAULT NULL`. Quando preenchida, indica que o status foi definido manualmente por um admin e não deve ser sobrescrito por sincronizações automáticas.
 
-### Arquivo: `src/hooks/useChargeLinks.ts` — função `getExistingLink`
+### 2. Edge Functions: respeitar `status_locked_at`
 
-**Mudança 1: Adicionar timeout de 15 segundos na queryFn**
+Nos 4 arquivos que fazem `.update({ status })` em `charges`:
+- `sync-card-status/index.ts` (linha 221)
+- `conclude-card-payment/index.ts` (linha 250)
+- `process-charge/index.ts` (linhas 79, 144, 198)
+- `payment-splits/index.ts` (linha 191)
 
-Envolver a chamada à Edge Function em `Promise.race` com timeout de 15 segundos. Se estourar, retornar `null` (link não disponível) em vez de ficar pendente para sempre. Isso faz o componente sair do estado "Carregando..." e mostrar o botão "Gerar Link" ou "Tentar Novamente".
+Antes de atualizar o status, verificar se `status_locked_at IS NOT NULL`. Se estiver travado, **pular** a atualização de status (log no console e continuar sem erro).
 
-**Mudança 2: Mover `tried.add()` para DEPOIS do resultado**
+### 3. Frontend: `ChargeHistory.tsx` — seção de Status no painel de detalhes
 
-Atualmente `tried.add(chargeId)` é chamado no início da queryFn (linha 35), antes de ter o resultado. Se a query falhar, o chargeId já está no Set e `enabled` vira `false`, impedindo qualquer re-tentativa. Mover o `tried.add()` para depois do retorno bem-sucedido.
+Abaixo da seção "Status" existente (linha ~1905-1912), adicionar (somente para `isAdmin`):
 
-**Mudança 3: Tratar erro sem travar**
+- Um botão "Alterar Status" que abre um dropdown/select inline com os status disponíveis:
+  `pending`, `processing`, `completed`, `failed`, `cancelled`, `pre_authorized`, `boleto_linked`, `approved`, `awaiting_validation`, `validating`, `payment_denied`
+- Botão "Confirmar" que faz `UPDATE charges SET status = :newStatus, status_locked_at = now() WHERE id = :chargeId`
+- Após sucesso: atualizar o `selectedCharge` local e mostrar toast de confirmação
+- Badge indicativo "Status manual" quando `status_locked_at` não é null
 
-No `catch` do timeout ou erro de rede, retornar `null` em vez de lançar exceção. Isso evita que o React Query entre em estado de erro com retry, e permite ao usuário clicar em "Tentar Novamente" manualmente.
+### 4. Interface `Charge`: adicionar campo `status_locked_at`
 
-### Arquivo: `src/pages/ChargeHistory.tsx` — componente `CheckoutButtons`
-
-**Mudança 4: Tratar estado de erro do linkQuery**
-
-Adicionar tratamento para `linkQuery.isError` mostrando mensagem "Erro ao carregar link" com botão "Tentar Novamente", em vez de ficar eternamente em loading.
+Adicionar `status_locked_at?: string` à interface `Charge` e incluir na query de fetch.
 
 ## O que NÃO muda
 
-- Layout/UI do componente (cores, posições, tamanhos)
-- Edge Function `charge-links` (nenhuma alteração no backend)
-- Lógica de geração de link (`generateLinkMutation`)
-- Fluxo funcional (buscar DB → buscar edge → salvar)
-
-## Resultado Esperado
-
-- "Carregando..." nunca dura mais de 15 segundos
-- Após timeout, o usuário vê "Link indisponível" com botão para tentar novamente
-- O botão "Tentar Novamente" funciona corretamente (sem bloqueio pelo Set `tried`)
+- Layout/cores/posições dos elementos existentes
+- Lógica de `getComputedStatus` e `getModernStatusBadge`
+- Contratos de integração Quita+
+- Fluxo de pagamento do cliente
 
