@@ -1,24 +1,44 @@
 
 
-# Plano: Otimizar carregamento de links de pagamento no histórico
+# Plano: Corrigir exibição do status "Estornado"
 
 ## Problema
 
-O componente `CheckoutButtons` chama `getExistingLink(charge.id)` para **cada cobrança** na lista. Isso dispara uma query individual ao DB (e potencialmente uma chamada à edge function `charge-links`) **por cobrança**. Com 100 cobranças, são 100+ requests paralelos, causando lentidão.
+Duas falhas impedem a exibição correta do status `refunded`:
 
-**Dado que a query principal de cobranças já retorna `checkout_url` e `checkout_link_id`**, essas chamadas individuais são desnecessárias.
+1. **`getModernStatusBadge`** (linha ~227): o mapa de configs não inclui `refunded`, então o fallback na linha 229 (`|| configs.pending`) exibe "Pendente".
 
-## Mudança
+2. **`getComputedStatus`** (linha ~141): para cobranças `cartao_pix`, a função recalcula o status a partir dos splits, ignorando que o admin alterou manualmente o status (com `status_locked_at`). Para cobranças não-combinadas, retorna `charge.status` corretamente.
 
-### `src/pages/ChargeHistory.tsx` — Componente `CheckoutButtons`
+## Mudanças em `src/pages/ChargeHistory.tsx`
 
-Refatorar para usar diretamente os campos `charge.checkout_url` e `charge.checkout_link_id` já presentes no objeto `charge`, **eliminando** a chamada a `getExistingLink()`.
+### 1. Adicionar `refunded` ao mapa de `getModernStatusBadge`
 
-Lógica:
-- Se `charge.checkout_url` existe → exibir botões de copiar/abrir imediatamente (sem loading, sem fetch)
-- Se não existe → exibir "Link indisponível" + botão "Gerar Novo Link"
-- Manter `generateLink` para geração manual (já funciona via mutation)
-- Remover `getExistingLink` do componente (e a dependência de `useChargeLinks` para queries automáticas)
+Após `cnpj_nao_cadastrado` (~linha 226), adicionar:
 
-Resultado: **zero queries adicionais** no carregamento da lista. Links aparecem instantaneamente.
+```ts
+refunded: {
+  label: 'Estornado',
+  variant: 'destructive' as const
+},
+```
+
+### 2. Respeitar `status_locked_at` em `getComputedStatus`
+
+No início da função (linha ~141), antes de qualquer lógica de splits, adicionar:
+
+```ts
+// Se o admin travou o status manualmente, respeitar sempre
+if (charge.status_locked_at) {
+  return charge.status;
+}
+```
+
+Isso garante que qualquer status definido manualmente pelo admin (refunded, cancelled, etc.) nunca seja sobrescrito pela lógica de splits.
+
+## O que NÃO muda
+
+- Nenhum layout, cor ou componente existente
+- Nenhuma integração ou edge function
+- Lógica de splits para cobranças sem lock manual
 
