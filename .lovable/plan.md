@@ -1,69 +1,51 @@
 
 
-# Plano: Destravar criação de cobrança — gerar link em background
+# Diagnóstico: Por que a criação de cobrança trava
 
-## Diagnóstico
+## Investigação realizada
 
-A criação de cobrança trava porque o fluxo é **síncrono e bloqueante**:
+1. **Banco de dados**: A cobrança mais recente (aa7af067) foi criada com sucesso às 15:52, COM checkout_url preenchido. O INSERT funciona.
+2. **Edge Function charge-links**: Está deployada (retorna 401 sem token, comportamento esperado). Sem logs recentes — pode ter cold starts longos.
+3. **Tabelas**: 437 cobranças, 371 payment_links — volume baixo. Índices existem em company_id e user_id. RLS não deveria ser lento.
+4. **Triggers**: Nenhum trigger na tabela charges.
 
-1. INSERT da cobrança no DB (sem timeout — se a rede/Supabase demorar, trava PARA SEMPRE)
-2. Aguarda `charge-links` edge function (com timeout de 15s, mas o cold start pode ser > 15s)
+## Causa raiz identificada
 
-O botão fica em "Criando cobrança..." porque: (a) o INSERT pode demorar, e (b) mesmo que o INSERT complete, o React pode não re-renderizar a label para "Gerando link..." antes de travar no `await` da edge function.
+Encontrei um bug estrutural no fluxo de submissão:
 
-**O problema real**: a geração do link **bloqueia** a confirmação da cobrança. O usuário fica preso esperando algo que deveria ser feito em segundo plano.
+```text
+Linha 272: setIsLoading(true)   ← FORA do try
+Linha 273: setLoadingStage('creating')
+Linha 274: setError("")
+Linha 276: try {
+  ...
+Linha 447: } finally {
+Linha 448:   setIsLoading(false)  ← só roda se entrou no try
+}
+```
 
-## Solução: fire-and-forget para o link
+**`setIsLoading(true)` está FORA do `try` block (linha 272), mas `setIsLoading(false)` está DENTRO do `finally` (linha 448).** Se qualquer erro síncrono ocorrer entre as linhas 272-276, o `finally` nunca executa e o botão fica travado em "Criando cobrança..." permanentemente.
 
-Separar o fluxo em duas etapas independentes:
-
-1. **INSERT da cobrança** → assim que o INSERT retornar com sucesso, **mostrar sucesso imediatamente** (toast + modal ou redirect)
-2. **Gerar link em background** → chamar `charge-links` sem `await`, sem bloquear o usuário. O link aparecerá no histórico quando estiver pronto.
-
-Isso elimina o travamento porque o usuário nunca espera pelo link.
+Além disso, a chamada `supabase.from('charges').insert(...).select().single()` na linha 304 pode ficar pendente indefinidamente caso haja instabilidade de rede — o `fetch` interno do Supabase JS não tem timeout nativo, e não há proteção contra isso.
 
 ## Mudanças em `src/pages/NewCharge.tsx`
 
-### Refatorar o bloco pós-INSERT (linhas ~397-456)
+### 1. Mover `setIsLoading(true)` para dentro do `try`
 
-Substituir o `await Promise.race([linkPromise, timeoutPromise])` por um fire-and-forget:
+Garante que `finally` SEMPRE execute quando `isLoading` é true.
 
-```ts
-// Após INSERT bem-sucedido:
-// 1. Disparar geração de link em background (não bloqueia)
-supabase.functions.invoke('charge-links', {
-  body: { chargeId: charge.id, action: 'create' }
-}).then(({ data: linkData }) => {
-  if (linkData?.link?.url) {
-    console.log('[NewCharge] Link gerado em background:', linkData.link.url);
-  }
-}).catch(err => {
-  console.warn('[NewCharge] Link será gerado depois:', err.message);
-});
+### 2. Envolver o INSERT com AbortController (10s)
 
-// 2. Mostrar sucesso imediato com dados já disponíveis
-const PRODUCTION_DOMAIN = 'https://pay1.autonegocie.com';
-toast({ title: "Cobrança criada!", description: "Link de checkout sendo gerado..." });
-setCheckoutData({
-  chargeId: charge.id,
-  checkoutUrl: `${PRODUCTION_DOMAIN}/checkout/${charge.id}`,
-  linkId: charge.id,
-  amount: charge.amount,
-  payerName: charge.payer_name,
-  description: charge.description || undefined,
-  status: 'PENDENTE'
-});
-setShowCheckoutModal(true);
-```
+Não é um "timeout cosmético" — é proteção contra hang de rede. Se o `fetch` interno do Supabase não resolver em 10s, o AbortController cancela a requisição e o catch mostra o erro. Sem isso, o `await` pode ficar pendente indefinidamente.
 
-### Adicionar AbortController ao INSERT (proteção contra hang de rede)
+### 3. Validar `formatAmount` antes do INSERT
 
-Envolver o `supabase.from('charges').insert(...)` com um AbortController de 10s para que, mesmo em caso de problema de rede, o usuário receba feedback em vez de ficar travado.
+Se `data.amount` produzir NaN, rejeitar antes de enviar ao banco.
 
 ## O que NÃO muda
 
-- Nenhum layout, cor ou componente visual
-- Nenhuma edge function ou integração
-- Lógica de PIX e boleto (já funcionam com retorno imediato)
-- O link continua sendo gerado — apenas **não bloqueia** mais o usuário
+- Nenhum layout, cor ou componente
+- Nenhuma edge function
+- Lógica de fire-and-forget para link (já aplicada)
+- Fluxo de PIX e boleto
 
