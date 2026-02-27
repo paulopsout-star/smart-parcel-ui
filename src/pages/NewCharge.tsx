@@ -394,65 +394,40 @@ export default function NewCharge() {
         });
       }
 
-      console.log('[NewCharge] Gerando link de checkout para cobrança pontual...');
+      // Fire-and-forget: gerar link em background sem bloquear o usuário
       if (!data.has_boleto) {
-        try {
-          console.log('[NewCharge] Gerando link de checkout via charge-links...');
-          setLoadingStage('generating');
-          
-          // Timeout de 15s para evitar botão travado em cold start
-          const linkPromise = supabase.functions.invoke('charge-links', {
-            body: { chargeId: charge.id, action: 'create' }
-          });
-          
-          const timeoutPromise = new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error('TIMEOUT')), 15000)
-          );
-          
-          const { data: linkData, error: linkError } = await Promise.race([linkPromise, timeoutPromise]);
-          
-          if (linkError) {
-            console.error('[NewCharge] Erro ao invocar charge-links:', linkError);
-            throw new Error(linkError.message || 'Falha ao gerar link');
+        console.log('[NewCharge] Disparando geração de link em background...');
+        
+        // Não usa await — o link será gerado em segundo plano
+        supabase.functions.invoke('charge-links', {
+          body: { chargeId: charge.id, action: 'create' }
+        }).then(({ data: linkData }) => {
+          if (linkData?.link?.url) {
+            console.log('[NewCharge] Link gerado em background:', linkData.link.url);
           }
-          
-          if (!linkData?.link?.url) {
-            console.error('[NewCharge] Link não retornado:', linkData);
-            throw new Error('Link não foi gerado');
-          }
-          
-          const fullCheckoutData = {
-            chargeId: charge.id,
-            checkoutUrl: linkData.link.url,
-            linkId: linkData.link.id,
-            amount: charge.amount,
-            payerName: charge.payer_name,
-            description: charge.description || undefined,
-            status: 'PENDENTE' as const
-          };
+        }).catch(err => {
+          console.warn('[NewCharge] Link será gerado depois:', err?.message);
+        });
 
-          toast({
-            title: "Cobrança criada com sucesso!",
-            description: "Link de checkout gerado.",
-          });
-          
-          setCheckoutData(fullCheckoutData);
-          setShowCheckoutModal(true);
-          return;
-          
-        } catch (linkError: any) {
-          console.error('[NewCharge] Erro ao criar link:', linkError);
-          const isTimeout = linkError.message === 'TIMEOUT';
-          toast({
-            title: isTimeout ? "Cobrança criada!" : "Cobrança criada",
-            description: isTimeout 
-              ? "O link de checkout está sendo gerado. Acesse pelo histórico em instantes."
-              : "Houve um problema ao gerar o link de checkout. Tente novamente pelo histórico.",
-            variant: isTimeout ? 'default' : 'destructive'
-          });
-          navigate('/charges');
-          return;
-        }
+        const PRODUCTION_DOMAIN = 'https://pay1.autonegocie.com';
+        const fullCheckoutData = {
+          chargeId: charge.id,
+          checkoutUrl: `${PRODUCTION_DOMAIN}/checkout/${charge.id}`,
+          linkId: charge.id,
+          amount: charge.amount,
+          payerName: charge.payer_name,
+          description: charge.description || undefined,
+          status: 'PENDENTE' as const
+        };
+
+        toast({
+          title: "Cobrança criada com sucesso!",
+          description: "Link de checkout sendo gerado em segundo plano.",
+        });
+
+        setCheckoutData(fullCheckoutData);
+        setShowCheckoutModal(true);
+        return;
       }
 
       toast({
