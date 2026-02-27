@@ -139,6 +139,10 @@ const formatCurrency = (cents: number) => {
 
 // Função para calcular status computado baseado nos splits (para pagamentos combinados)
 const getComputedStatus = (charge: Charge): string => {
+  // Se o admin travou o status manualmente, respeitar sempre
+  if (charge.status_locked_at) {
+    return charge.status;
+  }
   // Se não for pagamento combinado ou não tem splits, usar status do charge
   if (charge.payment_method !== 'cartao_pix' || !charge.splits || charge.splits.length === 0) {
     return charge.status;
@@ -222,6 +226,10 @@ const getModernStatusBadge = (status: string) => {
     // NOVO: StatusCode 50 - CNPJ não cadastrado
     cnpj_nao_cadastrado: {
       label: 'CNPJ não cadastrado',
+      variant: 'destructive' as const
+    },
+    refunded: {
+      label: 'Estornado',
       variant: 'destructive' as const
     },
   };
