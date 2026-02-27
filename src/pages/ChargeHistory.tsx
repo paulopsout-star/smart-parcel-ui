@@ -1281,14 +1281,20 @@ export default function ChargeHistory() {
   };
 
   const CheckoutButtons = ({ charge }: { charge: Charge }) => {
-    const { getExistingLink, generateLink, isGenerating, resetLinkState } = useChargeLinks();
-    const linkQuery = getExistingLink(charge.id);
+    const { generateLink, isGenerating } = useChargeLinks();
     const isCompleted = charge.status === 'completed';
+    const hasLink = !!charge.checkout_url;
 
     const handleGenerateLink = async () => {
       try {
         const newLink = await generateLink(charge.id);
         if (newLink?.url) {
+          // Atualizar o charge localmente para refletir o novo link
+          setCharges(prev => prev.map(c => 
+            c.id === charge.id 
+              ? { ...c, checkout_url: newLink.url, checkout_link_id: newLink.linkId }
+              : c
+          ));
           const event = new CustomEvent('openCheckoutModal', {
             detail: {
               checkoutUrl: newLink.url,
@@ -1306,16 +1312,7 @@ export default function ChargeHistory() {
       }
     };
 
-    if (linkQuery.isLoading && !linkQuery.isFetched) {
-      return (
-        <div className="flex items-center gap-2">
-          <Loader2 className="w-4 h-4 animate-spin text-primary" />
-          <span className="text-sm text-ds-text-muted">Carregando...</span>
-        </div>
-      );
-    }
-
-    if (linkQuery.isError || linkQuery.data === null || !linkQuery.data?.url) {
+    if (!hasLink) {
       return (
         <div className="space-y-3">
           {isCompleted && (
@@ -1331,16 +1328,6 @@ export default function ChargeHistory() {
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            <Button 
-              onClick={() => { resetLinkState(charge.id); linkQuery.refetch(); }} 
-              size="sm" 
-              variant="outline"
-              className="gap-2"
-              disabled={isCompleted}
-            >
-              <RefreshCw className="h-4 w-4" />
-              Tentar Novamente
-            </Button>
             <Button 
               onClick={handleGenerateLink} 
               size="sm"
@@ -1364,7 +1351,7 @@ export default function ChargeHistory() {
         <Button
           size="sm"
           variant="outline"
-          onClick={() => openPaymentLink(linkQuery.data.url)}
+          onClick={() => openPaymentLink(charge.checkout_url!)}
           className="gap-2"
         >
           <ExternalLink className="h-4 w-4" />
@@ -1373,7 +1360,7 @@ export default function ChargeHistory() {
         <Button
           size="sm"
           variant="outline"
-          onClick={() => copyToClipboard(linkQuery.data.url)}
+          onClick={() => copyToClipboard(charge.checkout_url!)}
           className="gap-2"
         >
           <Copy className="h-4 w-4" />
