@@ -306,8 +306,9 @@ export default function NewCharge() {
       // Admin pode escolher outra empresa; operador usa sua própria
       const targetCompanyId = isAdmin && selectedCompanyId ? selectedCompanyId : profile.company_id;
 
-      // Timeout de 10s: protege contra hang de rede
-      const insertPromise = supabase
+      // Chamada direta sem timeout artificial — latência real será logada
+      const t0 = performance.now();
+      const { data: charge, error: chargeError } = await supabase
         .from('charges')
         .insert({
           company_id: targetCompanyId,
@@ -346,12 +347,8 @@ export default function NewCharge() {
         })
         .select()
         .single();
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Tempo limite excedido ao salvar cobrança. Verifique sua conexão e tente novamente.')), 10000)
-      );
-
-      const { data: charge, error: chargeError } = await Promise.race([insertPromise, timeoutPromise]);
+      
+      console.log(`[NewCharge] INSERT durou ${(performance.now() - t0).toFixed(0)}ms`);
 
       if (chargeError) {
         throw chargeError;
@@ -447,11 +444,14 @@ export default function NewCharge() {
       navigate('/charges');
       
     } catch (error: any) {
-      console.error('Error creating charge:', error);
-      setError(error.message);
+      console.error('[NewCharge] Erro ao criar cobrança:', error);
+      const msg = error?.message || 'Erro desconhecido';
+      const details = error?.details || error?.hint || '';
+      const fullMsg = `${msg}${details ? ` (${details})` : ''}`;
+      setError(fullMsg);
       toast({
         title: "Erro ao criar cobrança",
-        description: error.message,
+        description: fullMsg,
         variant: 'destructive'
       });
     } finally {
