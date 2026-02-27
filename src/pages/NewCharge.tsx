@@ -269,12 +269,17 @@ export default function NewCharge() {
       console.log('ui.newcharge.cartao.boleto_obrigatorio:', data.boleto_linha_digitavel ? 'preenchido' : 'vazio');
     }
     
-    setIsLoading(true);
-    setLoadingStage('creating');
-    setError("");
-
     try {
+      setIsLoading(true);
+      setLoadingStage('creating');
+      setError("");
+
       let amountInCents = formatAmount(data.amount);
+      
+      // Validar que o valor é um número válido antes de inserir
+      if (isNaN(amountInCents) || amountInCents <= 0) {
+        throw new Error('Valor inválido. Verifique o campo de valor e tente novamente.');
+      }
       let feeAmount = 0;
       let feePercentage = 0;
       
@@ -301,7 +306,8 @@ export default function NewCharge() {
       // Admin pode escolher outra empresa; operador usa sua própria
       const targetCompanyId = isAdmin && selectedCompanyId ? selectedCompanyId : profile.company_id;
 
-      const { data: charge, error: chargeError } = await supabase
+      // Timeout de 10s: protege contra hang de rede
+      const insertPromise = supabase
         .from('charges')
         .insert({
           company_id: targetCompanyId,
@@ -318,8 +324,6 @@ export default function NewCharge() {
           has_boleto: data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
           has_boleto_link: requiresBoleto,
-          // Cartão simples: usa campo de vínculo automático
-          // Cartão + PIX: usa campo informativo (vínculo será manual pelo admin)
           boleto_linha_digitavel: data.payment_method === 'cartao' ? normalizedLinhaDigitavel : null,
           boleto_pix_cartao_linha_digitavel: data.payment_method === 'cartao_pix' ? normalizedLinhaDigitavel : null,
           pix_amount: data.payment_method === 'cartao_pix' ? formatAmount(data.pix_amount || '0') : null,
@@ -342,6 +346,12 @@ export default function NewCharge() {
         })
         .select()
         .single();
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Tempo limite excedido ao salvar cobrança. Verifique sua conexão e tente novamente.')), 10000)
+      );
+
+      const { data: charge, error: chargeError } = await Promise.race([insertPromise, timeoutPromise]);
 
       if (chargeError) {
         throw chargeError;
