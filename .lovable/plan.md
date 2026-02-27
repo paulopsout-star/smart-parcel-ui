@@ -1,51 +1,72 @@
 
 
-# Diagnóstico: Por que a criação de cobrança trava
+# Diagnóstico de Infraestrutura e Lógica — Criação de Cobrança
 
 ## Investigação realizada
 
-1. **Banco de dados**: A cobrança mais recente (aa7af067) foi criada com sucesso às 15:52, COM checkout_url preenchido. O INSERT funciona.
-2. **Edge Function charge-links**: Está deployada (retorna 401 sem token, comportamento esperado). Sem logs recentes — pode ter cold starts longos.
-3. **Tabelas**: 437 cobranças, 371 payment_links — volume baixo. Índices existem em company_id e user_id. RLS não deveria ser lento.
-4. **Triggers**: Nenhum trigger na tabela charges.
+1. **Postgres**: Zero erros (ERROR/FATAL/PANIC) nos logs recentes. Sem queries travadas (`pg_stat_activity` limpa). Rollback rate normal (20k rollbacks vs 3.2M commits).
+2. **Edge Function `charge-links`**: Sem logs recentes — não está sendo invocada (confirma que o fire-and-forget sequer é atingido, pois o código falha antes).
+3. **Dados do usuário admin**: `company_id = 00000000-...-000000000001`, role = `admin`. RLS permite INSERT porque `has_role(auth.uid(), 'admin')` retorna `true` — sem restrição de company_id para admins.
+4. **Cobranças recentes deste user**: Última criada em 18/fev. Todas com sucesso. INSERT funciona.
+5. **Intermitência**: O problema não é determinístico. Quando o INSERT completa em <10s, funciona. Quando leva >10s (cold connection, RLS latência), o timeout artificial mata a operação.
 
-## Causa raiz identificada
+## Causa raiz confirmada
 
-Encontrei um bug estrutural no fluxo de submissão:
+**O erro exibido ("Tempo limite excedido ao salvar cobrança") é gerado pelo frontend, não pelo banco.** A string exata está hardcoded na linha 351 de `NewCharge.tsx`:
 
-```text
-Linha 272: setIsLoading(true)   ← FORA do try
-Linha 273: setLoadingStage('creating')
-Linha 274: setError("")
-Linha 276: try {
-  ...
-Linha 447: } finally {
-Linha 448:   setIsLoading(false)  ← só roda se entrou no try
-}
+```typescript
+setTimeout(() => reject(new Error('Tempo limite excedido ao salvar cobrança...')), 10000)
 ```
 
-**`setIsLoading(true)` está FORA do `try` block (linha 272), mas `setIsLoading(false)` está DENTRO do `finally` (linha 448).** Se qualquer erro síncrono ocorrer entre as linhas 272-276, o `finally` nunca executa e o botão fica travado em "Criando cobrança..." permanentemente.
+O INSERT está dentro de um `Promise.race` com 10s de timeout. Quando o Supabase leva >10s (latência de rede, avaliação das funções RLS `has_role` + `is_admin_or_operador` + `get_user_company_id`), o timer rejeita antes da resposta real chegar.
 
-Além disso, a chamada `supabase.from('charges').insert(...).select().single()` na linha 304 pode ficar pendente indefinidamente caso haja instabilidade de rede — o `fetch` interno do Supabase JS não tem timeout nativo, e não há proteção contra isso.
+**Não há erro de banco, não há erro de RLS, não há erro de edge function.** O timeout artificial é a única causa da falha.
 
-## Mudanças em `src/pages/NewCharge.tsx`
+## Risco secundário identificado: `persistSession: false`
 
-### 1. Mover `setIsLoading(true)` para dentro do `try`
+Em `src/integrations/supabase/client.ts` (linhas 13-22):
+- Limpa **todo** `localStorage` com prefixo `sb-` no carregamento do módulo
+- `persistSession: false` impede salvar sessão
 
-Garante que `finally` SEMPRE execute quando `isLoading` é true.
+Isso significa que o token JWT vive apenas em memória. Se o `autoRefreshToken` falhar silenciosamente (ex.: aba em background por >1h), o INSERT retornará erro de autenticação. Hoje esse erro está mascarado pelo timeout.
 
-### 2. Envolver o INSERT com AbortController (10s)
+## Plano de correção (somente `src/pages/NewCharge.tsx`)
 
-Não é um "timeout cosmético" — é proteção contra hang de rede. Se o `fetch` interno do Supabase não resolver em 10s, o AbortController cancela a requisição e o catch mostra o erro. Sem isso, o `await` pode ficar pendente indefinidamente.
+### 1. Remover `Promise.race` e `timeoutPromise` (linhas 309-354)
 
-### 3. Validar `formatAmount` antes do INSERT
+Reverter para chamada direta:
+```typescript
+const { data: charge, error: chargeError } = await supabase
+  .from('charges')
+  .insert({ ... })
+  .select()
+  .single();
+```
 
-Se `data.amount` produzir NaN, rejeitar antes de enviar ao banco.
+### 2. Adicionar logging de duração para diagnóstico
+
+```typescript
+const t0 = performance.now();
+const { data: charge, error: chargeError } = await supabase...;
+console.log(`[NewCharge] INSERT durou ${(performance.now()-t0).toFixed(0)}ms`);
+```
+
+Isso revela a latência real sem mascarar erros.
+
+### 3. Melhorar catch para mostrar erro real
+
+No bloco `catch`, incluir detalhes do erro Supabase (code, details, hint):
+```typescript
+const msg = error?.message || 'Erro desconhecido';
+const details = error?.details || error?.hint || '';
+setError(`${msg}${details ? ` (${details})` : ''}`);
+```
 
 ## O que NÃO muda
 
-- Nenhum layout, cor ou componente
-- Nenhuma edge function
-- Lógica de fire-and-forget para link (já aplicada)
-- Fluxo de PIX e boleto
+- Nenhum layout, cor ou componente visual
+- Nenhuma edge function ou integração
+- Fire-and-forget do link (mantido)
+- Validação de `formatAmount` (mantida)
+- `setIsLoading` dentro do `try` (mantido)
 
