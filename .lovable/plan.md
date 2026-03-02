@@ -1,72 +1,80 @@
 
 
-# Diagnóstico de Infraestrutura e Lógica — Criação de Cobrança
+# Plano de Otimização de Performance — Histórico de Cobranças
 
-## Investigação realizada
+## Diagnóstico atual
 
-1. **Postgres**: Zero erros (ERROR/FATAL/PANIC) nos logs recentes. Sem queries travadas (`pg_stat_activity` limpa). Rollback rate normal (20k rollbacks vs 3.2M commits).
-2. **Edge Function `charge-links`**: Sem logs recentes — não está sendo invocada (confirma que o fire-and-forget sequer é atingido, pois o código falha antes).
-3. **Dados do usuário admin**: `company_id = 00000000-...-000000000001`, role = `admin`. RLS permite INSERT porque `has_role(auth.uid(), 'admin')` retorna `true` — sem restrição de company_id para admins.
-4. **Cobranças recentes deste user**: Última criada em 18/fev. Todas com sucesso. INSERT funciona.
-5. **Intermitência**: O problema não é determinístico. Quando o INSERT completa em <10s, funciona. Quando leva >10s (cold connection, RLS latência), o timeout artificial mata a operação.
+A query em `fetchCharges()` (linha 940) busca **100 registros** com 3 JOINs (companies, charge_executions, payment_splits) **sem filtro de data no banco**. Todos os filtros (status, data, documento, empresa) são aplicados **no frontend** após carregar tudo. Não há paginação real, nem cache via React Query, nem índice composto.
 
-## Causa raiz confirmada
+## Plano de correção
 
-**O erro exibido ("Tempo limite excedido ao salvar cobrança") é gerado pelo frontend, não pelo banco.** A string exata está hardcoded na linha 351 de `NewCharge.tsx`:
+### 1. Índice composto no banco (migração SQL)
 
-```typescript
-setTimeout(() => reject(new Error('Tempo limite excedido ao salvar cobrança...')), 10000)
+```sql
+CREATE INDEX IF NOT EXISTS idx_charges_company_created 
+  ON public.charges (company_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_charges_created_at_desc 
+  ON public.charges (created_at DESC);
 ```
 
-O INSERT está dentro de um `Promise.race` com 10s de timeout. Quando o Supabase leva >10s (latência de rede, avaliação das funções RLS `has_role` + `is_admin_or_operador` + `get_user_company_id`), o timer rejeita antes da resposta real chegar.
+Esses índices aceleram tanto a query filtrada por empresa (operador) quanto a query do admin (todas as empresas), ambas ordenadas por `created_at DESC`.
 
-**Não há erro de banco, não há erro de RLS, não há erro de edge function.** O timeout artificial é a única causa da falha.
+### 2. Filtro de data no banco (server-side)
 
-## Risco secundário identificado: `persistSession: false`
+Alterar `fetchCharges()` para enviar `date_from` e `date_to` como parâmetros `.gte()` / `.lte()` diretamente na query Supabase, ao invés de filtrar no frontend. Por padrão, carregar apenas o **mês corrente** (primeiro dia do mês até agora).
 
-Em `src/integrations/supabase/client.ts` (linhas 13-22):
-- Limpa **todo** `localStorage` com prefixo `sb-` no carregamento do módulo
-- `persistSession: false` impede salvar sessão
+### 3. Paginação real com "Carregar mais"
 
-Isso significa que o token JWT vive apenas em memória. Se o `autoRefreshToken` falhar silenciosamente (ex.: aba em background por >1h), o INSERT retornará erro de autenticação. Hoje esse erro está mascarado pelo timeout.
+- Implementar paginação por offset com `PAGE_SIZE = 50`.
+- Estado: `page`, `hasMore`, `loadingMore`.
+- Botão "Carregar mais" ao final da lista.
+- Query: `.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)`.
+- Contagem separada com `select('id', { count: 'exact', head: true })` para exibir total sem trazer dados.
 
-## Plano de correção (somente `src/pages/NewCharge.tsx`)
+### 4. React Query com staleTime
 
-### 1. Remover `Promise.race` e `timeoutPromise` (linhas 309-354)
+Substituir o `useState` + `useEffect` manual por `useQuery` do TanStack:
+- `queryKey`: `['charges', { dateFrom, dateTo, status, paymentMethod, companyId, page }]`
+- `staleTime: 60_000` (60s — evita refetch ao trocar aba)
+- `keepPreviousData: true` (mostra dados anteriores enquanto carrega nova página)
+- Remover `fetchCharges()` manual e os estados `loading`/`charges`/`filteredCharges`.
 
-Reverter para chamada direta:
-```typescript
-const { data: charge, error: chargeError } = await supabase
-  .from('charges')
-  .insert({ ... })
-  .select()
-  .single();
-```
+### 5. Skeleton loading melhorado
 
-### 2. Adicionar logging de duração para diagnóstico
+O skeleton atual já existe (linhas 1694+), mas será aprimorado para cobrir o estado de "carregar mais" também — um skeleton menor (3 linhas) aparece no final da tabela durante paginação.
 
-```typescript
-const t0 = performance.now();
-const { data: charge, error: chargeError } = await supabase...;
-console.log(`[NewCharge] INSERT durou ${(performance.now()-t0).toFixed(0)}ms`);
-```
+### 6. Filtros server-side
 
-Isso revela a latência real sem mascarar erros.
+Mover **todos** os filtros para a query Supabase:
+- `status` → `.eq('status', value)`
+- `payment_method` → `.eq('payment_method', value)`
+- `date_from/date_to` → `.gte('created_at', ...)` / `.lte('created_at', ...)`
+- `payer_document` → `.ilike('payer_document', '%value%')`
+- `company_id` → `.eq('company_id', value)`
 
-### 3. Melhorar catch para mostrar erro real
+Remover `applyFilters()` e `filteredCharges` — tudo vem filtrado do banco.
 
-No bloco `catch`, incluir detalhes do erro Supabase (code, details, hint):
-```typescript
-const msg = error?.message || 'Erro desconhecido';
-const details = error?.details || error?.hint || '';
-setError(`${msg}${details ? ` (${details})` : ''}`);
-```
+## Arquivos afetados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/pages/ChargeHistory.tsx` | Refatorar para React Query, paginação, filtros server-side, skeleton |
+| Migração SQL | Criar índices compostos |
 
 ## O que NÃO muda
 
-- Nenhum layout, cor ou componente visual
-- Nenhuma edge function ou integração
-- Fire-and-forget do link (mantido)
-- Validação de `formatAmount` (mantida)
-- `setIsLoading` dentro do `try` (mantido)
+- Layout, cores, componentes visuais (mesma tabela, mesmos badges)
+- Edge functions e integrações
+- Lógica de sincronização automática (`syncPaymentStatuses`)
+- Lógica de export CSV/Excel (opera sobre dados já carregados)
+- Sheet de detalhes da cobrança
+
+## Resultado esperado
+
+- Carregamento inicial < 500ms (50 registros com índice + filtro de data)
+- Skeleton visível durante loading
+- Sem refetch ao trocar aba (staleTime 60s)
+- Paginação real — "Carregar mais" para ver registros anteriores
+- Filtros executados no banco, não no frontend
 
