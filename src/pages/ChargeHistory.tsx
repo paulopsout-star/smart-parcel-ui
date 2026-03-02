@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -92,14 +93,9 @@ interface Charge {
   splits?: PaymentSplitInfo[];
 }
 
-interface ChargeFilters {
-  status: string;
-  payment_method: string;
-  date_from: Date | undefined;
-  date_to: Date | undefined;
-  payer_document: string;
-  company_id: string;
-}
+// ChargeFilters is now imported from the hook
+import { useChargesQuery, DEFAULT_FILTERS, PAGE_SIZE, deduplicateSplits, CHARGES_SELECT } from '@/hooks/useChargesQuery';
+import type { ChargeFilters } from '@/hooks/useChargesQuery';
 
 // Helper functions
 const getInitials = (name: string) => {
@@ -705,9 +701,7 @@ const ExecutionsDialogContent = ({
 
 export default function ChargeHistory() {
   const { isOperador, isAdmin, profile } = useAuth();
-  const [charges, setCharges] = useState<Charge[]>([]);
-  const [filteredCharges, setFilteredCharges] = useState<Charge[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
   const [executionsDialog, setExecutionsDialog] = useState<{ open: boolean; chargeId: string; chargeName: string }>({
@@ -738,16 +732,38 @@ export default function ChargeHistory() {
    const [newPaymentMethod, setNewPaymentMethod] = useState('');
    const [savingPaymentMethod, setSavingPaymentMethod] = useState(false);
   
-  // Filter state
-  const [filters, setFilters] = useState<ChargeFilters>({
-    status: 'all',
-    payment_method: 'all',
-    date_from: undefined,
-    date_to: undefined,
-    payer_document: '',
-    company_id: 'all'
-  });
+  // Filter state — default = mês corrente
+  const [filters, setFilters] = useState<ChargeFilters>(DEFAULT_FILTERS);
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Pagination
+  const [page, setPage] = useState(0);
+  
+  // React Query
+  const { data: queryData, isLoading: loading, isFetching } = useChargesQuery(filters, page);
+  const totalCount = queryData?.totalCount ?? 0;
+  const hasMore = queryData?.hasMore ?? false;
+  
+  // Accumulate pages for "load more" pattern
+  const [accumulatedCharges, setAccumulatedCharges] = useState<Charge[]>([]);
+  
+  useEffect(() => {
+    if (queryData?.charges) {
+      if (page === 0) {
+        setAccumulatedCharges(queryData.charges as Charge[]);
+      } else {
+        setAccumulatedCharges(prev => {
+          const existingIds = new Set(prev.map(c => c.id));
+          const newCharges = (queryData.charges as Charge[]).filter(c => !existingIds.has(c.id));
+          return [...prev, ...newCharges];
+        });
+      }
+    }
+  }, [queryData, page]);
+  
+  // For backward compat: filteredCharges = accumulated charges (filtering is server-side now)
+  const charges = accumulatedCharges;
+  const filteredCharges = accumulatedCharges;
   
   // Checkout modal state
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -780,86 +796,10 @@ export default function ChargeHistory() {
     }
   };
 
-  // Função para buscar apenas cobranças específicas e fazer merge no estado (sem setLoading)
-  const refreshSpecificCharges = async (chargeIds: string[]) => {
-    if (chargeIds.length === 0) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('charges')
-        .select(`
-          *,
-          company:companies(id, name),
-          executions:charge_executions(
-            id,
-            execution_date,
-            status,
-            payment_link_url
-          ),
-          splits:payment_splits(
-            id,
-            method,
-            amount_cents,
-            display_amount_cents,
-            status,
-            pix_paid_at,
-            pre_payment_key,
-            transaction_id,
-            processed_at,
-            order_index,
-            installments,
-            created_at
-          )
-        `)
-        .in('id', chargeIds);
-
-      if (error || !data || data.length === 0) {
-        console.error('[ChargeHistory] Erro ao buscar charges específicas:', error);
-        return;
-      }
-
-      // Deduplicate splits by method (keep the most recent)
-      const processedData = data.map(charge => {
-        if (charge.splits && charge.splits.length > 0) {
-          const splitsByMethod = new Map<string, any>();
-          charge.splits.forEach((split: any) => {
-            const existing = splitsByMethod.get(split.method);
-            if (!existing || new Date(split.created_at) > new Date(existing.created_at)) {
-              splitsByMethod.set(split.method, split);
-            }
-          });
-          charge.splits = Array.from(splitsByMethod.values()).sort((a, b) => a.order_index - b.order_index);
-        }
-        return charge;
-      });
-
-      // MERGE: atualizar apenas os registros modificados no estado
-      setCharges(prevCharges => {
-        const chargeMap = new Map(prevCharges.map(c => [c.id, c]));
-        processedData.forEach(updated => {
-          chargeMap.set(updated.id, updated as Charge);
-        });
-        return Array.from(chargeMap.values())
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      });
-
-      // Atualizar também a lista filtrada
-      setFilteredCharges(prev => {
-        const chargeMap = new Map(prev.map(c => [c.id, c]));
-        processedData.forEach(updated => {
-          if (chargeMap.has(updated.id)) {
-            chargeMap.set(updated.id, updated as Charge);
-          }
-        });
-        return Array.from(chargeMap.values())
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      });
-
-      console.log(`[ChargeHistory] Merge concluído: ${processedData.length} cobranças atualizadas`);
-    } catch (err) {
-      console.error('[ChargeHistory] Erro no refreshSpecificCharges:', err);
-    }
-  };
+  // Invalidar cache do React Query (substitui refreshSpecificCharges)
+  const invalidateCharges = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['charges'] });
+  }, [queryClient]);
 
   // Função de sincronização com API (manual ou automática) - SEM REFRESH DE TELA
   const syncPaymentStatuses = useCallback(async (isAutoSync = false) => {
@@ -894,7 +834,7 @@ export default function ChargeHistory() {
 
       // Se houve atualizações, buscar APENAS esses registros (sem setLoading)
       if (updatedChargeIds.size > 0) {
-        await refreshSpecificCharges(Array.from(updatedChargeIds));
+        invalidateCharges();
 
         if (!isAutoSync) {
           toast({
@@ -924,9 +864,9 @@ export default function ChargeHistory() {
       }
     } finally {
       setSyncing(false);
-      // NÃO chama fetchCharges() - apenas atualiza registros específicos!
+      // Invalidação via React Query (sem reload completo)
     }
-  }, []);
+  }, [invalidateCharges]);
 
   // Verificar se há cobranças pendentes que precisam de sincronização
   const hasPendingCharges = useCallback(() => {
@@ -934,151 +874,14 @@ export default function ChargeHistory() {
     return charges.some(c => pendingStatuses.includes(c.status));
   }, [charges]);
 
-  const fetchCharges = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('charges')
-        .select(`
-          id,
-          payer_name,
-          payer_email,
-          payer_phone,
-          payer_document,
-          amount,
-          description,
-          status,
-          recurrence_type,
-          has_boleto_link,
-          created_at,
-          next_charge_date,
-          checkout_url,
-          checkout_link_id,
-          payment_method,
-          pix_amount,
-          card_amount,
-          fee_amount,
-          fee_percentage,
-          pre_payment_key,
-          boleto_linha_digitavel,
-          boleto_admin_linha_digitavel,
-          creditor_document,
-          creditor_name,
-          company_id,
-          metadata,
-          company:companies(id, name),
-          executions:charge_executions(
-            id,
-            execution_date,
-            status,
-            payment_link_url
-          ),
-          splits:payment_splits(
-            id,
-            method,
-            amount_cents,
-            display_amount_cents,
-            status,
-            pix_paid_at,
-            pre_payment_key,
-            transaction_id,
-            processed_at,
-            order_index,
-            installments,
-            created_at
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-      
-      // Deduplicate splits by method (keep the most recent)
-      const processedData = (data || []).map(charge => {
-        if (charge.splits && charge.splits.length > 0) {
-          const splitsByMethod = new Map<string, any>();
-          charge.splits.forEach((split: any) => {
-            const existing = splitsByMethod.get(split.method);
-            if (!existing || new Date(split.created_at) > new Date(existing.created_at)) {
-              splitsByMethod.set(split.method, split);
-            }
-          });
-          charge.splits = Array.from(splitsByMethod.values()).sort((a, b) => a.order_index - b.order_index);
-        }
-        return charge;
-      });
-      
-      setCharges(processedData as Charge[]);
-      setFilteredCharges(processedData as Charge[]);
-    } catch (error: any) {
-      toast({
-        title: "Erro ao carregar cobranças",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const applyFilters = () => {
-    let filtered = [...charges];
-
-    if (filters.status !== 'all') {
-      filtered = filtered.filter(charge => charge.status === filters.status);
-    }
-
-    if (filters.payment_method !== 'all') {
-      filtered = filtered.filter(charge => charge.payment_method === filters.payment_method);
-    }
-
-    if (filters.date_from) {
-      filtered = filtered.filter(charge => {
-        const chargeDate = new Date(charge.created_at);
-        return chargeDate >= filters.date_from!;
-      });
-    }
-
-    if (filters.date_to) {
-      filtered = filtered.filter(charge => {
-        const chargeDate = new Date(charge.created_at);
-        const dateTo = new Date(filters.date_to!);
-        dateTo.setHours(23, 59, 59, 999);
-        return chargeDate <= dateTo;
-      });
-    }
-
-    if (filters.payer_document) {
-      const searchTerm = filters.payer_document.replace(/\D/g, '');
-      filtered = filtered.filter(charge => 
-        charge.payer_document?.replace(/\D/g, '').includes(searchTerm)
-      );
-    }
-
-    // Company filter (admin only)
-    if (isAdmin && filters.company_id !== 'all') {
-      filtered = filtered.filter(charge => charge.company_id === filters.company_id);
-    }
-
-    setFilteredCharges(filtered);
-  };
-
   const clearFilters = () => {
-    setFilters({
-      status: 'all',
-      payment_method: 'all',
-      date_from: undefined,
-      date_to: undefined,
-      payer_document: '',
-      company_id: 'all'
-    });
-    setFilteredCharges(charges);
+    setFilters(DEFAULT_FILTERS);
+    setPage(0);
   };
 
   const hasActiveFilters = () => {
     return filters.status !== 'all' || 
            filters.payment_method !== 'all' || 
-           filters.date_from !== undefined || 
            filters.date_to !== undefined || 
            filters.payer_document !== '' ||
            (isAdmin && filters.company_id !== 'all');
@@ -1097,7 +900,7 @@ export default function ChargeHistory() {
         description: "A cobrança foi processada com sucesso",
       });
 
-      fetchCharges();
+      invalidateCharges();
     } catch (error: any) {
       toast({
         title: "Erro ao processar cobrança",
@@ -1143,7 +946,7 @@ export default function ChargeHistory() {
           })
           .eq('id', charge.id);
           
-        fetchCharges();
+        invalidateCharges();
         return;
       }
 
@@ -1194,7 +997,7 @@ export default function ChargeHistory() {
           })
           .eq('id', charge.id);
           
-        fetchCharges(); // Recarregar lista
+        invalidateCharges(); // Recarregar lista
       }
     } catch (err) {
       console.error('Erro ao tentar vincular boleto:', err);
@@ -1272,7 +1075,7 @@ export default function ChargeHistory() {
 
       setAdminLinhaDigitavel('');
       setSelectedCharge(null);
-      await fetchCharges();
+      await invalidateCharges();
     } catch (err: any) {
       console.error('Erro ao vincular boleto:', err);
       const isTimeout = err?.message === 'TIMEOUT';
@@ -1298,11 +1101,7 @@ export default function ChargeHistory() {
         const newLink = await generateLink(charge.id);
         if (newLink?.url) {
           // Atualizar o charge localmente para refletir o novo link
-          setCharges(prev => prev.map(c => 
-            c.id === charge.id 
-              ? { ...c, checkout_url: newLink.url, checkout_link_id: newLink.linkId }
-              : c
-          ));
+          invalidateCharges();
           const event = new CustomEvent('openCheckoutModal', {
             detail: {
               checkoutUrl: newLink.url,
@@ -1379,7 +1178,6 @@ export default function ChargeHistory() {
   };
 
   useEffect(() => {
-    fetchCharges();
     fetchCompanies();
     
     const handleOpenCheckoutModal = (event: CustomEvent) => {
@@ -1416,10 +1214,10 @@ export default function ChargeHistory() {
       }
     };
   }, [hasPendingCharges, syncing, syncPaymentStatuses]);
-
+  // Reset page when filters change
   useEffect(() => {
-    applyFilters();
-  }, [filters, charges]);
+    setPage(0);
+  }, [filters]);
 
   // Export helper functions
   const getPaymentMethodLabel = (method: string | undefined) => {
@@ -1686,8 +1484,16 @@ export default function ChargeHistory() {
         )}
 
         {/* Results count */}
-        <div className="text-sm text-ds-text-muted">
-          {loading ? 'Carregando...' : `${filteredCharges.length} cobrança(s) encontrada(s)`}
+        <div className="text-sm text-ds-text-muted flex items-center gap-2">
+          {loading ? 'Carregando...' : (
+            <>
+              {`${filteredCharges.length} cobrança(s) exibida(s)`}
+              {totalCount > 0 && ` de ${totalCount} no total`}
+              {isFetching && !loading && (
+                <Loader2 className="h-3 w-3 animate-spin inline" />
+              )}
+            </>
+          )}
         </div>
 
         {/* Charges List */}
@@ -1735,31 +1541,53 @@ export default function ChargeHistory() {
             </CardContent>
           </Card>
         ) : (
-          <Card className="overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
-                  <TableHead className="font-semibold">Cliente</TableHead>
-                  <TableHead className="font-semibold hidden md:table-cell">CPF/CNPJ</TableHead>
-                  <TableHead className="font-semibold text-right">Valor</TableHead>
-                  <TableHead className="font-semibold hidden sm:table-cell">Pagamento</TableHead>
-                  <TableHead className="font-semibold">Status</TableHead>
-                  <TableHead className="font-semibold hidden lg:table-cell">Data</TableHead>
-                  <TableHead className="font-semibold text-right">Ação</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCharges.map((charge) => (
-                  <ChargeListRow 
-                    key={charge.id} 
-                    charge={charge} 
-                    onViewDetails={() => { setSelectedCharge(charge); setEditingStatus(false); setEditingPaymentMethod(false); }}
-                    isAdmin={isAdmin}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+          <>
+            <Card className="overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-ds-bg-surface-alt hover:bg-ds-bg-surface-alt">
+                    <TableHead className="font-semibold">Cliente</TableHead>
+                    <TableHead className="font-semibold hidden md:table-cell">CPF/CNPJ</TableHead>
+                    <TableHead className="font-semibold text-right">Valor</TableHead>
+                    <TableHead className="font-semibold hidden sm:table-cell">Pagamento</TableHead>
+                    <TableHead className="font-semibold">Status</TableHead>
+                    <TableHead className="font-semibold hidden lg:table-cell">Data</TableHead>
+                    <TableHead className="font-semibold text-right">Ação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredCharges.map((charge) => (
+                    <ChargeListRow 
+                      key={charge.id} 
+                      charge={charge} 
+                      onViewDetails={() => { setSelectedCharge(charge); setEditingStatus(false); setEditingPaymentMethod(false); }}
+                      isAdmin={isAdmin}
+                    />
+                  ))}
+                  {isFetching && !loading && (
+                    <>
+                      <ChargeListSkeleton />
+                      <ChargeListSkeleton />
+                      <ChargeListSkeleton />
+                    </>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+            
+            {/* Carregar mais */}
+            {hasMore && !isFetching && (
+              <div className="flex justify-center pt-4">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setPage(p => p + 1)}
+                  className="gap-2"
+                >
+                  Carregar mais
+                </Button>
+              </div>
+            )}
+          </>
         )}
 
         {/* Charge Details Sheet */}
@@ -1856,17 +1684,7 @@ export default function ChargeHistory() {
                                   const newCompany = companies.find(c => c.id === newCompanyId);
                                   
                                   // Atualizar estado local
-                                  setCharges(prev => prev.map(c => 
-                                    c.id === selectedCharge.id 
-                                      ? { ...c, company_id: newCompanyId, company: newCompany }
-                                      : c
-                                  ));
-                                  
-                                  setFilteredCharges(prev => prev.map(c => 
-                                    c.id === selectedCharge.id 
-                                      ? { ...c, company_id: newCompanyId, company: newCompany }
-                                      : c
-                                  ));
+                                   invalidateCharges();
                                   
                                   // Atualizar o charge selecionado
                                   setSelectedCharge(prev => prev ? { ...prev, company_id: newCompanyId, company: newCompany } : null);
@@ -1969,7 +1787,7 @@ export default function ChargeHistory() {
                               if (error) throw error;
                               const lockedAt = new Date().toISOString();
                               setSelectedCharge({ ...selectedCharge, status: newManualStatus, status_locked_at: lockedAt });
-                              setCharges(prev => prev.map(c => c.id === selectedCharge.id ? { ...c, status: newManualStatus, status_locked_at: lockedAt } : c));
+                              invalidateCharges();
                               setEditingStatus(false);
                               toast({ title: 'Status atualizado', description: 'Status alterado manualmente com sucesso.' });
                             } catch (err: any) {
@@ -2091,7 +1909,7 @@ export default function ChargeHistory() {
                                  card_amount: newCardAmount,
                                };
                                setSelectedCharge(updated);
-                               setCharges(prev => prev.map(c => c.id === selectedCharge.id ? { ...c, ...updated } : c));
+                               invalidateCharges();
                                setEditingPaymentMethod(false);
                                toast({ title: 'Tipo de pagamento atualizado', description: `Método alterado para ${newPaymentMethod === 'cartao' ? 'Cartão' : newPaymentMethod === 'pix' ? 'PIX' : 'Cartão + PIX'}.` });
                              } catch (err: any) {
