@@ -153,6 +153,7 @@ export default function NewCharge() {
     watch,
     control,
     setValue,
+    getValues,
     formState: { errors }
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
