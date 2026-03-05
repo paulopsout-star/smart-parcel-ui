@@ -153,6 +153,7 @@ export default function NewCharge() {
     watch,
     control,
     setValue,
+    getValues,
     formState: { errors }
   } = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -247,11 +248,63 @@ export default function NewCharge() {
     return linha.replace(/\D/g, '');
   };
 
+  const onValidationError = (errors: any) => {
+    const formValues = getValues();
+    console.warn('❌ [NewCharge] Validação Zod FALHOU. Campos inválidos:', Object.keys(errors));
+    Object.entries(errors).forEach(([field, err]: [string, any]) => {
+      console.warn(`  ❌ ${field}:`, {
+        mensagem: err?.message,
+        tipo: err?.type,
+        valor_atual: formValues[field as keyof FormData],
+      });
+    });
+    console.warn('❌ [NewCharge] Estado completo do form:', {
+      payment_method: formValues.payment_method,
+      amount: formValues.amount,
+      pix_amount: formValues.pix_amount,
+      card_amount: formValues.card_amount,
+      boleto_linha_digitavel: formValues.boleto_linha_digitavel
+        ? `${formValues.boleto_linha_digitavel.replace(/\D/g, '').length} dígitos (${formValues.boleto_linha_digitavel.substring(0, 8)}...)`
+        : 'vazio/undefined',
+      has_boleto: formValues.has_boleto,
+    });
+
+    const camposComErro = Object.entries(errors)
+      .map(([field, err]: [string, any]) => `• ${field}: ${err?.message}`)
+      .join('\n');
+
+    toast({
+      title: 'Erro de validação',
+      description: `Corrija os campos abaixo:\n${camposComErro}`,
+      variant: 'destructive',
+    });
+  };
+
   const onSubmit = async (data: FormData) => {
     console.log('✅ Iniciando criação de cobrança:', {
       valor: data.amount,
       pagador: data.payer_name
     });
+
+    // Log detalhado para cobranças combinadas
+    if (data.payment_method === 'cartao_pix') {
+      const pixCents = formatAmount(data.pix_amount || '0');
+      const cardCents = formatAmount(data.card_amount || '0');
+      const totalCents = formatAmount(data.amount);
+      console.log('🔀 [NewCharge] cartao_pix — diagnóstico split:', {
+        pix_amount_raw: data.pix_amount,
+        card_amount_raw: data.card_amount,
+        amount_raw: data.amount,
+        pix_cents: pixCents,
+        card_cents: cardCents,
+        total_cents: totalCents,
+        soma_split: pixCents + cardCents,
+        split_bate: (pixCents + cardCents) === totalCents,
+        boleto_linha_digitavel: data.boleto_linha_digitavel
+          ? `${data.boleto_linha_digitavel.replace(/\D/g, '').length} dígitos`
+          : 'vazio/undefined',
+      });
+    }
     
     if (!profile) return;
     
@@ -351,10 +404,24 @@ export default function NewCharge() {
       console.log(`[NewCharge] INSERT durou ${(performance.now() - t0).toFixed(0)}ms`);
 
       if (chargeError) {
+        console.error('❌ [NewCharge] Erro no INSERT:', chargeError);
         throw chargeError;
       }
 
       console.log('[NewCharge] Cobrança criada com sucesso no banco:', charge.id);
+
+      // Log campos combinados salvos no DB
+      if (data.payment_method === 'cartao_pix') {
+        console.log('🔀 [NewCharge] cartao_pix — campos salvos no DB:', {
+          charge_id: charge.id,
+          pix_amount: charge.pix_amount,
+          card_amount: charge.card_amount,
+          boleto_pix_cartao_linha_digitavel: charge.boleto_pix_cartao_linha_digitavel
+            ? `${charge.boleto_pix_cartao_linha_digitavel.length} dígitos`
+            : 'NULL',
+          payment_method: charge.payment_method,
+        });
+      }
 
       if (data.payment_method === 'pix') {
         // Sempre usar domínio de produção fixo - NUNCA usar window.location.origin
@@ -484,7 +551,7 @@ export default function NewCharge() {
           </Alert>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit, onValidationError)} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Form */}
             <div className="lg:col-span-2 space-y-6">
