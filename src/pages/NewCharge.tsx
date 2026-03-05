@@ -247,11 +247,63 @@ export default function NewCharge() {
     return linha.replace(/\D/g, '');
   };
 
+  const onValidationError = (errors: any) => {
+    const formValues = getValues();
+    console.warn('❌ [NewCharge] Validação Zod FALHOU. Campos inválidos:', Object.keys(errors));
+    Object.entries(errors).forEach(([field, err]: [string, any]) => {
+      console.warn(`  ❌ ${field}:`, {
+        mensagem: err?.message,
+        tipo: err?.type,
+        valor_atual: formValues[field as keyof FormData],
+      });
+    });
+    console.warn('❌ [NewCharge] Estado completo do form:', {
+      payment_method: formValues.payment_method,
+      amount: formValues.amount,
+      pix_amount: formValues.pix_amount,
+      card_amount: formValues.card_amount,
+      boleto_linha_digitavel: formValues.boleto_linha_digitavel
+        ? `${formValues.boleto_linha_digitavel.replace(/\D/g, '').length} dígitos (${formValues.boleto_linha_digitavel.substring(0, 8)}...)`
+        : 'vazio/undefined',
+      has_boleto: formValues.has_boleto,
+    });
+
+    const camposComErro = Object.entries(errors)
+      .map(([field, err]: [string, any]) => `• ${field}: ${err?.message}`)
+      .join('\n');
+
+    toast({
+      title: 'Erro de validação',
+      description: `Corrija os campos abaixo:\n${camposComErro}`,
+      variant: 'destructive',
+    });
+  };
+
   const onSubmit = async (data: FormData) => {
     console.log('✅ Iniciando criação de cobrança:', {
       valor: data.amount,
       pagador: data.payer_name
     });
+
+    // Log detalhado para cobranças combinadas
+    if (data.payment_method === 'cartao_pix') {
+      const pixCents = formatAmount(data.pix_amount || '0');
+      const cardCents = formatAmount(data.card_amount || '0');
+      const totalCents = formatAmount(data.amount);
+      console.log('🔀 [NewCharge] cartao_pix — diagnóstico split:', {
+        pix_amount_raw: data.pix_amount,
+        card_amount_raw: data.card_amount,
+        amount_raw: data.amount,
+        pix_cents: pixCents,
+        card_cents: cardCents,
+        total_cents: totalCents,
+        soma_split: pixCents + cardCents,
+        split_bate: (pixCents + cardCents) === totalCents,
+        boleto_linha_digitavel: data.boleto_linha_digitavel
+          ? `${data.boleto_linha_digitavel.replace(/\D/g, '').length} dígitos`
+          : 'vazio/undefined',
+      });
+    }
     
     if (!profile) return;
     
