@@ -359,9 +359,11 @@ export default function NewCharge() {
       // Admin pode escolher outra empresa; operador usa sua própria
       const targetCompanyId = isAdmin && selectedCompanyId ? selectedCompanyId : profile.company_id;
 
-      // Chamada direta sem timeout artificial — latência real será logada
+      // INSERT com timeout de segurança (15s) para evitar loading infinito
       const t0 = performance.now();
-      const { data: charge, error: chargeError } = await supabase
+      console.log('[NewCharge] ⏳ Iniciando INSERT...', { company_id: targetCompanyId, payment_method: data.payment_method });
+
+      const insertPromise = supabase
         .from('charges')
         .insert({
           company_id: targetCompanyId,
@@ -400,8 +402,33 @@ export default function NewCharge() {
         })
         .select()
         .single();
-      
-      console.log(`[NewCharge] INSERT durou ${(performance.now() - t0).toFixed(0)}ms`);
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('TIMEOUT_INSERT')), 15000)
+      );
+
+      let charge: any;
+      let chargeError: any;
+
+      try {
+        const result = await Promise.race([insertPromise, timeoutPromise]);
+        charge = (result as any).data;
+        chargeError = (result as any).error;
+      } catch (raceErr: any) {
+        if (raceErr?.message === 'TIMEOUT_INSERT') {
+          console.error(`❌ [NewCharge] INSERT TIMEOUT após 15s — company_id=${targetCompanyId}`);
+          toast({
+            title: "Tempo esgotado",
+            description: "A cobrança pode ter sido criada. Verifique o histórico antes de tentar novamente.",
+            variant: "destructive",
+          });
+          navigate('/charges');
+          return;
+        }
+        throw raceErr;
+      }
+
+      console.log(`[NewCharge] ✅ INSERT concluído em ${(performance.now() - t0).toFixed(0)}ms`);
 
       if (chargeError) {
         console.error('❌ [NewCharge] Erro no INSERT:', chargeError);
