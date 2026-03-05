@@ -553,7 +553,7 @@ export default function NewCharge() {
     }
   };
 
-  if (authLoading || checkingPayoutAccount) {
+  if (authLoading) {
     return (
       <DashboardShell>
         <div className="flex items-center justify-center min-h-[400px]">
