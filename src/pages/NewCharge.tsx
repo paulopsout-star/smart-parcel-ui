@@ -403,10 +403,24 @@ export default function NewCharge() {
       console.log(`[NewCharge] INSERT durou ${(performance.now() - t0).toFixed(0)}ms`);
 
       if (chargeError) {
+        console.error('❌ [NewCharge] Erro no INSERT:', chargeError);
         throw chargeError;
       }
 
       console.log('[NewCharge] Cobrança criada com sucesso no banco:', charge.id);
+
+      // Log campos combinados salvos no DB
+      if (data.payment_method === 'cartao_pix') {
+        console.log('🔀 [NewCharge] cartao_pix — campos salvos no DB:', {
+          charge_id: charge.id,
+          pix_amount: charge.pix_amount,
+          card_amount: charge.card_amount,
+          boleto_pix_cartao_linha_digitavel: charge.boleto_pix_cartao_linha_digitavel
+            ? `${charge.boleto_pix_cartao_linha_digitavel.length} dígitos`
+            : 'NULL',
+          payment_method: charge.payment_method,
+        });
+      }
 
       if (data.payment_method === 'pix') {
         // Sempre usar domínio de produção fixo - NUNCA usar window.location.origin
