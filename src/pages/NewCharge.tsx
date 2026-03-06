@@ -334,12 +334,15 @@ export default function NewCharge() {
     
     if (!profile) return;
     
+    setIsLoading(true);
+    
     if (!isSettingsValid) {
       toast({
         title: 'Configurações da empresa ausentes',
         description: 'Atualize a página e tente novamente. Se o problema persistir, entre em contato com o suporte.',
         variant: 'destructive'
       });
+      setIsLoading(false);
       return;
     }
     
