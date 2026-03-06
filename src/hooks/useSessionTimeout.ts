@@ -4,14 +4,15 @@ import { toast } from '@/hooks/use-toast';
 
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutos
 const WARNING_BEFORE = 1 * 60 * 1000; // Aviso 1 minuto antes
+const THROTTLE_MS = 30_000; // Só resetar timer a cada 30s
 
 export function useSessionTimeout() {
   const { signOut, user } = useAuth();
   const timeoutRef = useRef<NodeJS.Timeout>();
   const warningRef = useRef<NodeJS.Timeout>();
+  const lastResetRef = useRef<number>(0);
 
   const forceLocalLogout = useCallback(async () => {
-    // Limpar TODOS os dados do Supabase no localStorage antes de qualquer coisa
     Object.keys(localStorage)
       .filter(k => k.startsWith('sb-'))
       .forEach(k => localStorage.removeItem(k));
@@ -27,7 +28,6 @@ export function useSessionTimeout() {
       description: "Você foi desconectado por inatividade.",
     });
 
-    // Hard redirect para evitar estado stale
     window.location.href = '/login';
   }, [signOut]);
 
@@ -37,7 +37,6 @@ export function useSessionTimeout() {
 
     if (!user) return;
 
-    // Timer de aviso (4 minutos)
     warningRef.current = setTimeout(() => {
       toast({
         title: "⚠️ Sessão expirando",
@@ -46,7 +45,6 @@ export function useSessionTimeout() {
       });
     }, INACTIVITY_TIMEOUT - WARNING_BEFORE);
 
-    // Timer de logout (5 minutos)
     timeoutRef.current = setTimeout(() => {
       forceLocalLogout();
     }, INACTIVITY_TIMEOUT);
@@ -56,7 +54,12 @@ export function useSessionTimeout() {
     if (!user) return;
 
     const events = ['mousedown', 'keydown', 'mousemove', 'touchstart', 'scroll'];
-    const handleActivity = () => resetTimer();
+    const handleActivity = () => {
+      const now = Date.now();
+      if (now - lastResetRef.current < THROTTLE_MS) return;
+      lastResetRef.current = now;
+      resetTimer();
+    };
 
     events.forEach(event => document.addEventListener(event, handleActivity));
     resetTimer();

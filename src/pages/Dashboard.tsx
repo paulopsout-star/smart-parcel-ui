@@ -50,112 +50,97 @@ export default function Dashboard() {
   const [showSimulatorModal, setShowSimulatorModal] = useState(false);
   const [company, setCompany] = useState<Company | null>(null);
 
-  useEffect(() => {
-    if (profile?.company_id) {
-      loadDashboardStats();
-      loadCompany();
-    }
-  }, [profile?.company_id]);
-
-  const loadCompany = async () => {
-    if (!profile?.company_id) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('companies')
-        .select('id, name')
-        .eq('id', profile.company_id)
-        .single();
-
-      if (!error && data) {
-        setCompany(data);
-      }
-    } catch (error) {
-      console.error('Error loading company:', error);
-    }
-  };
-
   const now = new Date();
   const monthTitle = now.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
     .replace(/^./, (c) => c.toUpperCase());
 
-  const loadDashboardStats = async () => {
+  useEffect(() => {
     if (!profile?.company_id) return;
-    
+
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
 
-    try {
-      // Buscar cobranças do mês atual
-      const { data: charges, error: chargesError } = await supabase
-        .from('charges')
-        .select('id, status, amount, created_at')
-        .gte('created_at', startOfMonth)
-        .lte('created_at', endOfMonth);
+    const loadAll = async () => {
+      try {
+        const [chargesRes, splitsRes, companyRes] = await Promise.all([
+          supabase
+            .from('charges')
+            .select('id, status, amount, created_at')
+            .gte('created_at', startOfMonth)
+            .lte('created_at', endOfMonth),
+          supabase
+            .from('payment_splits')
+            .select('charge_id, method, status, amount_cents')
+            .not('charge_id', 'is', null)
+            .gte('created_at', startOfMonth)
+            .lte('created_at', endOfMonth),
+          supabase
+            .from('companies')
+            .select('id, name')
+            .eq('id', profile.company_id)
+            .single(),
+        ]);
 
-      if (chargesError) {
-        console.error('Error loading charges:', chargesError);
-        return;
+        if (chargesRes.error) {
+          console.error('Error loading charges:', chargesRes.error);
+        }
+        if (splitsRes.error) {
+          console.error('Error loading splits:', splitsRes.error);
+        }
+
+        const charges = chargesRes.data || [];
+        const splits = splitsRes.data || [];
+
+        if (!companyRes.error && companyRes.data) {
+          setCompany(companyRes.data);
+        }
+
+        const totalCharges = charges.length;
+        const activeCharges = charges.filter(c => c.status === 'pending' || c.status === 'processing').length;
+        const completedCharges = charges.filter(c => c.status === 'completed').length;
+        const totalAmount = charges.reduce((sum, c) => sum + c.amount, 0);
+        const completedAmount = charges
+          .filter(c => c.status === 'completed')
+          .reduce((sum, c) => sum + c.amount, 0);
+
+        const chargeGroups = splits.reduce((acc, split) => {
+          const chargeId = split.charge_id;
+          if (!chargeId) return acc;
+          if (!acc[chargeId]) acc[chargeId] = [];
+          acc[chargeId].push(split);
+          return acc;
+        }, {} as Record<string, typeof splits>);
+
+        const combinedPending = Object.values(chargeGroups).filter(splitGroup => {
+          if (!splitGroup || splitGroup.length <= 1) return false;
+          const hasConcluded = splitGroup.some(s => s.status === 'concluded');
+          const hasPending = splitGroup.some(s => s.status === 'pending');
+          return hasConcluded && hasPending;
+        });
+
+        const combinedPendingCount = combinedPending.length;
+        const combinedPaidAmount = combinedPending
+          .flatMap(splitGroup => (splitGroup || []).filter(s => s.status === 'concluded'))
+          .reduce((sum, s) => sum + (s.amount_cents || 0), 0);
+
+        setStats({
+          totalCharges,
+          activeCharges,
+          completedCharges,
+          totalAmount,
+          completedAmount,
+          combinedPendingCount,
+          combinedPaidAmount,
+        });
+      } catch (error) {
+        console.error('Error loading dashboard:', error);
+      } finally {
+        setLoading(false);
       }
+    };
 
-      // Buscar payment_splits do mês atual
-      const { data: splits, error: splitsError } = await supabase
-        .from('payment_splits')
-        .select('charge_id, method, status, amount_cents')
-        .not('charge_id', 'is', null)
-        .gte('created_at', startOfMonth)
-        .lte('created_at', endOfMonth);
-
-      if (splitsError) {
-        console.error('Error loading splits:', splitsError);
-      }
-
-      // Calcular estatísticas de cobranças
-      const totalCharges = charges?.length || 0;
-      const activeCharges = charges?.filter(c => c.status === 'pending' || c.status === 'processing').length || 0;
-      const completedCharges = charges?.filter(c => c.status === 'completed').length || 0;
-      const totalAmount = charges?.reduce((sum, c) => sum + c.amount, 0) || 0;
-      const completedAmount = charges
-        ?.filter(c => c.status === 'completed')
-        .reduce((sum, c) => sum + c.amount, 0) || 0;
-
-      // Agrupar splits por charge_id para identificar combinados
-      const chargeGroups = (splits || []).reduce((acc, split) => {
-        const chargeId = split.charge_id;
-        if (!chargeId) return acc;
-        if (!acc[chargeId]) acc[chargeId] = [];
-        acc[chargeId].push(split);
-        return acc;
-      }, {} as Record<string, typeof splits>);
-
-      // Identificar combinados com pendência (mais de 1 split, 1 concluded + 1 pending)
-      const combinedPending = Object.values(chargeGroups).filter(splitGroup => {
-        if (!splitGroup || splitGroup.length <= 1) return false;
-        const hasConcluded = splitGroup.some(s => s.status === 'concluded');
-        const hasPending = splitGroup.some(s => s.status === 'pending');
-        return hasConcluded && hasPending;
-      });
-
-      const combinedPendingCount = combinedPending.length;
-      const combinedPaidAmount = combinedPending
-        .flatMap(splitGroup => (splitGroup || []).filter(s => s.status === 'concluded'))
-        .reduce((sum, s) => sum + (s.amount_cents || 0), 0);
-
-      setStats({
-        totalCharges,
-        activeCharges,
-        completedCharges,
-        totalAmount,
-        completedAmount,
-        combinedPendingCount,
-        combinedPaidAmount,
-      });
-    } catch (error) {
-      console.error('Error loading dashboard stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    loadAll();
+  }, [profile?.company_id]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {

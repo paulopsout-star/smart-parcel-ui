@@ -165,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isOperador = (profile?.role === 'operador' || profile?.role === 'admin') && profile?.is_active;
 
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     session,
     profile,
@@ -175,7 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     isAdmin,
     isOperador,
-  };
+  }), [user, session, profile, loading, isAdmin, isOperador]);
 
   return (
     <AuthContext.Provider value={value}>
