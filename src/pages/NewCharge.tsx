@@ -19,7 +19,7 @@ import { z } from "zod";
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useCompanySettings } from '@/hooks/useCompanySettings';
-import { formatPhone, formatDocument, formatCurrencyInput, unformatPhone, unformatDocument } from '@/lib/input-masks';
+import { formatPhone, formatDocument, formatCurrencyInput, unformatPhone, unformatDocument, currencyToCents } from '@/lib/input-masks';
 import { cn } from '@/lib/utils';
 import { SimulatorModal } from '@/components/SimulatorModal';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
