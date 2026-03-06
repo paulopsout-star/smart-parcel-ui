@@ -352,7 +352,6 @@ export default function NewCharge() {
     }
     
     try {
-      setIsLoading(true);
       setLoadingStage('creating');
       setError("");
 
