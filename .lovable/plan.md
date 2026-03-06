@@ -1,80 +1,91 @@
 
 
-# Plano de Otimização de Performance — Histórico de Cobranças
+# Otimização RLS — Reduzir Function Calls por Row
 
-## Diagnóstico atual
+## Problema Atual
 
-A query em `fetchCharges()` (linha 940) busca **100 registros** com 3 JOINs (companies, charge_executions, payment_splits) **sem filtro de data no banco**. Todos os filtros (status, data, documento, empresa) são aplicados **no frontend** após carregar tudo. Não há paginação real, nem cache via React Query, nem índice composto.
+Cada policy na tabela `charges` avalia esta expressão **por row**:
 
-## Plano de correção
-
-### 1. Índice composto no banco (migração SQL)
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_charges_company_created 
-  ON public.charges (company_id, created_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_charges_created_at_desc 
-  ON public.charges (created_at DESC);
+```text
+has_role(auth.uid(), 'admin')
+  OR (is_admin_or_operador(auth.uid()) AND company_id = get_user_company_id(auth.uid()))
 ```
 
-Esses índices aceleram tanto a query filtrada por empresa (operador) quanto a query do admin (todas as empresas), ambas ordenadas por `created_at DESC`.
+Isso executa **3 sub-queries separadas** em `user_roles` e `profiles` para cada row retornada. Com 200 charges, são ~600 sub-queries por request. O mesmo padrão se repete em `charge_executions`, `companies` e `payment_links`.
 
-### 2. Filtro de data no banco (server-side)
+## Solução: Função única `can_access_company`
 
-Alterar `fetchCharges()` para enviar `date_from` e `date_to` como parâmetros `.gte()` / `.lte()` diretamente na query Supabase, ao invés de filtrar no frontend. Por padrão, carregar apenas o **mês corrente** (primeiro dia do mês até agora).
+Criar **uma única** função `SECURITY DEFINER` que resolve tudo em **1 query** com JOIN, retornando se o usuário é admin (acesso total) ou se pertence àquela company_id:
 
-### 3. Paginação real com "Carregar mais"
+```sql
+CREATE OR REPLACE FUNCTION public.can_access_company(_user_id uuid, _company_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.user_roles ur
+    WHERE ur.user_id = _user_id
+      AND (
+        ur.role = 'admin'
+        OR (
+          ur.role IN ('admin', 'operador')
+          AND _company_id = (SELECT company_id FROM public.profiles WHERE id = _user_id)
+        )
+      )
+  )
+$$;
+```
 
-- Implementar paginação por offset com `PAGE_SIZE = 50`.
-- Estado: `page`, `hasMore`, `loadingMore`.
-- Botão "Carregar mais" ao final da lista.
-- Query: `.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)`.
-- Contagem separada com `select('id', { count: 'exact', head: true })` para exibir total sem trazer dados.
+**De 3 function calls por row → 1 function call por row.** E internamente, a query usa os índices existentes (`idx_user_roles_user_id`, `profiles_pkey`).
 
-### 4. React Query com staleTime
+## Migração das Policies
 
-Substituir o `useState` + `useEffect` manual por `useQuery` do TanStack:
-- `queryKey`: `['charges', { dateFrom, dateTo, status, paymentMethod, companyId, page }]`
-- `staleTime: 60_000` (60s — evita refetch ao trocar aba)
-- `keepPreviousData: true` (mostra dados anteriores enquanto carrega nova página)
-- Remover `fetchCharges()` manual e os estados `loading`/`charges`/`filteredCharges`.
+Substituir as policies das 4 tabelas afetadas:
 
-### 5. Skeleton loading melhorado
+### charges (SELECT, INSERT, UPDATE)
+```sql
+-- DROP + CREATE para cada command
+-- Antes: has_role(...) OR (is_admin_or_operador(...) AND company_id = get_user_company_id(...))
+-- Depois: can_access_company(auth.uid(), company_id)
+```
 
-O skeleton atual já existe (linhas 1694+), mas será aprimorado para cobrir o estado de "carregar mais" também — um skeleton menor (3 linhas) aparece no final da tabela durante paginação.
+### charge_executions (SELECT)
+Mesma substituição.
 
-### 6. Filtros server-side
+### companies (SELECT para non-admin)
+A policy "Users can view their own company" usa `get_user_company_id` — substituir por:
+```sql
+id = (SELECT company_id FROM public.profiles WHERE id = auth.uid())
+```
+Ou manter `get_user_company_id` aqui (é 1 call por row, aceitável para a tabela `companies` que tem poucos registros).
 
-Mover **todos** os filtros para a query Supabase:
-- `status` → `.eq('status', value)`
-- `payment_method` → `.eq('payment_method', value)`
-- `date_from/date_to` → `.gte('created_at', ...)` / `.lte('created_at', ...)`
-- `payer_document` → `.ilike('payer_document', '%value%')`
-- `company_id` → `.eq('company_id', value)`
+### payment_links (SELECT, INSERT)
+Mesma substituição `can_access_company(auth.uid(), company_id)`.
 
-Remover `applyFilters()` e `filteredCharges` — tudo vem filtrado do banco.
+## Tabelas e policies afetadas
+
+| Tabela | Policies | Calls antes | Calls depois |
+|--------|----------|-------------|--------------|
+| charges | SELECT, INSERT, UPDATE | 3/row | 1/row |
+| charge_executions | SELECT | 3/row | 1/row |
+| payment_links | SELECT, INSERT | 2-3/row | 1/row |
+| companies | ALL (admin), SELECT | 1-2/row | sem mudança |
+
+## Impacto esperado
+
+- **Dashboard**: query de charges com 200 rows passa de ~600 sub-queries para ~200
+- **ChargeHistory**: mesma redução proporcional
+- **Sem mudança de comportamento**: a lógica de acesso permanece idêntica (admin vê tudo, operador vê só sua empresa)
 
 ## Arquivos afetados
 
 | Arquivo | Mudança |
-|---|---|
-| `src/pages/ChargeHistory.tsx` | Refatorar para React Query, paginação, filtros server-side, skeleton |
-| Migração SQL | Criar índices compostos |
+|---------|---------|
+| Nova migração SQL | Criar `can_access_company()` + DROP/CREATE policies |
 
-## O que NÃO muda
-
-- Layout, cores, componentes visuais (mesma tabela, mesmos badges)
-- Edge functions e integrações
-- Lógica de sincronização automática (`syncPaymentStatuses`)
-- Lógica de export CSV/Excel (opera sobre dados já carregados)
-- Sheet de detalhes da cobrança
-
-## Resultado esperado
-
-- Carregamento inicial < 500ms (50 registros com índice + filtro de data)
-- Skeleton visível durante loading
-- Sem refetch ao trocar aba (staleTime 60s)
-- Paginação real — "Carregar mais" para ver registros anteriores
-- Filtros executados no banco, não no frontend
+Nenhum arquivo frontend é alterado — as queries Supabase continuam iguais.
 
