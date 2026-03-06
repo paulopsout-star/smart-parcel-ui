@@ -390,7 +390,11 @@ export default function NewCharge() {
       // INSERT direto — sem Promise.race (causa bugs com PostgREST thenables)
       const t0 = performance.now();
       console.log('[NewCharge] ⏳ Iniciando INSERT...', { company_id: targetCompanyId, payment_method: data.payment_method });
+      console.log('[NewCharge] 🔑 Verificando sessão antes do INSERT...');
+      const { data: sessionCheck } = await supabase.auth.getSession();
+      console.log('[NewCharge] 🔑 Sessão:', sessionCheck?.session ? `válida (uid=${sessionCheck.session.user.id})` : 'NULA — INSERT vai falhar');
 
+      console.log('[NewCharge] 📡 Disparando POST /rest/v1/charges...');
       const { data: charge, error: chargeError } = await supabase
         .from('charges')
         .insert({
