@@ -291,6 +291,19 @@ export default function NewCharge() {
       description: `Corrija os campos abaixo:\n${camposComErro}`,
       variant: 'destructive',
     });
+
+    // Scroll até o primeiro campo com erro para visibilidade
+    setTimeout(() => {
+      const firstErrorField = Object.keys(errors)[0];
+      if (firstErrorField) {
+        const el = document.getElementById(firstErrorField) 
+          || document.querySelector(`[name="${firstErrorField}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          (el as HTMLElement).focus?.();
+        }
+      }
+    }, 100);
   };
 
   const onSubmit = async (data: FormData) => {
