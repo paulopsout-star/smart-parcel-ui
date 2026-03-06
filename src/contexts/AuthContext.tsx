@@ -83,14 +83,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // ÚNICO ponto de inicialização: onAuthStateChange
-    // O evento INITIAL_SESSION valida o token com o servidor antes de disparar.
-    // Se o token for inválido, dispara SIGNED_OUT automaticamente.
+    // Controle de corrida: ignora respostas de fetchProfile para sessões antigas
+    let currentUserId: string | null = null;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
+        // ⚠️ NUNCA usar async aqui — causa deadlock no client Supabase
+        // (queries ficam pendentes esperando o callback terminar)
         console.log('[AuthContext] event:', event, '| session:', session?.user?.id ?? 'null');
 
         if (event === 'SIGNED_OUT' || !session) {
+          currentUserId = null;
           clearLocalStorage();
           setUser(null);
           setSession(null);
@@ -105,11 +108,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           event === 'INITIAL_SESSION' ||
           event === 'USER_UPDATED'
         ) {
+          const userId = session.user.id;
+          currentUserId = userId;
           setSession(session);
           setUser(session.user);
-          const userProfile = await fetchProfile(session.user.id);
-          setProfile(userProfile);
-          setLoading(false);
+
+          // Disparar fetch de perfil FORA do callback para não bloquear o auth client
+          setTimeout(() => {
+            fetchProfile(userId).then((userProfile) => {
+              // Só aplica se a sessão ainda é a mesma (controle de corrida)
+              if (currentUserId === userId) {
+                setProfile(userProfile);
+                setLoading(false);
+              }
+            });
+          }, 0);
         }
       }
     );
