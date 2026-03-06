@@ -95,6 +95,19 @@ const formSchema = z.object({
         path: ["card_amount"],
       });
     }
+    // Validar soma PIX + Cartão = Total
+    if (data.pix_amount && data.card_amount && data.amount) {
+      const pixCents = currencyToCents(data.pix_amount);
+      const cardCents = currencyToCents(data.card_amount);
+      const totalCents = currencyToCents(data.amount);
+      if (pixCents + cardCents !== totalCents) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Soma PIX (R$ ${(pixCents/100).toFixed(2)}) + Cartão (R$ ${(cardCents/100).toFixed(2)}) deve ser igual ao total (R$ ${(totalCents/100).toFixed(2)})`,
+          path: ["card_amount"],
+        });
+      }
+    }
   }
 });
 
