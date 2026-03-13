@@ -1608,10 +1608,7 @@ export default function ChargeHistory() {
                     <InfoCard icon={Phone} label="Telefone" value={formatPhone(selectedCharge.payer_phone)} />
                     <InfoCard icon={FileText} label="CPF/CNPJ" value={formatDocument(selectedCharge.payer_document)} />
                     <InfoCard icon={CreditCard} label="Valor" value={formatCurrency(
-                      // Para PIX avulso: mostrar valor original (sem taxa)
-                      selectedCharge.payment_method === 'pix' && selectedCharge.fee_amount
-                        ? selectedCharge.amount - selectedCharge.fee_amount
-                        : selectedCharge.amount
+                      selectedCharge.amount
                     )} variant="primary" />
                   </div>
                   
