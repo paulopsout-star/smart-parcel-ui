@@ -262,8 +262,8 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
   const isCompleted = displayStatus === 'completed';
   const isPartial = displayStatus === 'partial';
 
-  // Cálculos para PIX - sempre calcular 5% de taxa
-  const PIX_FEE_RATE = 0.05; // 5%
+  // Cálculos para PIX - sempre calcular 1.5% de taxa
+  const PIX_FEE_RATE = 0.015; // 1.5%
   
   // Lógica corrigida para calcular taxa PIX:
   // - Se display_amount_cents existe: display_amount_cents = total com taxa, amount_cents = base
@@ -279,14 +279,14 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     pixTotal = pixSplit.display_amount_cents;
     pixBase = pixSplit.amount_cents;
     pixFee = pixTotal - pixBase;
-    pixFeePercent = pixBase > 0 ? ((pixFee / pixBase) * 100).toFixed(1) : '5.0';
+    pixFeePercent = pixBase > 0 ? ((pixFee / pixBase) * 100).toFixed(1) : '1.5';
   } else if (pixSplit?.amount_cents) {
     // Cenário legado: apenas amount_cents existe e JÁ inclui taxa
-    // Reverter: base = total / 1.05
+    // Reverter: base = total / 1.015
     pixTotal = pixSplit.amount_cents;
     pixBase = Math.round(pixTotal / (1 + PIX_FEE_RATE));
     pixFee = pixTotal - pixBase;
-    pixFeePercent = pixBase > 0 ? ((pixFee / pixBase) * 100).toFixed(1) : '5.0';
+    pixFeePercent = pixBase > 0 ? ((pixFee / pixBase) * 100).toFixed(1) : '1.5';
   } else {
     // Sem split: calcular a partir do charge
     // Para PIX avulso: amount é o valor base (original da dívida), fee_amount é a taxa
@@ -294,12 +294,12 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
       pixBase = charge.amount;  // Valor original (sem taxa)
       pixFee = charge.fee_amount;
       pixTotal = charge.amount + charge.fee_amount;  // Valor com taxa
-      pixFeePercent = charge.fee_percentage?.toFixed(1) || '5.0';
+      pixFeePercent = charge.fee_percentage?.toFixed(1) || '1.5';
     } else {
       pixBase = charge.pix_amount || (charge.payment_method === 'pix' ? charge.amount : 0);
       pixFee = Math.round(pixBase * PIX_FEE_RATE);
       pixTotal = pixBase + pixFee;
-      pixFeePercent = '5.0';
+      pixFeePercent = '1.5';
     }
   }
 

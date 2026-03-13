@@ -33,7 +33,7 @@ interface ChargeData {
   payment_method: string | null;
 }
 
-const PIX_FEE_PERCENT = 0.05; // 5% fee
+const PIX_FEE_PERCENT = 0.015; // 1.5% fee
 
 const formatCurrency = (cents: number): string => {
   return new Intl.NumberFormat('pt-BR', {
