@@ -217,6 +217,7 @@ export default function Checkout() {
           payment_link_id: paymentLinkId,
           method: 'pix',
           amount_cents: pixTotalCents,
+          display_amount_cents: pixTotalCents, // Total COM taxa PIX (para exibição)
           order_index: 1,
           status: 'pending',
         });
