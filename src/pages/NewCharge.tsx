@@ -365,8 +365,8 @@ export default function NewCharge() {
       let feePercentage = 0;
       
       if (data.payment_method === 'pix') {
-        feeAmount = Math.round(amountInCents * 0.05);
-        feePercentage = 5.00;
+        feeAmount = Math.round(amountInCents * 0.015);
+        feePercentage = 1.50;
         // NÃO soma ao amountInCents - taxa aplicada apenas no checkout (CheckoutPix.tsx)
       }
 
