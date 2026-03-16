@@ -1,76 +1,80 @@
 
 
-# Fix: Taxa PIX ainda calculada incorretamente
+# Plano de Otimização de Performance — Histórico de Cobranças
 
-## Problema raiz
+## Diagnóstico atual
 
-Dois bugs encadeados:
+A query em `fetchCharges()` (linha 940) busca **100 registros** com 3 JOINs (companies, charge_executions, payment_splits) **sem filtro de data no banco**. Todos os filtros (status, data, documento, empresa) são aplicados **no frontend** após carregar tudo. Não há paginação real, nem cache via React Query, nem índice composto.
 
-### Bug 1 — NewCharge armazena `fee_amount` mesmo sem inflar o `amount`
+## Plano de correção
 
-Em `NewCharge.tsx` (linhas 367-371), ao criar uma cobrança PIX, o código salva:
-- `amount = 1000` (valor base, correto)
-- `fee_amount = 15` (1.5% de 1000)
-- `fee_percentage = 1.50`
-
-O `amount` **não é inflado** (o comentário diz "taxa aplicada apenas no checkout"). Porém, `fee_amount > 0` é salvo no DB.
-
-### Bug 2 — CheckoutPix subtrai `fee_amount` do `amount` incorretamente
-
-Em `CheckoutPix.tsx` (linhas 166-171), o código faz:
-```
-hasPreInflatedAmount = charge.fee_amount > 0  → true (15 > 0)
-baseCents = 1000 - 15 = 985   ← ERRADO, amount NÃO foi inflado
-feeCents = round(985 * 0.015) = 15
-totalCents = 985 + 15 = 1000  ← Cliente vê R$10,00 sem taxa!
-```
-
-O correto seria `baseCents = 1000`, `totalCents = 1015`.
-
-### Dados corrompidos no DB
-
-O split mais recente (`58cd84aa`) tem `display_amount_cents = 1050` (calculado com 5% antes do deploy). Deveria ser `1015`.
-
-## Correção
-
-### 1. `src/pages/NewCharge.tsx` — Não armazenar fee_amount para PIX
-
-Como a taxa é calculada exclusivamente no checkout, remover o armazenamento de `fee_amount` e `fee_percentage` na criação:
-
-```tsx
-if (data.payment_method === 'pix') {
-  // Taxa PIX calculada no checkout (CheckoutPix.tsx)
-  // NÃO armazenar fee_amount aqui para evitar dupla subtração
-  feeAmount = 0;
-  feePercentage = 0;
-}
-```
-
-### 2. `src/pages/CheckoutPix.tsx` — Simplificar cálculo do base
-
-Remover a lógica de subtração de `fee_amount`. Para cobranças novas, `amount` já é o valor base. Para cobranças antigas (fee_amount pré-inflado com 5%), manter compatibilidade verificando `fee_percentage`:
-
-```tsx
-// Cobranças antigas tinham amount inflado (amount = base + 5%)
-// Cobranças novas têm amount = base (taxa calculada aqui)
-const isLegacyInflated = charge.fee_amount > 0 && charge.fee_percentage >= 5;
-const baseCents = isLegacyInflated
-  ? charge.amount - charge.fee_amount
-  : charge.amount;
-const feeCents = Math.round(baseCents * PIX_FEE_PERCENT);
-const totalCents = baseCents + feeCents;
-```
-
-### 3. SQL — Corrigir split existente
+### 1. Índice composto no banco (migração SQL)
 
 ```sql
-UPDATE payment_splits 
-SET display_amount_cents = 1015 
-WHERE id = '58cd84aa-9ea1-466f-a9d2-68076e6495be';
+CREATE INDEX IF NOT EXISTS idx_charges_company_created 
+  ON public.charges (company_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_charges_created_at_desc 
+  ON public.charges (created_at DESC);
 ```
+
+Esses índices aceleram tanto a query filtrada por empresa (operador) quanto a query do admin (todas as empresas), ambas ordenadas por `created_at DESC`.
+
+### 2. Filtro de data no banco (server-side)
+
+Alterar `fetchCharges()` para enviar `date_from` e `date_to` como parâmetros `.gte()` / `.lte()` diretamente na query Supabase, ao invés de filtrar no frontend. Por padrão, carregar apenas o **mês corrente** (primeiro dia do mês até agora).
+
+### 3. Paginação real com "Carregar mais"
+
+- Implementar paginação por offset com `PAGE_SIZE = 50`.
+- Estado: `page`, `hasMore`, `loadingMore`.
+- Botão "Carregar mais" ao final da lista.
+- Query: `.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)`.
+- Contagem separada com `select('id', { count: 'exact', head: true })` para exibir total sem trazer dados.
+
+### 4. React Query com staleTime
+
+Substituir o `useState` + `useEffect` manual por `useQuery` do TanStack:
+- `queryKey`: `['charges', { dateFrom, dateTo, status, paymentMethod, companyId, page }]`
+- `staleTime: 60_000` (60s — evita refetch ao trocar aba)
+- `keepPreviousData: true` (mostra dados anteriores enquanto carrega nova página)
+- Remover `fetchCharges()` manual e os estados `loading`/`charges`/`filteredCharges`.
+
+### 5. Skeleton loading melhorado
+
+O skeleton atual já existe (linhas 1694+), mas será aprimorado para cobrir o estado de "carregar mais" também — um skeleton menor (3 linhas) aparece no final da tabela durante paginação.
+
+### 6. Filtros server-side
+
+Mover **todos** os filtros para a query Supabase:
+- `status` → `.eq('status', value)`
+- `payment_method` → `.eq('payment_method', value)`
+- `date_from/date_to` → `.gte('created_at', ...)` / `.lte('created_at', ...)`
+- `payer_document` → `.ilike('payer_document', '%value%')`
+- `company_id` → `.eq('company_id', value)`
+
+Remover `applyFilters()` e `filteredCharges` — tudo vem filtrado do banco.
+
+## Arquivos afetados
+
+| Arquivo | Mudança |
+|---|---|
+| `src/pages/ChargeHistory.tsx` | Refatorar para React Query, paginação, filtros server-side, skeleton |
+| Migração SQL | Criar índices compostos |
+
+## O que NÃO muda
+
+- Layout, cores, componentes visuais (mesma tabela, mesmos badges)
+- Edge functions e integrações
+- Lógica de sincronização automática (`syncPaymentStatuses`)
+- Lógica de export CSV/Excel (opera sobre dados já carregados)
+- Sheet de detalhes da cobrança
 
 ## Resultado esperado
 
-- Cobrança de R$ 10,00: base = 1000, taxa 1.5% = 15, total = R$ 10,15
-- Cobranças legadas com 5% continuam funcionando via detecção de `fee_percentage >= 5`
+- Carregamento inicial < 500ms (50 registros com índice + filtro de data)
+- Skeleton visível durante loading
+- Sem refetch ao trocar aba (staleTime 60s)
+- Paginação real — "Carregar mais" para ver registros anteriores
+- Filtros executados no banco, não no frontend
 

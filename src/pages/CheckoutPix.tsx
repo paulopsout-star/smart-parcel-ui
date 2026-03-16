@@ -161,12 +161,9 @@ function CheckoutPixContent() {
 
     setCreating(true);
     try {
-      // Para cobranças antigas com fee_amount pré-inflado, usar amount - fee_amount como base
-      // Para cobranças novas (sem fee_amount), usar amount diretamente
-      const hasPreInflatedAmount = charge.fee_amount && charge.fee_amount > 0;
-      const baseCents = hasPreInflatedAmount
-        ? charge.amount - charge.fee_amount
-        : charge.amount;
+      // charge.amount sempre armazena o valor BASE da dívida (sem taxa)
+      // A taxa de 1.5% é calculada aqui no checkout
+      const baseCents = charge.amount;
       const feeCents = Math.round(baseCents * PIX_FEE_PERCENT);
       const totalCents = baseCents + feeCents;
 
