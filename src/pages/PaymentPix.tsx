@@ -160,16 +160,46 @@ export default function PaymentPix() {
           });
         }
 
-        // If we already have MP data, use it directly
+        // If we already have MP data, validate amount before reusing
         if (pixSplit.mp_payment_id && pixSplit.mp_qr_code && pixSplit.mp_qr_code_base64) {
-          setPixData({
-            payment_id: pixSplit.mp_payment_id,
-            qr_code: pixSplit.mp_qr_code,
-            qr_code_base64: pixSplit.mp_qr_code_base64,
-            ticket_url: pixSplit.mp_ticket_url || undefined,
-            status: pixSplit.mp_status || 'pending',
-            amount_cents: pixSplit.display_amount_cents || pixSplit.amount_cents,
-          });
+          const splitDisplayAmount = pixSplit.display_amount_cents || pixSplit.amount_cents;
+          
+          // For combined payments, validate against split's own amount_cents
+          // For pure PIX, validate against charge amount + 1.5%
+          const baseForValidation = pixSplit.amount_cents;
+          const expectedTotal = baseForValidation + Math.round(baseForValidation * PIX_FEE_PERCENT);
+          const isAmountCorrect = Math.abs(splitDisplayAmount - expectedTotal) <= 1;
+
+          if (isAmountCorrect) {
+            setPixData({
+              payment_id: pixSplit.mp_payment_id,
+              qr_code: pixSplit.mp_qr_code,
+              qr_code_base64: pixSplit.mp_qr_code_base64,
+              ticket_url: pixSplit.mp_ticket_url || undefined,
+              status: pixSplit.mp_status || 'pending',
+              amount_cents: expectedTotal,
+            });
+          } else {
+            // Split com taxa errada - limpar para forçar regeneração
+            console.warn('[PaymentPix] Split com display_amount incorreto:', {
+              atual: splitDisplayAmount,
+              esperado: expectedTotal,
+            });
+            const { error: updateErr } = await supabase
+              .from('payment_splits')
+              .update({
+                display_amount_cents: expectedTotal,
+                mp_payment_id: null,
+                mp_qr_code: null,
+                mp_qr_code_base64: null,
+                mp_status: null,
+                mp_status_detail: null,
+                mp_ticket_url: null,
+                mp_date_of_expiration: null,
+              })
+              .eq('id', pixSplit.id);
+            if (updateErr) console.error('[PaymentPix] Error fixing split:', updateErr);
+          }
         }
 
         setLoading(false);
