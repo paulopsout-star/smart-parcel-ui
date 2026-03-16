@@ -152,6 +152,7 @@ export default function PaymentPix() {
         if (data.charge) {
           setCharge({
             id: data.charge.id,
+            amount: data.charge.amount,
             payer_name: data.charge.payer_name,
             payer_email: data.charge.payer_email,
             payer_document: data.charge.payer_document,
