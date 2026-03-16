@@ -365,9 +365,10 @@ export default function NewCharge() {
       let feePercentage = 0;
       
       if (data.payment_method === 'pix') {
-        feeAmount = Math.round(amountInCents * 0.015);
-        feePercentage = 1.50;
-        // NÃO soma ao amountInCents - taxa aplicada apenas no checkout (CheckoutPix.tsx)
+        // Taxa PIX (1.5%) é calculada exclusivamente no checkout (CheckoutPix.tsx)
+        // NÃO armazenar fee_amount aqui para evitar dupla subtração no checkout
+        feeAmount = 0;
+        feePercentage = 0;
       }
 
       const normalizedLinhaDigitavel = data.boleto_linha_digitavel 
