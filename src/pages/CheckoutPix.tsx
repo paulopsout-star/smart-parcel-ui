@@ -132,15 +132,43 @@ function CheckoutPixContent() {
             return;
           }
 
-          if (existingSplit.mp_payment_id && existingSplit.mp_qr_code) {
+          // Validar se o display_amount_cents do split confere com 1.5%
+          const expectedTotal = chargeData.amount + Math.round(chargeData.amount * PIX_FEE_PERCENT);
+          const splitDisplayAmount = existingSplit.display_amount_cents || existingSplit.amount_cents;
+          const isAmountCorrect = Math.abs(splitDisplayAmount - expectedTotal) <= 1;
+
+          if (existingSplit.mp_payment_id && existingSplit.mp_qr_code && isAmountCorrect) {
+            // Split com dados corretos - reaproveitar
             setPixData({
               payment_id: existingSplit.mp_payment_id,
               qr_code: existingSplit.mp_qr_code,
               qr_code_base64: existingSplit.mp_qr_code_base64 || '',
               ticket_url: existingSplit.mp_ticket_url || undefined,
               status: existingSplit.mp_status || 'pending',
-              amount_cents: existingSplit.display_amount_cents || existingSplit.amount_cents,
+              amount_cents: expectedTotal,
             });
+          } else if (!isAmountCorrect) {
+            // Split com taxa errada - limpar metadados para forçar regeneração
+            console.warn('[CheckoutPix] Split com display_amount incorreto:', {
+              atual: splitDisplayAmount,
+              esperado: expectedTotal,
+              diff: splitDisplayAmount - expectedTotal,
+            });
+            await supabase
+              .from('payment_splits')
+              .update({
+                amount_cents: chargeData.amount,
+                display_amount_cents: expectedTotal,
+                mp_payment_id: null,
+                mp_qr_code: null,
+                mp_qr_code_base64: null,
+                mp_status: null,
+                mp_status_detail: null,
+                mp_ticket_url: null,
+                mp_date_of_expiration: null,
+              })
+              .eq('id', existingSplit.id);
+            console.log('[CheckoutPix] Split corrigido, QR será regenerado');
           }
         }
 

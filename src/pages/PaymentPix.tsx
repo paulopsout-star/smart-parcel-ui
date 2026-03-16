@@ -36,11 +36,14 @@ interface PaymentSplit {
 
 interface ChargeData {
   id: string;
+  amount: number;
   payer_name: string;
   payer_email: string;
   payer_document: string;
   description: string | null;
 }
+
+const PIX_FEE_PERCENT = 0.015;
 
 const formatCurrency = (cents: number): string => {
   return new Intl.NumberFormat('pt-BR', {
@@ -149,6 +152,7 @@ export default function PaymentPix() {
         if (data.charge) {
           setCharge({
             id: data.charge.id,
+            amount: data.charge.amount,
             payer_name: data.charge.payer_name,
             payer_email: data.charge.payer_email,
             payer_document: data.charge.payer_document,
@@ -156,16 +160,46 @@ export default function PaymentPix() {
           });
         }
 
-        // If we already have MP data, use it directly
+        // If we already have MP data, validate amount before reusing
         if (pixSplit.mp_payment_id && pixSplit.mp_qr_code && pixSplit.mp_qr_code_base64) {
-          setPixData({
-            payment_id: pixSplit.mp_payment_id,
-            qr_code: pixSplit.mp_qr_code,
-            qr_code_base64: pixSplit.mp_qr_code_base64,
-            ticket_url: pixSplit.mp_ticket_url || undefined,
-            status: pixSplit.mp_status || 'pending',
-            amount_cents: pixSplit.display_amount_cents || pixSplit.amount_cents,
-          });
+          const splitDisplayAmount = pixSplit.display_amount_cents || pixSplit.amount_cents;
+          
+          // For combined payments, validate against split's own amount_cents
+          // For pure PIX, validate against charge amount + 1.5%
+          const baseForValidation = pixSplit.amount_cents;
+          const expectedTotal = baseForValidation + Math.round(baseForValidation * PIX_FEE_PERCENT);
+          const isAmountCorrect = Math.abs(splitDisplayAmount - expectedTotal) <= 1;
+
+          if (isAmountCorrect) {
+            setPixData({
+              payment_id: pixSplit.mp_payment_id,
+              qr_code: pixSplit.mp_qr_code,
+              qr_code_base64: pixSplit.mp_qr_code_base64,
+              ticket_url: pixSplit.mp_ticket_url || undefined,
+              status: pixSplit.mp_status || 'pending',
+              amount_cents: expectedTotal,
+            });
+          } else {
+            // Split com taxa errada - limpar para forçar regeneração
+            console.warn('[PaymentPix] Split com display_amount incorreto:', {
+              atual: splitDisplayAmount,
+              esperado: expectedTotal,
+            });
+            const { error: updateErr } = await supabase
+              .from('payment_splits')
+              .update({
+                display_amount_cents: expectedTotal,
+                mp_payment_id: null,
+                mp_qr_code: null,
+                mp_qr_code_base64: null,
+                mp_status: null,
+                mp_status_detail: null,
+                mp_ticket_url: null,
+                mp_date_of_expiration: null,
+              })
+              .eq('id', pixSplit.id);
+            if (updateErr) console.error('[PaymentPix] Error fixing split:', updateErr);
+          }
         }
 
         setLoading(false);
@@ -185,7 +219,10 @@ export default function PaymentPix() {
 
     setCreating(true);
     try {
-      const amountCents = split.display_amount_cents || split.amount_cents;
+      // Calcular valor correto com 1.5% de taxa
+      const baseCents = split.amount_cents;
+      const expectedTotal = baseCents + Math.round(baseCents * PIX_FEE_PERCENT);
+      const amountCents = expectedTotal;
 
       const { data, error: createError } = await supabase.functions.invoke('mercadopago-pix-create', {
         body: {

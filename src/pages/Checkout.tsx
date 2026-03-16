@@ -212,12 +212,15 @@ export default function Checkout() {
       const splits = [];
       
       if (pixTotalCents > 0) {
+        // pixTotalCents já inclui taxa de 1.5%
+        // amount_cents = valor base (sem taxa), display_amount_cents = valor com taxa
+        const pixBaseCents = Math.round(pixTotalCents / 1.015);
         splits.push({
           charge_id: chargeId,
           payment_link_id: paymentLinkId,
           method: 'pix',
-          amount_cents: pixTotalCents,
-          display_amount_cents: pixTotalCents, // Total COM taxa PIX (para exibição)
+          amount_cents: pixBaseCents,
+          display_amount_cents: pixTotalCents,
           order_index: 1,
           status: 'pending',
         });
