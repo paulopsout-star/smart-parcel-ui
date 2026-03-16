@@ -219,7 +219,10 @@ export default function PaymentPix() {
 
     setCreating(true);
     try {
-      const amountCents = split.display_amount_cents || split.amount_cents;
+      // Calcular valor correto com 1.5% de taxa
+      const baseCents = split.amount_cents;
+      const expectedTotal = baseCents + Math.round(baseCents * PIX_FEE_PERCENT);
+      const amountCents = expectedTotal;
 
       const { data, error: createError } = await supabase.functions.invoke('mercadopago-pix-create', {
         body: {
