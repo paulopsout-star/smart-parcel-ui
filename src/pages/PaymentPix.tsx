@@ -36,11 +36,14 @@ interface PaymentSplit {
 
 interface ChargeData {
   id: string;
+  amount: number;
   payer_name: string;
   payer_email: string;
   payer_document: string;
   description: string | null;
 }
+
+const PIX_FEE_PERCENT = 0.015;
 
 const formatCurrency = (cents: number): string => {
   return new Intl.NumberFormat('pt-BR', {
