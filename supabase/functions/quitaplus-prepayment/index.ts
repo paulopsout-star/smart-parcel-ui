@@ -107,13 +107,14 @@ serve(async (req) => {
     console.log('[quitaplus-prepayment] Iniciando pré-pagamento para charge:', requestData.chargeId);
 
     // Validar número de parcelas
-    if (requestData.installments < 1 || requestData.installments > 12) {
+    if (requestData.installments < 1 || requestData.installments > 21) {
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: 'Número de parcelas inválido',
-          message: 'O número de parcelas deve estar entre 1 e 12'
+          message: 'O número de parcelas deve estar entre 1 e 21'
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
