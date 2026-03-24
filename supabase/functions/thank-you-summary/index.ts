@@ -392,7 +392,7 @@ Deno.serve(async (req) => {
     // pre_payment_key ou transaction_id NÃO garantem que o pagamento foi concluído
     // O status 'concluded' é o único indicador válido de pagamento aprovado
     const isPaid = finalSplits && finalSplits.length > 0 && finalSplits.every(s => 
-      s.status === 'concluded'
+      s.status === 'concluded' || s.status === 'boleto_linked'
     );
     
     // Verificar se algum split está em análise
