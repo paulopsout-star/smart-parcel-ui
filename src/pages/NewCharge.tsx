@@ -410,7 +410,7 @@ export default function NewCharge() {
           payment_method: data.payment_method,
           installments: parseInt(data.installments),
           mask_fee: data.mask_fee,
-          has_boleto: data.has_boleto,
+          has_boleto: data.payment_method === 'cartao' ? !!normalizedLinhaDigitavel : data.has_boleto,
           boleto_barcode: data.boleto_barcode || null,
           has_boleto_link: requiresBoleto,
           boleto_linha_digitavel: data.payment_method === 'cartao' ? normalizedLinhaDigitavel : null,
