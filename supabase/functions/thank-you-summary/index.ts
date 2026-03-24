@@ -176,15 +176,109 @@ Deno.serve(async (req) => {
     }
 
     // Buscar payment_link pelo id (consistente com public-payment-link)
-    const { data: paymentLink, error: linkError } = await supabase
+    let paymentLink = null
+    
+    // Tentativa 1: buscar por payment_links.id
+    const { data: linkById, error: linkByIdError } = await supabase
       .from('payment_links')
       .select('*')
       .eq('id', token)
-      .single()
+      .maybeSingle()
 
-    console.log('[thank-you-summary] Payment Link found:', paymentLink?.id)
+    if (linkById) {
+      paymentLink = linkById
+      console.log('[thank-you-summary] Payment Link found by id:', paymentLink.id)
+    } else {
+      // Tentativa 2: token pode ser charge_id — buscar payment_link vinculado
+      console.log('[thank-you-summary] Not found by id, trying charge_id fallback:', token)
+      const { data: linkByCharge } = await supabase
+        .from('payment_links')
+        .select('*')
+        .eq('charge_id', token)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-    if (linkError || !paymentLink) {
+      if (linkByCharge) {
+        paymentLink = linkByCharge
+        console.log('[thank-you-summary] Payment Link found by charge_id:', paymentLink.id)
+      }
+    }
+
+    if (!paymentLink) {
+      // Tentativa 3: tratar token como chargeId e buscar direto (reutiliza lógica existente)
+      console.log('[thank-you-summary] No payment link found, treating token as chargeId')
+      const { data: charge, error: chargeError } = await supabase
+        .from('charges')
+        .select('*')
+        .eq('id', token)
+        .maybeSingle()
+
+      if (charge) {
+        // Buscar dados da empresa
+        let company = null
+        if (charge.company_id) {
+          const { data: companyData } = await supabase
+            .from('companies')
+            .select('name, email, phone')
+            .eq('id', charge.company_id)
+            .maybeSingle()
+          company = companyData
+        }
+
+        // Buscar splits
+        const { data: splits } = await supabase
+          .from('payment_splits')
+          .select('*')
+          .eq('charge_id', token)
+          .order('created_at', { ascending: false })
+
+        const finalSplits = splits && splits.length > 0 ? splits : [{
+          id: 'virtual',
+          method: 'CREDIT_CARD',
+          amount_cents: charge.amount,
+          status: 'analyzing',
+          processed_at: new Date().toISOString()
+        }]
+
+        const isPaid = finalSplits.every(s => s.status === 'concluded')
+        const analyzingSplit = finalSplits.find(s => s.status === 'analyzing')
+        const totalPaidCents = finalSplits.reduce((sum, s) => sum + (s.display_amount_cents || s.amount_cents || 0), 0)
+
+        return new Response(JSON.stringify({
+          paid: isPaid,
+          analyzing: !isPaid && !!analyzingSplit,
+          processing: !isPaid && !analyzingSplit,
+          message: isPaid ? 'Pagamento confirmado' : 'Pagamento em análise',
+          charge: {
+            id: charge.id,
+            type: charge.recurrence_type || 'pontual',
+            total_amount_cents: charge.amount,
+            total_paid_cents: totalPaidCents,
+            currency: 'BRL',
+            paid: isPaid,
+            analyzing: !isPaid && !!analyzingSplit,
+            paid_at: finalSplits[0]?.processed_at || new Date().toISOString()
+          },
+          splits: finalSplits.map(s => ({
+            id: s.id,
+            method: s.method?.toUpperCase() || 'CREDIT_CARD',
+            amount_cents: s.display_amount_cents || s.amount_cents,
+            original_amount_cents: s.amount_cents,
+            status: (s.status || 'ANALYZING').toUpperCase(),
+            processed_at: s.processed_at
+          })),
+          company: {
+            name: company?.name || null,
+            email: company?.email || null,
+            phone: company?.phone || null
+          },
+          ui: { support_email: "faleconosco@autonegocie.com" }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
       return new Response(JSON.stringify({ error: 'Invalid or expired link' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
