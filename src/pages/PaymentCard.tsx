@@ -382,7 +382,7 @@ export default function PaymentCard() {
           onSuccess={handlePaymentSuccess}
           chargeId={charge?.charge_id || charge?.id || ''}
           paymentLinkId={id || ''}
-          hasBoleto={charge?.has_boleto_link || false}
+          hasBoleto={charge?.has_boleto || false}
           boletoLinhaDigitavel={charge?.boleto_linha_digitavel || ''}
           creditorDocument={charge?.creditor_document || ''}
           creditorName={charge?.creditor_name || ''}
