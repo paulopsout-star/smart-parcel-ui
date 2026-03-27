@@ -223,7 +223,7 @@ function CheckoutPixContent() {
       }
 
       // Create PIX payment via Mercado Pago
-      const { data, error: createError } = await supabase.functions.invoke('mercadopago-pix-create', {
+      const { data, error: createError } = await supabase.functions.invoke('treeal-pix-create', {
         body: {
           payment_split_id: currentSplitId,
           charge_id: charge.id,
@@ -276,7 +276,7 @@ function CheckoutPixContent() {
 
     const checkStatus = async () => {
       try {
-        const { data, error: statusError } = await supabase.functions.invoke('mercadopago-pix-status', {
+        const { data, error: statusError } = await supabase.functions.invoke('treeal-pix-status', {
           body: {
             payment_split_id: splitId,
           },
@@ -318,7 +318,7 @@ function CheckoutPixContent() {
 
     setChecking(true);
     try {
-      const { data, error: statusError } = await supabase.functions.invoke('mercadopago-pix-status', {
+      const { data, error: statusError } = await supabase.functions.invoke('treeal-pix-status', {
         body: {
           payment_split_id: splitId,
         },

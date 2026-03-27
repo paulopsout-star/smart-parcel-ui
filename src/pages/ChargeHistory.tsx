@@ -808,7 +808,7 @@ export default function ChargeHistory() {
       // Executar sincronizações em paralelo
       const [paymentResult, pixResult, cardResult] = await Promise.allSettled([
         supabase.functions.invoke('sync-payment-status'),
-        supabase.functions.invoke('sync-mercadopago-status'), // Corrigido: era sync-pix-status
+        supabase.functions.invoke('sync-mercadopago-status'), // AbacatePay legado — substituir por sync-treeal-status quando criado
         supabase.functions.invoke('sync-card-status'),
       ]);
 
@@ -822,7 +822,7 @@ export default function ChargeHistory() {
         });
       }
 
-      // Extrair IDs do sync-mercadopago-status
+      // Extrair IDs do sync-mercadopago-status (AbacatePay legado)
       if (pixResult.status === 'fulfilled' && pixResult.value.data?.updatedChargeIds) {
         pixResult.value.data.updatedChargeIds.forEach((id: string) => updatedChargeIds.add(id));
       }

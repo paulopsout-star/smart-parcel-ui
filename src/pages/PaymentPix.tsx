@@ -224,7 +224,7 @@ export default function PaymentPix() {
       const expectedTotal = baseCents + Math.round(baseCents * PIX_FEE_PERCENT);
       const amountCents = expectedTotal;
 
-      const { data, error: createError } = await supabase.functions.invoke('mercadopago-pix-create', {
+      const { data, error: createError } = await supabase.functions.invoke('treeal-pix-create', {
         body: {
           payment_split_id: split.id,
           charge_id: split.charge_id,
@@ -280,7 +280,7 @@ export default function PaymentPix() {
         const splitIdToCheck = resolvedSplitId || split?.id;
         if (!splitIdToCheck) return;
 
-        const { data, error: statusError } = await supabase.functions.invoke('mercadopago-pix-status', {
+        const { data, error: statusError } = await supabase.functions.invoke('treeal-pix-status', {
           body: {
             payment_split_id: splitIdToCheck,
           },
@@ -337,7 +337,7 @@ export default function PaymentPix() {
         return;
       }
 
-      const { data, error: statusError } = await supabase.functions.invoke('mercadopago-pix-status', {
+      const { data, error: statusError } = await supabase.functions.invoke('treeal-pix-status', {
         body: {
           payment_split_id: splitIdToCheck,
         },
