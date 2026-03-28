@@ -1,80 +1,42 @@
 
 
-# Plano de Otimização de Performance — Histórico de Cobranças
+# Plano: Gerar PDF de Regras e Diretrizes da Plataforma Autonegocie
 
-## Diagnóstico atual
+## Objetivo
+Criar um documento PDF profissional e completo contendo todas as regras de negocio, fluxos, diretrizes de mudancas e politicas da plataforma Hub de Pagamentos Autonegocie.
 
-A query em `fetchCharges()` (linha 940) busca **100 registros** com 3 JOINs (companies, charge_executions, payment_splits) **sem filtro de data no banco**. Todos os filtros (status, data, documento, empresa) são aplicados **no frontend** após carregar tudo. Não há paginação real, nem cache via React Query, nem índice composto.
+## Conteudo do Documento
 
-## Plano de correção
+O PDF sera estruturado nas seguintes secoes:
 
-### 1. Índice composto no banco (migração SQL)
+1. **Capa** - Titulo, versao, data
+2. **Principios Imutaveis** - Regras que nunca podem ser violadas
+3. **Politica de Mudancas** - Protocolo de aprovacao para integracoes e telas
+4. **Autenticacao e RBAC** - Roles, guards, permissoes por funcionalidade
+5. **Assinaturas** - Status canonico, gate de acesso, regras de bloqueio
+6. **Cobranças** - Pontuais, recorrentes, validacoes, campos obrigatorios
+7. **Checkout Publico** - Opcoes de pagamento, regras de parcelas, centavos
+8. **Split de Pagamento** - PIX + Cartao, soma exata, parcela minima
+9. **Integracao Quita+** - Contrato canonico, proxy, sanitizacao
+10. **Fluxos Principais** - Diagramas de Nova Cobranca, Historico, Checkout
+11. **Regras de Exibicao de Valores** - display_amount_cents vs amount_cents
+12. **Regras de Dominio/Links** - Dominio oficial obrigatorio
+13. **Tabelas do Banco de Dados** - Schema resumido
+14. **Edge Functions** - Inventario e proposito
+15. **Erros Comuns e Tratamento**
+16. **Criterios de Aceite Globais**
 
-```sql
-CREATE INDEX IF NOT EXISTS idx_charges_company_created 
-  ON public.charges (company_id, created_at DESC);
+## Implementacao
 
-CREATE INDEX IF NOT EXISTS idx_charges_created_at_desc 
-  ON public.charges (created_at DESC);
-```
+- Script Python com `reportlab` para gerar o PDF
+- Cores da marca Autonegocie (verde #00D678, azul escuro #1E3A5F)
+- Output em `/mnt/documents/Regras_Diretrizes_Autonegocie.pdf`
+- QA visual obrigatorio apos geracao
 
-Esses índices aceleram tanto a query filtrada por empresa (operador) quanto a query do admin (todas as empresas), ambas ordenadas por `created_at DESC`.
+## Correcao do Build Error
 
-### 2. Filtro de data no banco (server-side)
+Tambem sera necessario corrigir o erro de build em `treeal-auth.ts` que usa `npm:node-forge@1.3.1` — precisa ser adicionado ao `deno.json` ou ajustar o import.
 
-Alterar `fetchCharges()` para enviar `date_from` e `date_to` como parâmetros `.gte()` / `.lte()` diretamente na query Supabase, ao invés de filtrar no frontend. Por padrão, carregar apenas o **mês corrente** (primeiro dia do mês até agora).
-
-### 3. Paginação real com "Carregar mais"
-
-- Implementar paginação por offset com `PAGE_SIZE = 50`.
-- Estado: `page`, `hasMore`, `loadingMore`.
-- Botão "Carregar mais" ao final da lista.
-- Query: `.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)`.
-- Contagem separada com `select('id', { count: 'exact', head: true })` para exibir total sem trazer dados.
-
-### 4. React Query com staleTime
-
-Substituir o `useState` + `useEffect` manual por `useQuery` do TanStack:
-- `queryKey`: `['charges', { dateFrom, dateTo, status, paymentMethod, companyId, page }]`
-- `staleTime: 60_000` (60s — evita refetch ao trocar aba)
-- `keepPreviousData: true` (mostra dados anteriores enquanto carrega nova página)
-- Remover `fetchCharges()` manual e os estados `loading`/`charges`/`filteredCharges`.
-
-### 5. Skeleton loading melhorado
-
-O skeleton atual já existe (linhas 1694+), mas será aprimorado para cobrir o estado de "carregar mais" também — um skeleton menor (3 linhas) aparece no final da tabela durante paginação.
-
-### 6. Filtros server-side
-
-Mover **todos** os filtros para a query Supabase:
-- `status` → `.eq('status', value)`
-- `payment_method` → `.eq('payment_method', value)`
-- `date_from/date_to` → `.gte('created_at', ...)` / `.lte('created_at', ...)`
-- `payer_document` → `.ilike('payer_document', '%value%')`
-- `company_id` → `.eq('company_id', value)`
-
-Remover `applyFilters()` e `filteredCharges` — tudo vem filtrado do banco.
-
-## Arquivos afetados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/pages/ChargeHistory.tsx` | Refatorar para React Query, paginação, filtros server-side, skeleton |
-| Migração SQL | Criar índices compostos |
-
-## O que NÃO muda
-
-- Layout, cores, componentes visuais (mesma tabela, mesmos badges)
-- Edge functions e integrações
-- Lógica de sincronização automática (`syncPaymentStatuses`)
-- Lógica de export CSV/Excel (opera sobre dados já carregados)
-- Sheet de detalhes da cobrança
-
-## Resultado esperado
-
-- Carregamento inicial < 500ms (50 registros com índice + filtro de data)
-- Skeleton visível durante loading
-- Sem refetch ao trocar aba (staleTime 60s)
-- Paginação real — "Carregar mais" para ver registros anteriores
-- Filtros executados no banco, não no frontend
+### Nota sobre o build error
+O erro `Could not find a matching package for 'npm:node-forge@1.3.1'` em `treeal-auth.ts` e um problema de dependencia Deno. Sera corrigido junto com a entrega.
 
