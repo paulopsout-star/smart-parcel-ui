@@ -303,13 +303,13 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
     }
   }
 
-  // Cálculos para Cartão - usar valor do split se disponível
-  // Para pagamentos 100% cartão, usar charge.amount como base quando card_amount for null
-  const cardBase = charge.card_amount || (charge.payment_method === 'cartao' ? charge.amount : 0);
-  const cardTotalWithInterest = cardSplit?.display_amount_cents || cardSplit?.amount_cents || cardBase;
-  const cardTotal = isAdmin ? cardTotalWithInterest : cardBase;
+  // Cálculos para Cartão - usar valores do split diretamente
+  // amount_cents = valor original sem juros; display_amount_cents = valor com juros
+  const cardBase = cardSplit?.amount_cents || 0;
+  const cardTotalWithInterest = cardSplit?.display_amount_cents || cardSplit?.amount_cents || 0;
+  const cardTotal = cardTotalWithInterest;
   const cardFeeAmount = cardTotalWithInterest - cardBase;
-  const cardFee = isAdmin ? cardFeeAmount : 0;
+  const cardFee = cardFeeAmount;
   const cardFeePercent = cardBase > 0 && cardFeeAmount > 0 
     ? ((cardFeeAmount / cardBase) * 100).toFixed(1) 
     : '0';
