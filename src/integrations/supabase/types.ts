@@ -774,6 +774,75 @@ export type Database = {
           },
         ]
       }
+      provider_events: {
+        Row: {
+          charge_id: string | null
+          created_at: string
+          event_key: string
+          event_type: string | null
+          external_reference: string | null
+          headers: Json | null
+          id: string
+          merchant_id: string | null
+          payload: Json
+          payment_split_id: string | null
+          pre_payment_key: string | null
+          processed_at: string | null
+          processing_result: Json | null
+          provider: string
+          status: string
+        }
+        Insert: {
+          charge_id?: string | null
+          created_at?: string
+          event_key: string
+          event_type?: string | null
+          external_reference?: string | null
+          headers?: Json | null
+          id?: string
+          merchant_id?: string | null
+          payload: Json
+          payment_split_id?: string | null
+          pre_payment_key?: string | null
+          processed_at?: string | null
+          processing_result?: Json | null
+          provider: string
+          status?: string
+        }
+        Update: {
+          charge_id?: string | null
+          created_at?: string
+          event_key?: string
+          event_type?: string | null
+          external_reference?: string | null
+          headers?: Json | null
+          id?: string
+          merchant_id?: string | null
+          payload?: Json
+          payment_split_id?: string | null
+          pre_payment_key?: string | null
+          processed_at?: string | null
+          processing_result?: Json | null
+          provider?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_events_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: false
+            referencedRelation: "charges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "provider_events_payment_split_id_fkey"
+            columns: ["payment_split_id"]
+            isOneToOne: false
+            referencedRelation: "payment_splits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       refund_jobs: {
         Row: {
           charge_id: string | null
