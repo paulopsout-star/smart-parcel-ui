@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
       }
     );
 
-    const { payment_link_id, amount_cents, installments = 1, transaction_id, pre_payment_key } = await req.json();
+    const { payment_link_id, amount_cents, display_amount_cents, installments = 1, transaction_id, pre_payment_key } = await req.json();
 
     if (!payment_link_id) {
       console.error('[conclude-card-payment] Missing payment_link_id');
@@ -163,6 +163,7 @@ Deno.serve(async (req) => {
           authorization_code: authorizationCode,
           processed_at: finalStatus === 'concluded' ? new Date().toISOString() : null,
           amount_cents: totalAmount,
+          display_amount_cents: display_amount_cents || existingSplits[0].display_amount_cents || totalAmount,
           installments: installments,
           pre_payment_key: prePaymentKey || existingSplits[0].pre_payment_key,
         })
@@ -183,6 +184,7 @@ Deno.serve(async (req) => {
           charge_id: chargeId,
           method: 'credit_card',
           amount_cents: totalAmount,
+          display_amount_cents: display_amount_cents || totalAmount,
           status: finalStatus,
           installments: installments,
           order_index: 1,

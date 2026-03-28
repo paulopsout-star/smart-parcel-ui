@@ -208,6 +208,7 @@ export default function PaymentCard() {
         body: {
           payment_link_id: charge.id,
           amount_cents: cardAmount,
+          display_amount_cents: cardDisplayAmount,
           installments: cardInstallments,
           transaction_id: transactionId
         }

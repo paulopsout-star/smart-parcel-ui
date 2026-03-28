@@ -103,10 +103,19 @@ export default function PaymentDirect() {
       try {
         console.log('[PaymentDirect] Calling conclude-card-payment edge function');
         
+        const displayAmountCents = selectedOption
+          ? (selectedOption.isCustom
+              ? (customResult?.totalCents || 0)
+              : selectedOption.isSelectInstallments
+                ? (selectResult?.totalCents || 0)
+                : selectedOption.totalCents)
+          : 0;
+
         const { data, error } = await supabase.functions.invoke('conclude-card-payment', {
           body: {
             payment_link_id: charge.id,
             amount_cents: charge.amount_cents, // ✅ Usar valor original
+            display_amount_cents: displayAmountCents || charge.amount_cents,
             installments: finalInstallments,
             transaction_id: transactionId,
           },
