@@ -206,6 +206,30 @@ export const mapSimulationToPaymentOptions = (
 };
 
 /**
+ * Calcula o resumo financeiro de um pagamento combinado PIX + Cartão
+ */
+export function calculateSplitSummary(
+  pixCents: number,
+  cardCondition: InstallmentCondition | null
+): {
+  pixAmount: number;
+  cardBase: number;
+  cardTotal: number;
+  cardFee: number;
+  grandTotal: number;
+  feePercentage: number;
+} {
+  const pixAmount = pixCents;
+  const cardBase = cardCondition ? cardCondition.installmentAmount * cardCondition.installments : 0;
+  const cardTotal = cardCondition ? cardCondition.totalAmount : 0;
+  const cardFee = cardTotal - cardBase;
+  const grandTotal = pixAmount + cardTotal;
+  const feePercentage = cardBase > 0 ? (cardFee / cardBase) * 100 : 0;
+
+  return { pixAmount, cardBase, cardTotal, cardFee, grandTotal, feePercentage };
+}
+
+/**
  * Encontra a parcela mais próxima do valor desejado
  */
 export const findClosestInstallment = (
