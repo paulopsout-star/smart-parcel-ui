@@ -4,8 +4,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { formatCents } from '@/lib/currency-utils';
 import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
-import { CreditCard, AlertCircle, TrendingDown } from 'lucide-react';
-import { InstallmentCondition } from '@/hooks/usePaymentSimulation';
+import { CreditCard, AlertCircle } from 'lucide-react';
+import type { InstallmentCondition } from '@/hooks/usePaymentSimulation';
 
 interface PaymentSimulatorProps {
   amountCents: number;
@@ -67,8 +67,6 @@ export function PaymentSimulator({
 
   const conditions = data.simulation.conditions;
   const popularInstallment = 6;
-  const minInstallmentCount = Math.max(...conditions.map(c => c.installments));
-  const baseAmount = conditions.find(c => c.installments === 1)?.totalAmount ?? amountCents;
 
   return (
     <Card>
@@ -85,9 +83,6 @@ export function PaymentSimulator({
         {conditions.map((condition) => {
           const isSelected = selectedInstallments === condition.installments;
           const isPopular = condition.installments === popularInstallment;
-          const isMinInstallment = condition.installments === minInstallmentCount && minInstallmentCount > 1;
-          const fee = condition.totalAmount - baseAmount;
-          const feePct = baseAmount > 0 ? (fee / baseAmount) * 100 : 0;
 
           return (
             <button
@@ -113,29 +108,10 @@ export function PaymentSimulator({
                         Mais Escolhido
                       </Badge>
                     )}
-                    {condition.installments === 1 && (
-                      <Badge variant="outline" className="text-xs text-green-600 border-green-300">
-                        Menor juros
-                      </Badge>
-                    )}
-                    {isMinInstallment && (
-                      <Badge variant="outline" className="text-xs flex items-center gap-1">
-                        <TrendingDown className="h-3 w-3" />
-                        Menor parcela
-                      </Badge>
-                    )}
                   </div>
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <span>Total: {formatCents(condition.totalAmount)}</span>
-                    {fee > 0 && (
-                      <span className="text-red-400">
-                        +{formatCents(fee)} ({feePct.toFixed(1)}% juros)
-                      </span>
-                    )}
-                    {fee === 0 && (
-                      <span className="text-green-600">sem juros</span>
-                    )}
-                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Total: {formatCents(condition.totalAmount)}
+                  </p>
                 </div>
                 {isSelected && (
                   <div className="flex-shrink-0 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
