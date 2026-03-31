@@ -21,14 +21,14 @@ import {
   LineChart,
   Line,
 } from "recharts";
-import { 
-  Download, 
-  RefreshCw, 
+import {
+  Download,
+  RefreshCw,
   Filter,
   BarChart3,
   DollarSign,
-  ArrowDownLeft,
-  Receipt,
+  QrCode,
+  CreditCard,
   Wallet,
   TrendingUp,
   AlertTriangle,
@@ -356,39 +356,48 @@ export default function Reports() {
         </Card>
 
         {/* KPIs with StatCard */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <StatCard
-            icon={DollarSign}
-            label="Recebido Bruto"
-            value={formatCurrency(kpis.totalBruto)}
-            variant="highlight"
-          />
-          <StatCard
-            icon={ArrowDownLeft}
-            label="Estornos"
-            value={formatCurrency(kpis.totalEstornos)}
-          />
-          <StatCard
-            icon={Receipt}
-            label="Taxas de Estorno"
-            value={formatCurrency(kpis.totalTaxas)}
-          />
-          <StatCard
-            icon={Wallet}
-            label="Recebido Líquido"
-            value={formatCurrency(kpis.totalLiquido)}
-          />
-          <StatCard
-            icon={TrendingUp}
-            label="Conversão"
-            value={`${kpis.conversao.toFixed(1)}%`}
-          />
-          <StatCard
-            icon={AlertTriangle}
-            label="Inadimplência Rec."
-            value={`${kpis.inadimplencia.toFixed(1)}%`}
-          />
-        </div>
+        {(() => {
+          const methods = chartData.methods as { method: string; value: number }[];
+          const pixBruto = methods.find(m => m.method === 'PIX')?.value || 0;
+          const cardBruto = methods.find(m => m.method === 'CARD')?.value || 0;
+          const receitaPix = pixBruto * 0.015;
+          const receitaCartao = cardBruto * 0.012;
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+              <StatCard
+                icon={DollarSign}
+                label="Recebido Bruto"
+                value={formatCurrency(kpis.totalBruto)}
+                variant="highlight"
+              />
+              <StatCard
+                icon={QrCode}
+                label="Receita PIX (1,5%)"
+                value={formatCurrency(receitaPix)}
+              />
+              <StatCard
+                icon={CreditCard}
+                label="Receita Cartão (1,2%)"
+                value={formatCurrency(receitaCartao)}
+              />
+              <StatCard
+                icon={Wallet}
+                label="Recebido Líquido"
+                value={formatCurrency(kpis.totalLiquido)}
+              />
+              <StatCard
+                icon={TrendingUp}
+                label="Conversão"
+                value={`${kpis.conversao.toFixed(1)}%`}
+              />
+              <StatCard
+                icon={AlertTriangle}
+                label="Inadimplência Rec."
+                value={`${kpis.inadimplencia.toFixed(1)}%`}
+              />
+            </div>
+          );
+        })()}
 
         {/* Gráficos */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
