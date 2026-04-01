@@ -27,6 +27,13 @@ export default function Checkout() {
   const [charge, setCharge] = useState<any>(null);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false);
   const [existingSplits, setExistingSplits] = useState<PaymentSplit[]>([]);
+  const [alreadyProcessed, setAlreadyProcessed] = useState(false);
+
+  // Statuses que indicam que o cliente já agiu — link deve ser bloqueado
+  const BLOCKING_STATUSES = new Set([
+    'analyzing', 'processing', 'validating', 'approved',
+    'awaiting_validation', 'boleto_linked', 'concluded',
+  ]);
   
   const mode = searchParams.get('mode') || 'direct';
 
@@ -79,6 +86,12 @@ export default function Checkout() {
           return;
         }
 
+        // Cobrança já finalizada → redirecionar para confirmação
+        if (data.status === 'completed') {
+          navigate(`/thank-you?pl=${id}`, { replace: true });
+          return;
+        }
+
         setCharge(data);
         setExistingSplits(splits);
         
@@ -112,15 +125,27 @@ export default function Checkout() {
 
           // Helper para verificar se PIX foi pago (status OU pix_paid_at)
           const isPixPaid = pixSplit && (
-            pixSplit.status === 'concluded' || 
+            pixSplit.status === 'concluded' ||
             !!pixSplit.pix_paid_at
           );
 
           // Helper para verificar se Cartão foi pago - SOMENTE status === 'concluded'
           const isCardPaid = cardSplit && cardSplit.status === 'concluded';
 
+          // Helper: cartão em processamento (ação já submetida, não cancelado/negado)
+          const isCardInProgress = cardSplit &&
+            BLOCKING_STATUSES.has(cardSplit.status) &&
+            !isCardPaid;
+
           // CENÁRIO 1: PIX já pago, cartão pendente → ir direto para cartão
+          // Exceção: se cartão já está em processamento, bloquear link
           if (isPixPaid && cardSplit && !isCardPaid) {
+            if (isCardInProgress) {
+              console.log('[Checkout] PIX pago + cartão em processamento, bloqueando link');
+              setAlreadyProcessed(true);
+              setLoading(false);
+              return;
+            }
             console.log('[Checkout] PIX já pago, redirecionando para cartão');
             navigate(`/payment-card/${id}`, { replace: true });
             return;
@@ -295,6 +320,24 @@ export default function Checkout() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-ds-text-muted">Carregando dados do pagamento...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (alreadyProcessed) {
+    return (
+      <div className="min-h-screen bg-ds-bg-body flex items-center justify-center p-4">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="text-primary mb-4">
+            <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-ds-text-strong mb-2">Pagamento em Processamento</h2>
+          <p className="text-ds-text-muted">
+            Este pagamento já foi enviado e está sendo processado. Em breve você receberá a confirmação.
+          </p>
+        </Card>
       </div>
     );
   }

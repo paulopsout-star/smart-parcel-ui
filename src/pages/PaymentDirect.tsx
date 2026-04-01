@@ -19,6 +19,12 @@ export default function PaymentDirect() {
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [charge, setCharge] = useState<any>(null);
+  const [alreadyProcessed, setAlreadyProcessed] = useState(false);
+
+  const BLOCKING_STATUSES = new Set([
+    'analyzing', 'processing', 'validating', 'approved',
+    'awaiting_validation', 'boleto_linked', 'concluded',
+  ]);
   const [selectedOption, setSelectedOption] = useState<PaymentOption | null>(null);
   const [customAmount, setCustomAmount] = useState(0);
   const [customInstallments, setCustomInstallments] = useState(1);
@@ -71,6 +77,30 @@ export default function PaymentDirect() {
             description: "Este link de pagamento não existe ou expirou.",
             variant: "destructive",
           });
+          setLoading(false);
+          return;
+        }
+
+        // Cobrança já finalizada
+        if (data.status === 'completed') {
+          setAlreadyProcessed(true);
+          setLoading(false);
+          return;
+        }
+
+        // Verificar splits existentes para bloquear reentrada
+        const chargeId = data.charge_id || data.id;
+        const { data: existingSplits } = await supabase
+          .from('payment_splits')
+          .select('status, method')
+          .eq('charge_id', chargeId);
+
+        const hasBlockingSplit = (existingSplits || []).some(
+          (s: { status: string }) => BLOCKING_STATUSES.has(s.status)
+        );
+
+        if (hasBlockingSplit) {
+          setAlreadyProcessed(true);
           setLoading(false);
           return;
         }
@@ -163,6 +193,24 @@ export default function PaymentDirect() {
       });
     }
   };
+
+  if (alreadyProcessed) {
+    return (
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="text-primary mb-4">
+            <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Pagamento em Processamento</h2>
+          <p className="text-muted-foreground">
+            Este pagamento já foi enviado e está sendo processado. Em breve você receberá a confirmação.
+          </p>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading || isSimulating) {
     return (

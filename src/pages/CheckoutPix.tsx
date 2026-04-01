@@ -100,7 +100,7 @@ function CheckoutPixContent() {
           payer_document: checkoutData.payer_document || '',
           description: checkoutData.description || checkoutData.title || null,
           checkout_link_id: id,
-          status: 'pending',
+          status: checkoutData.status || checkoutData.charge_status || 'pending',
           fee_amount: checkoutData.fee_amount ?? null,
           payment_method: checkoutData.payment_method ?? null,
         };
