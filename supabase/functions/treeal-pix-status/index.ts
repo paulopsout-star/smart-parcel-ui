@@ -124,11 +124,15 @@ Deno.serve(async (req) => {
             .select("id, status")
             .eq("charge_id", splitData.charge_id);
 
-          const allConcluded = allSplits?.every((s) =>
-            s.id === payment_split_id ? true : s.status === "concluded"
-          );
+          // All non-failed splits must be concluded (handles duplicate splits)
+          const nonFailed = allSplits?.filter((s) => s.status !== "failed") || [];
+          const allNonFailedConcluded =
+            nonFailed.length > 0 &&
+            nonFailed.every((s) =>
+              s.id === payment_split_id ? true : s.status === "concluded"
+            );
 
-          if (allConcluded) {
+          if (allNonFailedConcluded) {
             await supabase
               .from("charges")
               .update({ status: "completed", completed_at: new Date().toISOString() })

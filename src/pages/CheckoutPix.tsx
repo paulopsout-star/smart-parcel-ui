@@ -114,15 +114,18 @@ function CheckoutPixContent() {
         setCharge(chargeData);
 
         // Check if there's an existing PIX split (payment_splits has public read RLS)
+        // Fetch ALL pix splits to find one with active QR or concluded status
         const { data: existingSplits } = await supabase
           .from('payment_splits')
           .select('*')
           .eq('charge_id', chargeData.id)
           .eq('method', 'pix')
-          .order('created_at', { ascending: false })
-          .limit(1);
+          .order('created_at', { ascending: false });
 
-        const existingSplit = existingSplits?.[0];
+        // Priority: 1) concluded split, 2) split with active QR (mp_payment_id + mp_status=ATIVA), 3) most recent
+        const concludedSplit = existingSplits?.find(s => s.status === 'concluded' || s.pix_paid_at);
+        const activeSplit = existingSplits?.find(s => s.mp_payment_id && s.mp_status === 'ATIVA');
+        const existingSplit = concludedSplit || activeSplit || existingSplits?.[0] || null;
 
         if (existingSplit) {
           setSplitId(existingSplit.id);
@@ -195,31 +198,48 @@ function CheckoutPixContent() {
       const feeCents = Math.round(baseCents * PIX_FEE_PERCENT);
       const totalCents = baseCents + feeCents;
 
-      // Create or update split first
+      // Reuse existing split or create new one — prevents duplicates
       let currentSplitId = splitId;
 
       if (!currentSplitId) {
-        const { data: newSplit, error: splitError } = await supabase
+        // Double-check: look for any existing pending pix split with QR for this charge
+        const { data: existingPix } = await supabase
           .from('payment_splits')
-          .insert({
-            charge_id: charge.id,
-            method: 'pix',
-            amount_cents: baseCents,
-            display_amount_cents: totalCents,
-            status: 'pending',
-          })
-          .select('id')
-          .single();
+          .select('id, mp_payment_id')
+          .eq('charge_id', charge.id)
+          .eq('method', 'pix')
+          .eq('status', 'pending')
+          .not('mp_payment_id', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-        if (splitError || !newSplit) {
-          console.error('Error creating split:', splitError);
-          setError('Erro ao criar pagamento');
-          setCreating(false);
-          return;
+        if (existingPix?.[0]) {
+          console.log('[CheckoutPix] Reusing existing split with QR:', existingPix[0].id);
+          currentSplitId = existingPix[0].id;
+          setSplitId(currentSplitId);
+        } else {
+          const { data: newSplit, error: splitError } = await supabase
+            .from('payment_splits')
+            .insert({
+              charge_id: charge.id,
+              method: 'pix',
+              amount_cents: baseCents,
+              display_amount_cents: totalCents,
+              status: 'pending',
+            })
+            .select('id')
+            .single();
+
+          if (splitError || !newSplit) {
+            console.error('Error creating split:', splitError);
+            setError('Erro ao criar pagamento');
+            setCreating(false);
+            return;
+          }
+
+          currentSplitId = newSplit.id;
+          setSplitId(currentSplitId);
         }
-
-        currentSplitId = newSplit.id;
-        setSplitId(currentSplitId);
       }
 
       // Create PIX payment via Mercado Pago

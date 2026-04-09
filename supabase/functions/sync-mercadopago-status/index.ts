@@ -140,7 +140,8 @@ Deno.serve(async (req) => {
           .select("id, status")
           .eq("charge_id", chargeId);
 
-        if (allSplits && allSplits.every(s => s.status === "concluded")) {
+        const nonFailed = (allSplits || []).filter(s => s.status !== "failed");
+        if (nonFailed.length > 0 && nonFailed.every(s => s.status === "concluded")) {
           await supabase
             .from("charges")
             .update({
@@ -169,7 +170,8 @@ Deno.serve(async (req) => {
           .select("id, status")
           .eq("charge_id", charge.id);
 
-        if (chargeSplits && chargeSplits.length > 0 && chargeSplits.every(s => s.status === "concluded")) {
+        const nonFailedSplits = (chargeSplits || []).filter(s => s.status !== "failed");
+        if (nonFailedSplits.length > 0 && nonFailedSplits.every(s => s.status === "concluded")) {
           await supabase
             .from("charges")
             .update({
