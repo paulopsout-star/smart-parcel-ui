@@ -80,8 +80,18 @@ function deduplicateSplits(charges: any[]) {
       const splitsByMethod = new Map<string, any>();
       charge.splits.forEach((split: any) => {
         const existing = splitsByMethod.get(split.method);
-        if (!existing || new Date(split.created_at) > new Date(existing.created_at)) {
+        if (!existing) {
           splitsByMethod.set(split.method, split);
+        } else {
+          const existingHasKey = !!existing.pre_payment_key;
+          const newHasKey = !!split.pre_payment_key;
+          if (newHasKey && !existingHasKey) {
+            splitsByMethod.set(split.method, split);
+          } else if (!newHasKey && existingHasKey) {
+            // manter o existente que já tem pre_payment_key
+          } else if (new Date(split.created_at) > new Date(existing.created_at)) {
+            splitsByMethod.set(split.method, split);
+          }
         }
       });
       charge.splits = Array.from(splitsByMethod.values()).sort((a: any, b: any) => a.order_index - b.order_index);
