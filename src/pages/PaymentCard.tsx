@@ -313,7 +313,7 @@ export default function PaymentCard() {
               </div>
               <div className="text-sm">
                 <p className="font-medium text-emerald-800 dark:text-emerald-200">
-                  PIX confirmado: {formatCurrency(pixAmount)}
+                  PIX confirmado
                 </p>
                 <p className="text-emerald-600 dark:text-emerald-300">
                   Agora complete o pagamento de {formatCurrency(cardDisplayAmount || cardAmount)} no cartão.
