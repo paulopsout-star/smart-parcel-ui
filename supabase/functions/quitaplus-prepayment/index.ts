@@ -139,19 +139,39 @@ async function saveCardHolder(
   if (!holder || !payer.companyId) return;
 
   try {
-    const { data: cardSplit } = await supabase
-      .from('payment_splits')
-      .select('id')
-      .eq('payment_link_id', requestData.paymentLinkId)
-      .eq('method', 'credit_card')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // O paymentLinkId da requisição nem sempre é um payment_links.id (no fluxo só-cartão,
+    // /payment-direct/:id, vem o id da cobrança). Por isso o vínculo é resolvido pelo
+    // split de cartão da charge, e o payment_link_id gravado é o que está no split.
+    let cardSplit: { id: string; payment_link_id: string | null } | null = null;
+
+    if (payer.chargeId) {
+      const { data } = await supabase
+        .from('payment_splits')
+        .select('id, payment_link_id')
+        .eq('charge_id', payer.chargeId)
+        .eq('method', 'credit_card')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      cardSplit = data;
+    }
+
+    if (!cardSplit && requestData.paymentLinkId) {
+      const { data } = await supabase
+        .from('payment_splits')
+        .select('id, payment_link_id')
+        .eq('payment_link_id', requestData.paymentLinkId)
+        .eq('method', 'credit_card')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      cardSplit = data;
+    }
 
     const { error } = await supabase.from('card_holder_details').insert({
       company_id: payer.companyId,
       charge_id: payer.chargeId,
-      payment_link_id: requestData.paymentLinkId || null,
+      payment_link_id: cardSplit?.payment_link_id ?? null,
       payment_split_id: cardSplit?.id ?? null,
       pre_payment_key: prePaymentKey,
       holder_name: (holder.name || requestData.card.holderName || '').trim(),
