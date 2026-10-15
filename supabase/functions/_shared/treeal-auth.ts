@@ -1,7 +1,10 @@
 // @ts-nocheck
 import forge from "npm:node-forge@1.3.1";
 
-export const TREEAL_CASHIN_URL = "https://api.pix.treeal.com";
+// Base da API Pix (cash-in) da Treeal. Pode ser sobrescrita por secret para
+// acompanhar mudanças de endpoint no provedor sem precisar redeployar código.
+export const TREEAL_CASHIN_URL = (Deno.env.get("TREEAL_API_URL") || "https://api.pix.treeal.com").replace(/\/+$/, "");
+export const TREEAL_OAUTH_URL = Deno.env.get("TREEAL_OAUTH_URL") || `${TREEAL_CASHIN_URL}/oauth/token`;
 
 export interface MtlsCredentials {
   certPem: string;
@@ -104,7 +107,7 @@ export async function getAccessToken(
   }).toString();
 
   const response = await fetchMtls(
-    `${TREEAL_CASHIN_URL}/oauth/token`,
+    TREEAL_OAUTH_URL,
     {
       method: "POST",
       headers: {
@@ -118,7 +121,7 @@ export async function getAccessToken(
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Treeal OAuth falhou [${response.status}]: ${detail}`);
+    throw new Error(`Treeal OAuth falhou [${response.status}] em ${TREEAL_OAUTH_URL}: ${detail}`);
   }
 
   const data = await response.json() as Record<string, unknown>;

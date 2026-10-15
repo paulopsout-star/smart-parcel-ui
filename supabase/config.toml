@@ -155,3 +155,16 @@ verify_jwt = false
 
 [functions.sync-mercadopago-status]
 verify_jwt = false
+
+# Contingência AbacatePay v2 (out/2026) — Treeal permanece como integração principal
+[functions.abacatepay-pix-create]
+verify_jwt = false
+
+[functions.abacatepay-pix-status]
+verify_jwt = false
+
+[functions.abacatepay-webhook]
+verify_jwt = false
+
+[functions.sync-abacatepay-status]
+verify_jwt = false

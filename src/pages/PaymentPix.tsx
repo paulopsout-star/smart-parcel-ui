@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, CheckCircle2, Clock, Copy, QrCode, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { getFunctionErrorMessage } from '@/lib/functionError';
+import { PIX_CREATE_FUNCTION, isReusablePixQr, pixStatusFunctionFor } from '@/lib/pixProvider';
 import { toast } from 'sonner';
 
 interface PixData {
@@ -40,6 +42,7 @@ interface ChargeData {
   payer_name: string;
   payer_email: string;
   payer_document: string;
+  payer_phone?: string | null;
   description: string | null;
 }
 
@@ -156,12 +159,14 @@ export default function PaymentPix() {
             payer_name: data.charge.payer_name,
             payer_email: data.charge.payer_email,
             payer_document: data.charge.payer_document,
+            payer_phone: data.charge.payer_phone ?? data.payment_link?.payer_phone ?? null,
             description: data.payment_link?.description || data.charge.description || null,
           });
         }
 
-        // If we already have MP data, validate amount before reusing
-        if (pixSplit.mp_payment_id && pixSplit.mp_qr_code && pixSplit.mp_qr_code_base64) {
+        // Reaproveita QR só se for do provedor ativo e ainda pendente; QR de outro
+        // provedor (ex.: Treeal durante a contingência) cai no createPixPayment e é substituído
+        if (isReusablePixQr(pixSplit) && pixSplit.mp_qr_code_base64) {
           const splitDisplayAmount = pixSplit.display_amount_cents || pixSplit.amount_cents;
           
           // For combined payments, validate against split's own amount_cents
@@ -224,7 +229,7 @@ export default function PaymentPix() {
       const expectedTotal = baseCents + Math.round(baseCents * PIX_FEE_PERCENT);
       const amountCents = expectedTotal;
 
-      const { data, error: createError } = await supabase.functions.invoke('treeal-pix-create', {
+      const { data, error: createError } = await supabase.functions.invoke(PIX_CREATE_FUNCTION, {
         body: {
           payment_split_id: split.id,
           charge_id: split.charge_id,
@@ -232,14 +237,16 @@ export default function PaymentPix() {
           payer_name: charge.payer_name,
           payer_email: charge.payer_email,
           payer_document: charge.payer_document,
+          payer_phone: charge.payer_phone ?? null,
           description: charge.description || 'Pagamento via PIX - Autonegocie',
         },
       });
 
       if (createError) {
         console.error('Error creating PIX:', createError);
+        const detail = await getFunctionErrorMessage(createError);
         toast.error('Erro ao gerar QR Code PIX');
-        setError('Erro ao gerar QR Code. Tente novamente.');
+        setError(detail ? `Erro ao gerar QR Code: ${detail}` : 'Erro ao gerar QR Code. Tente novamente.');
         return;
       }
 
@@ -280,7 +287,7 @@ export default function PaymentPix() {
         const splitIdToCheck = resolvedSplitId || split?.id;
         if (!splitIdToCheck) return;
 
-        const { data, error: statusError } = await supabase.functions.invoke('treeal-pix-status', {
+        const { data, error: statusError } = await supabase.functions.invoke(pixStatusFunctionFor(pixData?.payment_id), {
           body: {
             payment_split_id: splitIdToCheck,
           },
@@ -337,7 +344,7 @@ export default function PaymentPix() {
         return;
       }
 
-      const { data, error: statusError } = await supabase.functions.invoke('treeal-pix-status', {
+      const { data, error: statusError } = await supabase.functions.invoke(pixStatusFunctionFor(pixData?.payment_id), {
         body: {
           payment_split_id: splitIdToCheck,
         },

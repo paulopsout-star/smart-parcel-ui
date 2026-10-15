@@ -7,6 +7,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertCircle, CheckCircle2, Clock, Copy, QrCode, RefreshCw } from 'lucide-react';
 // supabase client still needed for functions.invoke in createPixPayment and status check
 import { supabase } from '@/integrations/supabase/client';
+import { getFunctionErrorMessage } from '@/lib/functionError';
+import { ACTIVE_PIX_PROVIDER, PIX_CREATE_FUNCTION, isReusablePixQr, pixProviderOf, pixStatusFunctionFor } from '@/lib/pixProvider';
 import { toast } from 'sonner';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -26,6 +28,7 @@ interface ChargeData {
   payer_name: string;
   payer_email: string;
   payer_document: string;
+  payer_phone?: string | null;
   description: string | null;
   checkout_link_id: string | null;
   status: string;
@@ -98,6 +101,7 @@ function CheckoutPixContent() {
           payer_name: checkoutData.payer_name || 'Cliente',
           payer_email: checkoutData.payer_email || '',
           payer_document: checkoutData.payer_document || '',
+          payer_phone: checkoutData.payer_phone || null,
           description: checkoutData.description || checkoutData.title || null,
           checkout_link_id: id,
           status: checkoutData.status || checkoutData.charge_status || 'pending',
@@ -122,9 +126,9 @@ function CheckoutPixContent() {
           .eq('method', 'pix')
           .order('created_at', { ascending: false });
 
-        // Priority: 1) concluded split, 2) split with active QR (mp_payment_id + mp_status=ATIVA), 3) most recent
+        // Priority: 1) concluded split, 2) split with active QR do provedor ativo, 3) most recent
         const concludedSplit = existingSplits?.find(s => s.status === 'concluded' || s.pix_paid_at);
-        const activeSplit = existingSplits?.find(s => s.mp_payment_id && s.mp_status === 'ATIVA');
+        const activeSplit = existingSplits?.find(s => isReusablePixQr(s));
         const existingSplit = concludedSplit || activeSplit || existingSplits?.[0] || null;
 
         if (existingSplit) {
@@ -140,7 +144,7 @@ function CheckoutPixContent() {
           const splitDisplayAmount = existingSplit.display_amount_cents || existingSplit.amount_cents;
           const isAmountCorrect = Math.abs(splitDisplayAmount - expectedTotal) <= 1;
 
-          if (existingSplit.mp_payment_id && existingSplit.mp_qr_code && isAmountCorrect) {
+          if (isReusablePixQr(existingSplit) && isAmountCorrect) {
             // Split com dados corretos - reaproveitar
             setPixData({
               payment_id: existingSplit.mp_payment_id,
@@ -203,19 +207,21 @@ function CheckoutPixContent() {
 
       if (!currentSplitId) {
         // Double-check: look for any existing pending pix split with QR for this charge
-        const { data: existingPix } = await supabase
+        const { data: pendingPixSplits } = await supabase
           .from('payment_splits')
           .select('id, mp_payment_id')
           .eq('charge_id', charge.id)
           .eq('method', 'pix')
           .eq('status', 'pending')
           .not('mp_payment_id', 'is', null)
-          .order('created_at', { ascending: false })
-          .limit(1);
+          .order('created_at', { ascending: false });
 
-        if (existingPix?.[0]) {
-          console.log('[CheckoutPix] Reusing existing split with QR:', existingPix[0].id);
-          currentSplitId = existingPix[0].id;
+        // Só reaproveita split cujo QR foi emitido pelo provedor ativo
+        const existingPix = pendingPixSplits?.find(s => pixProviderOf(s.mp_payment_id) === ACTIVE_PIX_PROVIDER);
+
+        if (existingPix) {
+          console.log('[CheckoutPix] Reusing existing split with QR:', existingPix.id);
+          currentSplitId = existingPix.id;
           setSplitId(currentSplitId);
         } else {
           const { data: newSplit, error: splitError } = await supabase
@@ -243,7 +249,7 @@ function CheckoutPixContent() {
       }
 
       // Create PIX payment via Mercado Pago
-      const { data, error: createError } = await supabase.functions.invoke('treeal-pix-create', {
+      const { data, error: createError } = await supabase.functions.invoke(PIX_CREATE_FUNCTION, {
         body: {
           payment_split_id: currentSplitId,
           charge_id: charge.id,
@@ -251,14 +257,16 @@ function CheckoutPixContent() {
           payer_name: charge.payer_name,
           payer_email: charge.payer_email,
           payer_document: charge.payer_document,
+          payer_phone: charge.payer_phone ?? null,
           description: charge.description || 'Pagamento via PIX - Autonegocie',
         },
       });
 
       if (createError) {
         console.error('Error creating PIX:', createError);
+        const detail = await getFunctionErrorMessage(createError);
         toast.error('Erro ao gerar QR Code PIX');
-        setError('Erro ao gerar QR Code. Tente novamente.');
+        setError(detail ? `Erro ao gerar QR Code: ${detail}` : 'Erro ao gerar QR Code. Tente novamente.');
         return;
       }
 
@@ -296,7 +304,7 @@ function CheckoutPixContent() {
 
     const checkStatus = async () => {
       try {
-        const { data, error: statusError } = await supabase.functions.invoke('treeal-pix-status', {
+        const { data, error: statusError } = await supabase.functions.invoke(pixStatusFunctionFor(pixData?.payment_id), {
           body: {
             payment_split_id: splitId,
           },
@@ -338,7 +346,7 @@ function CheckoutPixContent() {
 
     setChecking(true);
     try {
-      const { data, error: statusError } = await supabase.functions.invoke('treeal-pix-status', {
+      const { data, error: statusError } = await supabase.functions.invoke(pixStatusFunctionFor(pixData?.payment_id), {
         body: {
           payment_split_id: splitId,
         },
