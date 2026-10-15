@@ -57,8 +57,38 @@ const CHARGES_SELECT = `
   )
 `;
 
+/** Etapas do processo de pagamento (enum charge_status) — é o que o badge da tabela exibe. */
+export const CHARGE_STATUSES: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'pending', label: 'Pendente' },
+  { value: 'processing', label: 'Processando' },
+  { value: 'pre_authorized', label: 'Pré-autorizado' },
+  { value: 'boleto_linked', label: 'Boleto vinculado' },
+  { value: 'awaiting_validation', label: 'Aguardando validação' },
+  { value: 'validating', label: 'Validando' },
+  { value: 'approved', label: 'Aprovado' },
+  { value: 'completed', label: 'Pago' },
+  { value: 'payment_denied', label: 'Pagamento negado' },
+  { value: 'failed', label: 'Falhou' },
+  { value: 'cancelled', label: 'Cancelado' },
+  { value: 'refunded', label: 'Estornado' },
+];
+
+/** Situação = agrupamento das etapas acima (conclusão, andamento, etc.). */
+export const CHARGE_SITUATIONS: ReadonlyArray<{ value: string; label: string; statuses: string[] }> = [
+  {
+    value: 'in_progress',
+    label: 'Em andamento',
+    statuses: ['pending', 'processing', 'pre_authorized', 'boleto_linked', 'awaiting_validation', 'validating', 'approved'],
+  },
+  { value: 'completed', label: 'Concluída', statuses: ['completed'] },
+  { value: 'failed', label: 'Falhou', statuses: ['failed', 'payment_denied'] },
+  { value: 'cancelled', label: 'Cancelada', statuses: ['cancelled'] },
+  { value: 'refunded', label: 'Estornada', statuses: ['refunded'] },
+];
+
 export interface ChargeFilters {
-  status: string;
+  situation: string;   // grupo (CHARGE_SITUATIONS) ou 'all'
+  status: string;      // etapa exata (CHARGE_STATUSES) ou 'all'
   payment_method: string;
   date_from: Date | undefined;
   date_to: Date | undefined;
@@ -67,6 +97,7 @@ export interface ChargeFilters {
 }
 
 const DEFAULT_FILTERS: ChargeFilters = {
+  situation: 'all',
   status: 'all',
   payment_method: 'all',
   date_from: startOfMonth(new Date()),
@@ -118,7 +149,15 @@ async function fetchChargesPage(
     query = query.lte('created_at', endOfDay(filters.date_to).toISOString());
   }
 
-  // Server-side status filter
+  // Server-side situation filter (grupo de status)
+  if (filters.situation !== 'all') {
+    const situation = CHARGE_SITUATIONS.find(s => s.value === filters.situation);
+    if (situation) {
+      query = query.in('status', situation.statuses as any);
+    }
+  }
+
+  // Server-side status filter (etapa exata; combina com a situação por AND)
   if (filters.status !== 'all') {
     query = query.eq('status', filters.status as any);
   }
@@ -169,6 +208,7 @@ export function useChargesQuery(filters: ChargeFilters, page: number) {
     queryKey: ['charges', {
       dateFrom: filters.date_from?.toISOString(),
       dateTo: filters.date_to?.toISOString(),
+      situation: filters.situation,
       status: filters.status,
       paymentMethod: filters.payment_method,
       payerDocument: filters.payer_document,

@@ -108,7 +108,7 @@ interface Charge {
 }
 
 // ChargeFilters is now imported from the hook
-import { useChargesQuery, DEFAULT_FILTERS, PAGE_SIZE, deduplicateSplits, CHARGES_SELECT } from '@/hooks/useChargesQuery';
+import { useChargesQuery, DEFAULT_FILTERS, PAGE_SIZE, deduplicateSplits, CHARGES_SELECT, CHARGE_SITUATIONS, CHARGE_STATUSES } from '@/hooks/useChargesQuery';
 import type { ChargeFilters } from '@/hooks/useChargesQuery';
 
 // Helper functions
@@ -927,7 +927,8 @@ export default function ChargeHistory() {
   };
 
   const hasActiveFilters = () => {
-    return filters.status !== 'all' || 
+    return filters.situation !== 'all' ||
+           filters.status !== 'all' ||
            filters.payment_method !== 'all' || 
            filters.date_to !== undefined || 
            filters.payer_document !== '' ||
@@ -1288,7 +1289,8 @@ export default function ChargeHistory() {
       approved: 'Aprovado',
       awaiting_validation: 'Aguardando Validação',
       validating: 'Validando',
-      payment_denied: 'Pagamento Negado'
+      payment_denied: 'Pagamento Negado',
+      refunded: 'Estornado'
     };
     return labels[status] || status;
   };
@@ -1424,7 +1426,7 @@ export default function ChargeHistory() {
         {showFilters && (
           <Card>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4">
                 {/* Company filter - Admin only */}
                 {isAdmin && (
                   <div className="space-y-2">
@@ -1443,6 +1445,28 @@ export default function ChargeHistory() {
                   </div>
                 )}
                 <div className="space-y-2">
+                  <label className="text-sm font-medium text-ds-text-muted">Situação</label>
+                  <Select
+                    value={filters.situation}
+                    onValueChange={(value) => setFilters(prev => {
+                      // Status fora do novo grupo volta para "Todos" (evita AND vazio)
+                      const group = CHARGE_SITUATIONS.find(g => g.value === value);
+                      const keepStatus = value === 'all' || !group || group.statuses.includes(prev.status);
+                      return { ...prev, situation: value, status: keepStatus ? prev.status : 'all' };
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      {CHARGE_SITUATIONS.map(s => (
+                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-medium text-ds-text-muted">Status</label>
                   <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
                     <SelectTrigger>
@@ -1450,11 +1474,12 @@ export default function ChargeHistory() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="pending">Pendente</SelectItem>
-                      <SelectItem value="processing">Processando</SelectItem>
-                      <SelectItem value="completed">Concluída</SelectItem>
-                      <SelectItem value="failed">Falhou</SelectItem>
-                      <SelectItem value="cancelled">Cancelada</SelectItem>
+                      {CHARGE_STATUSES
+                        // Com uma situação escolhida, lista só as etapas daquele grupo
+                        .filter(s => filters.situation === 'all' || CHARGE_SITUATIONS.find(g => g.value === filters.situation)?.statuses.includes(s.value))
+                        .map(s => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
