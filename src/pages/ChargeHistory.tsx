@@ -11,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2, Download, FileSpreadsheet, Clock } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2, Download, FileSpreadsheet, Clock, Users } from 'lucide-react';
+import { cardHolderRelationshipLabel } from '@/types/payment';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -47,6 +48,18 @@ interface PaymentSplitInfo {
 interface Company {
   id: string;
   name: string;
+}
+
+// Portador do cartão informado no checkout (tabela card_holder_details)
+interface CardHolderDetails {
+  id: string;
+  holder_name: string;
+  holder_document: string;
+  holder_birth_date: string | null;
+  holder_phone: string | null;
+  holder_email: string | null;
+  relationship: string;
+  created_at: string;
 }
 
 interface Charge {
@@ -705,6 +718,33 @@ export default function ChargeHistory() {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
+  const [holderDetails, setHolderDetails] = useState<CardHolderDetails | null>(null);
+
+  // Carrega o último portador de cartão registrado para a cobrança aberta nos detalhes
+  useEffect(() => {
+    const chargeId = selectedCharge?.id;
+    setHolderDetails(null);
+    if (!chargeId) return;
+
+    let cancelled = false;
+    supabase
+      .from('card_holder_details')
+      .select('id, holder_name, holder_document, holder_birth_date, holder_phone, holder_email, relationship, created_at')
+      .eq('charge_id', chargeId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error('[ChargeHistory] Erro ao buscar portador do cartão:', error);
+          return;
+        }
+        setHolderDetails(data);
+      });
+
+    return () => { cancelled = true; };
+  }, [selectedCharge?.id]);
   const [executionsDialog, setExecutionsDialog] = useState<{ open: boolean; chargeId: string; chargeName: string }>({
     open: false,
     chargeId: '',
@@ -1618,7 +1658,44 @@ export default function ChargeHistory() {
                       selectedCharge.amount
                     )} variant="primary" />
                   </div>
-                  
+
+                  {/* Dados do Portador do Cartão (informados no checkout) */}
+                  {(selectedCharge.payment_method === 'cartao' || selectedCharge.payment_method === 'cartao_pix' || holderDetails) && (
+                    <div className="space-y-3 p-4 bg-ds-bg-surface-alt rounded-lg border border-ds-border-subtle">
+                      <h4 className="font-medium text-ds-text-strong flex items-center gap-2">
+                        <CreditCard className="h-4 w-4" />
+                        Dados do Portador do Cartão
+                      </h4>
+                      {holderDetails ? (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="col-span-2">
+                            <InfoCard
+                              icon={Users}
+                              label="Vínculo com o portador"
+                              value={cardHolderRelationshipLabel(holderDetails.relationship)}
+                              variant="info"
+                            />
+                          </div>
+                          <InfoCard icon={User} label="Nome impresso no cartão" value={holderDetails.holder_name} />
+                          <InfoCard icon={FileText} label="CPF/CNPJ do portador" value={formatDocument(holderDetails.holder_document)} />
+                          <InfoCard
+                            icon={CalendarIcon}
+                            label="Nascimento"
+                            value={holderDetails.holder_birth_date
+                              ? format(new Date(`${holderDetails.holder_birth_date}T00:00:00`), 'dd/MM/yyyy')
+                              : '-'}
+                          />
+                          <InfoCard icon={Phone} label="Celular do portador" value={holderDetails.holder_phone ? formatPhone(holderDetails.holder_phone) : '-'} />
+                          <div className="col-span-2">
+                            <InfoCard icon={Mail} label="E-mail do portador" value={holderDetails.holder_email || '-'} />
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-ds-text-muted">Não informado (cobrança anterior à coleta ou cartão ainda não preenchido).</p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Link de Pagamento */}
                   <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
                     <h4 className="font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2">

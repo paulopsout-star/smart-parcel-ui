@@ -387,6 +387,12 @@ export default function PaymentCard() {
           boletoLinhaDigitavel={charge?.boleto_linha_digitavel || ''}
           creditorDocument={charge?.creditor_document || ''}
           creditorName={charge?.creditor_name || ''}
+          registeredPayer={{
+            name: charge?.payer_name || '',
+            email: charge?.payer_email || '',
+            document: charge?.payer_document || '',
+            phone: charge?.payer_phone || '',
+          }}
         />
       </Card>
     </div>

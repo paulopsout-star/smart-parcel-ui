@@ -17,12 +17,157 @@ interface PrePaymentRequest {
     expirationDate: string; // MM/AA
     cvv: string;
   };
-  payer: {
+  /** Portador do cartão informado no checkout — guardado em card_holder_details, NÃO enviado ao Quita+ (exceto o nome, como CardHolderName). */
+  cardHolder?: {
+    name: string;
+    document: string;
+    birthDate?: string | null; // YYYY-MM-DD
+    phone?: string;
+    email?: string;
+    relationship: string;
+  };
+  /**
+   * Legado / ConnectivityTest. Só é usado quando NÃO há chargeId nem paymentLinkId.
+   * Com cobrança identificada, o pagador enviado ao Quita+ é SEMPRE o do cadastro.
+   */
+  payer?: {
     name: string;
     document: string;
     email: string;
     phoneNumber: string;
   };
+}
+
+interface ResolvedPayer {
+  name: string;
+  document: string;
+  email: string;
+  phoneNumber: string;
+  companyId: string | null;
+  chargeId: string | null;
+  source: 'charge' | 'payment_link' | 'request';
+}
+
+const onlyDigits = (v: string | null | undefined) => (v || '').replace(/\D/g, '');
+
+/**
+ * Resolve o pagador a partir do CADASTRO da cobrança (charges) ou, para links avulsos
+ * do admin, do payment_link. O que o cliente digita no checkout nunca entra aqui.
+ * Única exceção: requisições sem chargeId/paymentLinkId (ferramenta de teste).
+ */
+async function resolvePayer(
+  supabase: ReturnType<typeof createClient>,
+  requestData: PrePaymentRequest,
+): Promise<{ payer: ResolvedPayer } | { error: string }> {
+  const holderPhone = onlyDigits(requestData.cardHolder?.phone);
+
+  if (requestData.chargeId) {
+    const { data: charge } = await supabase
+      .from('charges')
+      .select('id, company_id, payer_name, payer_document, payer_email, payer_phone')
+      .eq('id', requestData.chargeId)
+      .maybeSingle();
+
+    if (charge) {
+      return {
+        payer: {
+          name: (charge.payer_name || '').trim(),
+          document: onlyDigits(charge.payer_document),
+          email: (charge.payer_email || '').trim(),
+          phoneNumber: onlyDigits(charge.payer_phone) || holderPhone,
+          companyId: charge.company_id,
+          chargeId: charge.id,
+          source: 'charge',
+        },
+      };
+    }
+  }
+
+  if (requestData.paymentLinkId) {
+    const { data: link } = await supabase
+      .from('payment_links')
+      .select('id, company_id, charge_id, payer_name, payer_document, payer_email, payer_phone_number')
+      .eq('id', requestData.paymentLinkId)
+      .maybeSingle();
+
+    if (link) {
+      const phone = onlyDigits(link.payer_phone_number) || holderPhone;
+      if (!onlyDigits(link.payer_phone_number) && holderPhone) {
+        console.warn('[quitaplus-prepayment] payment_link sem telefone — usando celular do portador como PayerPhoneNumber');
+      }
+      return {
+        payer: {
+          name: (link.payer_name || '').trim(),
+          document: onlyDigits(link.payer_document),
+          email: (link.payer_email || '').trim(),
+          phoneNumber: phone,
+          companyId: link.company_id,
+          chargeId: link.charge_id,
+          source: 'payment_link',
+        },
+      };
+    }
+  }
+
+  // Nenhuma cobrança/link encontrado (ex.: ConnectivityTest com IDs fictícios): usa o payer da requisição
+  if (requestData.payer) {
+    console.warn('[quitaplus-prepayment] Cobrança/link não encontrados — usando payer da requisição (modo teste)');
+    return {
+      payer: {
+        name: (requestData.payer.name || '').trim(),
+        document: onlyDigits(requestData.payer.document),
+        email: (requestData.payer.email || '').trim(),
+        phoneNumber: onlyDigits(requestData.payer.phoneNumber),
+        companyId: null,
+        chargeId: null,
+        source: 'request',
+      },
+    };
+  }
+
+  return { error: 'Cobrança não encontrada para identificar o pagador' };
+}
+
+/** Guarda o portador informado no checkout. Falha aqui nunca interrompe o pagamento. */
+async function saveCardHolder(
+  supabase: ReturnType<typeof createClient>,
+  requestData: PrePaymentRequest,
+  payer: ResolvedPayer,
+  prePaymentKey: string | null,
+): Promise<void> {
+  const holder = requestData.cardHolder;
+  if (!holder || !payer.companyId) return;
+
+  try {
+    const { data: cardSplit } = await supabase
+      .from('payment_splits')
+      .select('id')
+      .eq('payment_link_id', requestData.paymentLinkId)
+      .eq('method', 'credit_card')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { error } = await supabase.from('card_holder_details').insert({
+      company_id: payer.companyId,
+      charge_id: payer.chargeId,
+      payment_link_id: requestData.paymentLinkId || null,
+      payment_split_id: cardSplit?.id ?? null,
+      pre_payment_key: prePaymentKey,
+      holder_name: (holder.name || requestData.card.holderName || '').trim(),
+      holder_document: onlyDigits(holder.document),
+      holder_birth_date: holder.birthDate || null,
+      holder_phone: onlyDigits(holder.phone) || null,
+      holder_email: (holder.email || '').trim() || null,
+      relationship: holder.relationship,
+    });
+
+    if (error) {
+      console.error('[quitaplus-prepayment] Erro ao salvar card_holder_details:', error);
+    }
+  } catch (err) {
+    console.error('[quitaplus-prepayment] Exceção ao salvar card_holder_details:', err);
+  }
 }
 
 /**
@@ -123,6 +268,25 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Pagador enviado ao Quita+ = cadastro da cobrança (nunca o formulário do checkout)
+    const resolved = await resolvePayer(supabase, requestData);
+    if ('error' in resolved) {
+      console.error('[quitaplus-prepayment]', resolved.error, { chargeId: requestData.chargeId, paymentLinkId: requestData.paymentLinkId });
+      return new Response(
+        JSON.stringify({ success: false, error: 'payer_not_found', userMessage: 'Não foi possível identificar a cobrança. Atualize a página e tente novamente.' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const payer = resolved.payer;
+    if (!payer.name || !payer.document || !payer.email || !payer.phoneNumber) {
+      console.error('[quitaplus-prepayment] Cadastro do pagador incompleto:', { source: payer.source, hasName: !!payer.name, hasDocument: !!payer.document, hasEmail: !!payer.email, hasPhone: !!payer.phoneNumber });
+      return new Response(
+        JSON.stringify({ success: false, error: 'payer_data_incomplete', userMessage: 'O cadastro desta cobrança está incompleto (nome, CPF/CNPJ, e-mail ou telefone). Entre em contato com quem enviou o link.' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    console.log('[quitaplus-prepayment] Pagador resolvido do cadastro:', { source: payer.source, chargeId: payer.chargeId, relationship: requestData.cardHolder?.relationship ?? null });
+
     // Obter token de autenticação
     const tokenResponse = await fetch(`${supabaseUrl}/functions/v1/quitaplus-token`, {
       method: 'POST',
@@ -147,8 +311,8 @@ serve(async (req) => {
     // Sanitizar dados
     const sanitizedCardNumber = requestData.card.number.replace(/\D/g, '');
     const sanitizedCvv = requestData.card.cvv.replace(/\D/g, '');
-    const sanitizedDocument = requestData.payer.document.replace(/\D/g, '');
-    const sanitizedPhone = requestData.payer.phoneNumber.replace(/\D/g, '');
+    const sanitizedDocument = payer.document;
+    const sanitizedPhone = payer.phoneNumber;
     
     // Converter data de expiração de MM/AA para YYYY/MM
     const expDateClean = requestData.card.expirationDate.replace(/\D/g, '');
@@ -175,9 +339,9 @@ serve(async (req) => {
       AmountInCents: requestData.amount,
       Installments: requestData.installments,
       PayerDocument: sanitizedDocument,
-      PayerEmail: requestData.payer.email.trim(),
+      PayerEmail: payer.email,
       PayerPhoneNumber: sanitizedPhone,
-      PayerName: requestData.payer.name.trim(),
+      PayerName: payer.name,
       CardHolderName: requestData.card.holderName.trim(),
       CardNumber: sanitizedCardNumber,
       CardExpirationDate: cardExpirationDate,
@@ -376,6 +540,9 @@ DETALHES TÉCNICOS:
         if (updateError) {
           console.error('[quitaplus-prepayment] Erro ao atualizar payment_splits:', updateError);
         }
+
+        // Guardar o portador do cartão (aprovado ou não — serve para rastreabilidade)
+        await saveCardHolder(supabase, requestData, payer, prePaymentKey);
 
         // VALIDAÇÃO 2: Verificar se isApproved === true
         // Só continua o fluxo de sucesso se aprovado

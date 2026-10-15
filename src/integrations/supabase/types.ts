@@ -14,6 +14,83 @@ export type Database = {
   }
   public: {
     Tables: {
+      card_holder_details: {
+        Row: {
+          charge_id: string | null
+          company_id: string
+          created_at: string
+          holder_birth_date: string | null
+          holder_document: string
+          holder_email: string | null
+          holder_name: string
+          holder_phone: string | null
+          id: string
+          payment_link_id: string | null
+          payment_split_id: string | null
+          pre_payment_key: string | null
+          relationship: Database["public"]["Enums"]["card_holder_relationship"]
+        }
+        Insert: {
+          charge_id?: string | null
+          company_id: string
+          created_at?: string
+          holder_birth_date?: string | null
+          holder_document: string
+          holder_email?: string | null
+          holder_name: string
+          holder_phone?: string | null
+          id?: string
+          payment_link_id?: string | null
+          payment_split_id?: string | null
+          pre_payment_key?: string | null
+          relationship: Database["public"]["Enums"]["card_holder_relationship"]
+        }
+        Update: {
+          charge_id?: string | null
+          company_id?: string
+          created_at?: string
+          holder_birth_date?: string | null
+          holder_document?: string
+          holder_email?: string | null
+          holder_name?: string
+          holder_phone?: string | null
+          id?: string
+          payment_link_id?: string | null
+          payment_split_id?: string | null
+          pre_payment_key?: string | null
+          relationship?: Database["public"]["Enums"]["card_holder_relationship"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_holder_details_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: false
+            referencedRelation: "charges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_holder_details_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_holder_details_payment_link_id_fkey"
+            columns: ["payment_link_id"]
+            isOneToOne: false
+            referencedRelation: "payment_links"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_holder_details_payment_split_id_fkey"
+            columns: ["payment_split_id"]
+            isOneToOne: false
+            referencedRelation: "payment_splits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       charge_executions: {
         Row: {
           attempts: number | null
@@ -1085,6 +1162,16 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "operador"
+      card_holder_relationship:
+        | "self"
+        | "spouse"
+        | "parent"
+        | "child"
+        | "sibling"
+        | "uncle_aunt"
+        | "cousin"
+        | "grandparent"
+        | "friend"
       charge_status:
         | "pending"
         | "processing"
@@ -1236,6 +1323,17 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "operador"],
+      card_holder_relationship: [
+        "self",
+        "spouse",
+        "parent",
+        "child",
+        "sibling",
+        "uncle_aunt",
+        "cousin",
+        "grandparent",
+        "friend",
+      ],
       charge_status: [
         "pending",
         "processing",

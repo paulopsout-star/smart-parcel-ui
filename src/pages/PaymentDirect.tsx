@@ -402,7 +402,7 @@ export default function PaymentDirect() {
               onSuccess={handlePaymentSuccess}
               skipSplitCheck={true}
               disableSubmit={!selectedOption || isSimulating || (selectedOption?.isCustom && customAmount <= 0) || (selectedOption?.isSelectInstallments && selectInstallments <= 0)}
-              initialPayerData={{
+              registeredPayer={{
                 name: charge.payer_name || '',
                 email: charge.payer_email || '',
                 document: charge.payer_document || '',

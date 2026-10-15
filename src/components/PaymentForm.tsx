@@ -1,13 +1,23 @@
 import { useState } from "react";
-import { CreditCard, User, Mail, Phone, Calendar, Lock } from "lucide-react";
+import { CreditCard, User, Mail, Phone, Calendar, Lock, ShieldCheck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import type { PaymentFormData, PaymentState } from "@/types/payment";
+import { CARD_HOLDER_RELATIONSHIPS } from "@/types/payment";
+import type { CardHolderRelationship, PaymentFormData, PaymentState } from "@/types/payment";
+
+/** Pagador do CADASTRO da cobrança — somente leitura; é o que o backend envia ao Quita+. */
+export interface RegisteredPayer {
+  name?: string;
+  email?: string;
+  document?: string;
+  phone?: string;
+}
 
 interface PaymentFormProps {
   amount: number;            // Valor ORIGINAL em reais (será enviado à API Quita+)
@@ -24,13 +34,62 @@ interface PaymentFormProps {
   onCancel?: () => void;
   skipSplitCheck?: boolean;
   disableSubmit?: boolean;
-  initialPayerData?: {
-    name?: string;
-    email?: string;
-    document?: string;
-    phone?: string;
-  };
+  registeredPayer?: RegisteredPayer;
 }
+
+type FormErrors = Partial<Record<keyof PaymentFormData, string>>;
+
+const formatCardNumber = (value: string) =>
+  value.replace(/\s/g, '').replace(/(\d{4})/g, '$1 ').trim().slice(0, 19);
+
+const formatDocument = (value: string) => {
+  const numbers = value.replace(/\D/g, '');
+  if (numbers.length <= 11) {
+    return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  }
+  return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+};
+
+const formatPhone = (value: string) => {
+  const numbers = value.replace(/\D/g, '').slice(0, 11);
+  return numbers.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+};
+
+const formatExpirationDate = (value: string) => {
+  const numbers = value.replace(/\D/g, '');
+  if (numbers.length >= 2) {
+    return numbers.slice(0, 2) + '/' + numbers.slice(2, 4);
+  }
+  return numbers;
+};
+
+const formatBirthDate = (value: string) => {
+  const n = value.replace(/\D/g, '').slice(0, 8);
+  if (n.length <= 2) return n;
+  if (n.length <= 4) return `${n.slice(0, 2)}/${n.slice(2)}`;
+  return `${n.slice(0, 2)}/${n.slice(2, 4)}/${n.slice(4)}`;
+};
+
+/** DD/MM/AAAA → YYYY-MM-DD; null se a data não existir no calendário ou for futura. */
+const parseBirthDate = (value: string): string | null => {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  if (!m) return null;
+  const [, dd, mm, yyyy] = m;
+  const day = Number(dd), month = Number(mm), year = Number(yyyy);
+  if (year < 1900) return null;
+  const d = new Date(year, month - 1, day);
+  const exists = d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day;
+  if (!exists || d > new Date()) return null;
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+// Mascara o documento do cadastro para exibição (CPF: 099.xxx.xxx-75 | CNPJ: 12.xxx.xxx/0001-xx)
+const maskDocument = (doc: string) => {
+  const n = doc.replace(/\D/g, '');
+  if (n.length === 11) return `${n.slice(0, 3)}.***.***-${n.slice(9)}`;
+  if (n.length === 14) return `${n.slice(0, 2)}.***.***/${n.slice(8, 12)}-**`;
+  return doc;
+};
 
 export function PaymentForm({
   amount,
@@ -47,59 +106,37 @@ export function PaymentForm({
   onCancel,
   skipSplitCheck = false,
   disableSubmit = false,
-  initialPayerData,
+  registeredPayer,
 }: PaymentFormProps) {
   // Valor para enviar à API = amount (original)
   // Valor para exibir ao cliente = amountDisplay || amount
   const { toast } = useToast();
-  
+
   const [paymentState, setPaymentState] = useState<PaymentState>({
     isProcessing: false,
     isSuccess: false,
     error: null,
     transactionId: null,
   });
-  
+
   const [formData, setFormData] = useState<PaymentFormData>({
-    payerName: initialPayerData?.name || "",
-    payerDocument: initialPayerData?.document || "",
-    payerEmail: initialPayerData?.email || "",
-    payerPhoneNumber: initialPayerData?.phone || "",
-    cardHolderName: "",
+    relationship: "",
+    holderName: "",
+    holderDocument: "",
+    holderBirthDate: "",
+    holderPhone: "",
+    holderEmail: "",
     cardNumber: "",
     cardExpirationDate: "",
     cardCvv: "",
   });
 
-  const [errors, setErrors] = useState<Partial<PaymentFormData>>({});
+  const [errors, setErrors] = useState<FormErrors>({});
 
-  const formatCardNumber = (value: string) => {
-    return value
-      .replace(/\s/g, '')
-      .replace(/(\d{4})/g, '$1 ')
-      .trim()
-      .slice(0, 19);
-  };
-
-  const formatDocument = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    if (numbers.length <= 11) {
-      return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  const clearError = (field: keyof PaymentFormData) => {
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
     }
-    return numbers.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-  };
-
-  const formatPhone = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    return numbers.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-  };
-
-  const formatExpirationDate = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    if (numbers.length >= 2) {
-      return numbers.slice(0, 2) + '/' + numbers.slice(2, 4);
-    }
-    return numbers;
   };
 
   const handleInputChange = (field: keyof PaymentFormData, value: string) => {
@@ -109,11 +146,14 @@ export function PaymentForm({
       case 'cardNumber':
         formattedValue = formatCardNumber(value);
         break;
-      case 'payerDocument':
+      case 'holderDocument':
         formattedValue = formatDocument(value);
         break;
-      case 'payerPhoneNumber':
+      case 'holderPhone':
         formattedValue = formatPhone(value);
+        break;
+      case 'holderBirthDate':
+        formattedValue = formatBirthDate(value);
         break;
       case 'cardExpirationDate':
         formattedValue = formatExpirationDate(value);
@@ -124,39 +164,58 @@ export function PaymentForm({
     }
 
     setFormData(prev => ({ ...prev, [field]: formattedValue }));
-    
-    if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: undefined }));
-    }
+    clearError(field);
+  };
+
+  // "Sou o portador do cartão" → pré-preenche com o cadastro da cobrança (continua editável)
+  const handleRelationshipChange = (value: CardHolderRelationship) => {
+    setFormData(prev => ({
+      ...prev,
+      relationship: value,
+      ...(value === 'self' && registeredPayer
+        ? {
+            holderName: registeredPayer.name || prev.holderName,
+            holderDocument: registeredPayer.document ? formatDocument(registeredPayer.document) : prev.holderDocument,
+            holderPhone: registeredPayer.phone ? formatPhone(registeredPayer.phone) : prev.holderPhone,
+            holderEmail: registeredPayer.email || prev.holderEmail,
+          }
+        : {}),
+    }));
+    clearError('relationship');
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<PaymentFormData> = {};
+    const newErrors: FormErrors = {};
 
-    if (!formData.payerName.trim()) newErrors.payerName = "Nome é obrigatório";
-    if (!formData.payerDocument.trim()) newErrors.payerDocument = "CPF/CNPJ é obrigatório";
-    if (!formData.payerEmail.trim()) newErrors.payerEmail = "E-mail é obrigatório";
-    if (!formData.payerPhoneNumber.trim()) newErrors.payerPhoneNumber = "Telefone é obrigatório";
-    if (!formData.cardHolderName.trim()) newErrors.cardHolderName = "Nome no cartão é obrigatório";
+    if (!formData.relationship) newErrors.relationship = "Informe seu vínculo com o portador do cartão";
+    if (!formData.holderName.trim()) newErrors.holderName = "Nome impresso no cartão é obrigatório";
+    if (!formData.holderDocument.trim()) newErrors.holderDocument = "CPF/CNPJ do portador é obrigatório";
+    if (!formData.holderBirthDate.trim()) newErrors.holderBirthDate = "Data de nascimento é obrigatória";
+    if (!formData.holderPhone.trim()) newErrors.holderPhone = "Celular do portador é obrigatório";
+    if (!formData.holderEmail.trim()) newErrors.holderEmail = "E-mail do portador é obrigatório";
     if (!formData.cardNumber.trim()) newErrors.cardNumber = "Número do cartão é obrigatório";
     if (!formData.cardExpirationDate.trim()) newErrors.cardExpirationDate = "Data de validade é obrigatória";
     if (!formData.cardCvv.trim()) newErrors.cardCvv = "CVV é obrigatório";
 
-    if (formData.payerEmail && !/\S+@\S+\.\S+/.test(formData.payerEmail)) {
-      newErrors.payerEmail = "E-mail inválido";
+    if (formData.holderEmail && !/\S+@\S+\.\S+/.test(formData.holderEmail)) {
+      newErrors.holderEmail = "E-mail inválido";
     }
 
-    if (formData.payerDocument) {
-      const numbers = formData.payerDocument.replace(/\D/g, '');
+    if (formData.holderDocument) {
+      const numbers = formData.holderDocument.replace(/\D/g, '');
       if (numbers.length !== 11 && numbers.length !== 14) {
-        newErrors.payerDocument = "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos";
+        newErrors.holderDocument = "CPF deve ter 11 dígitos ou CNPJ deve ter 14 dígitos";
       }
     }
 
-    if (formData.payerPhoneNumber) {
-      const numbers = formData.payerPhoneNumber.replace(/\D/g, '');
+    if (formData.holderBirthDate && !parseBirthDate(formData.holderBirthDate)) {
+      newErrors.holderBirthDate = "Data de nascimento inválida (use DD/MM/AAAA)";
+    }
+
+    if (formData.holderPhone) {
+      const numbers = formData.holderPhone.replace(/\D/g, '');
       if (numbers.length < 10 || numbers.length > 11) {
-        newErrors.payerPhoneNumber = "Telefone deve ter 10 ou 11 dígitos";
+        newErrors.holderPhone = "Celular deve ter 10 ou 11 dígitos";
       }
     }
 
@@ -178,7 +237,7 @@ export function PaymentForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) return;
 
     if (!chargeId || !paymentLinkId) {
@@ -200,6 +259,8 @@ export function PaymentForm({
     try {
       console.log('[PaymentForm] Iniciando pré-pagamento Quita+...');
 
+      // O pagador enviado ao Quita+ é resolvido no backend a partir do cadastro da
+      // cobrança. Daqui vão apenas o cartão e os dados do PORTADOR (guardados no painel).
       const { data: prePaymentData, error: prePaymentError } = await supabase.functions.invoke(
         'quitaplus-prepayment',
         {
@@ -209,16 +270,18 @@ export function PaymentForm({
             amount: Math.round(amount * 100),
             installments,
             card: {
-              holderName: formData.cardHolderName,
+              holderName: formData.holderName.trim(),
               number: formData.cardNumber.replace(/\s/g, ''),
               expirationDate: formData.cardExpirationDate.replace('/', ''),
               cvv: formData.cardCvv,
             },
-            payer: {
-              name: formData.payerName,
-              document: formData.payerDocument.replace(/\D/g, ''),
-              email: formData.payerEmail,
-              phoneNumber: formData.payerPhoneNumber.replace(/\D/g, ''),
+            cardHolder: {
+              name: formData.holderName.trim(),
+              document: formData.holderDocument.replace(/\D/g, ''),
+              birthDate: parseBirthDate(formData.holderBirthDate),
+              phone: formData.holderPhone.replace(/\D/g, ''),
+              email: formData.holderEmail.trim(),
+              relationship: formData.relationship,
             },
           },
         }
@@ -232,13 +295,13 @@ export function PaymentForm({
       if (prePaymentData?.error || prePaymentData?.success === false) {
         // Priorizar userMessage (mensagem da API) sobre error (código interno)
         const errorMessage = prePaymentData.userMessage || 'Não foi possível processar o pagamento';
-        
+
         console.error('[PaymentForm] Pagamento não autorizado:', {
           internalError: prePaymentData.error,
           userMessage: errorMessage,
           apiResponse: prePaymentData.apiRawResponse?.substring(0, 200)
         });
-        
+
         toast({
           title: "Pagamento não autorizado",
           description: errorMessage,
@@ -282,13 +345,13 @@ export function PaymentForm({
           if (linkError || linkData?.error) {
             const errorMessage = linkError?.message || linkData?.message || linkData?.error || 'Erro desconhecido';
             console.error('[PaymentForm] ❌ Erro ao vincular boleto (silencioso):', errorMessage);
-            
+
             if (chargeId) {
               await supabase.from('charges')
-                .update({ 
-                  metadata: { 
-                    link_boleto_error: { 
-                      message: errorMessage, 
+                .update({
+                  metadata: {
+                    link_boleto_error: {
+                      message: errorMessage,
                       attemptedAt: new Date().toISOString(),
                       httpStatus: linkData?.httpStatus || null
                     }
@@ -305,7 +368,7 @@ export function PaymentForm({
       }
 
       const transactionId = prePaymentData?.transactionId || prePaymentKey;
-      
+
       setPaymentState({
         isProcessing: false,
         isSuccess: true,
@@ -315,7 +378,7 @@ export function PaymentForm({
 
       toast({
         title: "Pagamento autorizado!",
-        description: hasBoleto 
+        description: hasBoleto
           ? `Cartão autorizado e boleto vinculado com sucesso!`
           : `Transação processada com sucesso em ${installments}x.`,
       });
@@ -325,7 +388,7 @@ export function PaymentForm({
     } catch (error) {
       console.error('[PaymentForm] Erro fatal:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao processar pagamento';
-      
+
       toast({
         title: "Erro no pagamento",
         description: errorMessage,
@@ -360,6 +423,9 @@ export function PaymentForm({
     );
   }
 
+  const fieldClass = (field: keyof PaymentFormData, extra = '') =>
+    `h-10 rounded-xl text-sm ${extra} ${errors[field] ? "border-destructive" : ""}`;
+
   return (
     <Card className="rounded-2xl border bg-card/80 shadow-md overflow-hidden">
       {/* Header */}
@@ -380,89 +446,154 @@ export function PaymentForm({
       </div>
 
       <form onSubmit={handleSubmit} className="px-5 lg:px-6 pb-5 lg:pb-6 space-y-5">
-        {/* Dados Pessoais */}
+        {/* Pagador do cadastro — somente leitura */}
+        {registeredPayer?.name && (
+          <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/40 p-4">
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <ShieldCheck className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Cobrança em nome de
+              </p>
+              <p className="truncate text-sm font-semibold text-foreground">{registeredPayer.name}</p>
+              {registeredPayer.document && (
+                <p className="text-xs text-muted-foreground">
+                  CPF/CNPJ {maskDocument(registeredPayer.document)}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Dados do Portador do Cartão */}
         <div className="space-y-1">
           <h4 className="flex items-center gap-2 text-sm font-medium text-foreground">
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-primary">
               <User className="h-3.5 w-3.5" />
             </span>
-            Dados Pessoais
+            Dados do Portador do Cartão
           </h4>
         </div>
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="payerName" className="text-xs font-medium">
-              Nome Completo
+            <Label htmlFor="relationship" className="text-xs font-medium">
+              Qual seu vínculo com o portador do cartão?
             </Label>
-            <Input
-              id="payerName"
-              value={formData.payerName}
-              onChange={(e) => handleInputChange('payerName', e.target.value)}
-              placeholder="Seu nome completo"
-              className={`h-10 rounded-xl text-sm ${errors.payerName ? "border-destructive" : ""}`}
-            />
-            {errors.payerName && (
-              <p className="text-xs text-destructive">{errors.payerName}</p>
+            <Select value={formData.relationship} onValueChange={(v) => handleRelationshipChange(v as CardHolderRelationship)}>
+              <SelectTrigger id="relationship" className={fieldClass('relationship')}>
+                <span className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="Selecione" />
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {CARD_HOLDER_RELATIONSHIPS.map((r) => (
+                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.relationship && (
+              <p className="text-xs text-destructive">{errors.relationship}</p>
             )}
           </div>
-          
+
           <div className="space-y-1.5">
-            <Label htmlFor="payerDocument" className="text-xs font-medium">
-              CPF/CNPJ
+            <Label htmlFor="holderName" className="text-xs font-medium">
+              Nome Impresso no Cartão
             </Label>
             <Input
-              id="payerDocument"
-              value={formData.payerDocument}
-              onChange={(e) => handleInputChange('payerDocument', e.target.value)}
+              id="holderName"
+              value={formData.holderName}
+              onChange={(e) => handleInputChange('holderName', e.target.value)}
+              placeholder="Nome como está no cartão"
+              autoComplete="cc-name"
+              className={fieldClass('holderName')}
+            />
+            {errors.holderName && (
+              <p className="text-xs text-destructive">{errors.holderName}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="holderDocument" className="text-xs font-medium">
+              CPF/CNPJ do portador do Cartão
+            </Label>
+            <Input
+              id="holderDocument"
+              value={formData.holderDocument}
+              onChange={(e) => handleInputChange('holderDocument', e.target.value)}
               placeholder="000.000.000-00"
-              className={`h-10 rounded-xl text-sm ${errors.payerDocument ? "border-destructive" : ""}`}
+              inputMode="numeric"
+              className={fieldClass('holderDocument')}
             />
-            {errors.payerDocument && (
-              <p className="text-xs text-destructive">{errors.payerDocument}</p>
+            {errors.holderDocument && (
+              <p className="text-xs text-destructive">{errors.holderDocument}</p>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="payerEmail" className="text-xs font-medium">
-              E-mail
+            <Label htmlFor="holderBirthDate" className="text-xs font-medium">
+              Data de nascimento do portador do cartão
             </Label>
             <div className="relative">
-              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-muted-foreground">
-                @
-              </span>
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                id="payerEmail"
-                type="email"
-                value={formData.payerEmail}
-                onChange={(e) => handleInputChange('payerEmail', e.target.value)}
-                placeholder="seu@email.com"
-                className={`h-10 rounded-xl bg-background pl-8 text-sm ${errors.payerEmail ? "border-destructive" : ""}`}
+                id="holderBirthDate"
+                value={formData.holderBirthDate}
+                onChange={(e) => handleInputChange('holderBirthDate', e.target.value)}
+                placeholder="DD/MM/AAAA"
+                inputMode="numeric"
+                maxLength={10}
+                autoComplete="bday"
+                className={fieldClass('holderBirthDate', 'pl-10')}
               />
             </div>
-            {errors.payerEmail && (
-              <p className="text-xs text-destructive">{errors.payerEmail}</p>
+            {errors.holderBirthDate && (
+              <p className="text-xs text-destructive">{errors.holderBirthDate}</p>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="payerPhoneNumber" className="text-xs font-medium">
-              Telefone
+            <Label htmlFor="holderPhone" className="text-xs font-medium">
+              Celular do portador do Cartão
             </Label>
             <div className="relative">
-              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-xs text-muted-foreground">
-                +55
-              </span>
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                id="payerPhoneNumber"
-                value={formData.payerPhoneNumber}
-                onChange={(e) => handleInputChange('payerPhoneNumber', e.target.value)}
+                id="holderPhone"
+                value={formData.holderPhone}
+                onChange={(e) => handleInputChange('holderPhone', e.target.value)}
                 placeholder="(11) 99999-9999"
-                className={`h-10 rounded-xl pl-10 text-sm ${errors.payerPhoneNumber ? "border-destructive" : ""}`}
+                inputMode="tel"
+                autoComplete="tel-national"
+                className={fieldClass('holderPhone', 'pl-10')}
               />
             </div>
-            {errors.payerPhoneNumber && (
-              <p className="text-xs text-destructive">{errors.payerPhoneNumber}</p>
+            {errors.holderPhone && (
+              <p className="text-xs text-destructive">{errors.holderPhone}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="holderEmail" className="text-xs font-medium">
+              E-mail do portador do Cartão
+            </Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                id="holderEmail"
+                type="email"
+                value={formData.holderEmail}
+                onChange={(e) => handleInputChange('holderEmail', e.target.value)}
+                placeholder="email@exemplo.com"
+                autoComplete="email"
+                className={fieldClass('holderEmail', 'bg-background pl-10')}
+              />
+            </div>
+            {errors.holderEmail && (
+              <p className="text-xs text-destructive">{errors.holderEmail}</p>
             )}
           </div>
         </div>
@@ -476,24 +607,8 @@ export function PaymentForm({
             Dados do Cartão
           </h4>
         </div>
-        
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="cardHolderName" className="text-xs font-medium">
-              Nome no Cartão
-            </Label>
-            <Input
-              id="cardHolderName"
-              value={formData.cardHolderName}
-              onChange={(e) => handleInputChange('cardHolderName', e.target.value)}
-              placeholder="Nome como está no cartão"
-              className={`h-10 rounded-xl text-sm ${errors.cardHolderName ? "border-destructive" : ""}`}
-            />
-            {errors.cardHolderName && (
-              <p className="text-xs text-destructive">{errors.cardHolderName}</p>
-            )}
-          </div>
 
+        <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="cardNumber" className="text-xs font-medium">
               Número do Cartão
@@ -504,7 +619,9 @@ export function PaymentForm({
               onChange={(e) => handleInputChange('cardNumber', e.target.value)}
               placeholder="0000 0000 0000 0000"
               maxLength={19}
-              className={`h-10 rounded-xl text-sm ${errors.cardNumber ? "border-destructive" : ""}`}
+              inputMode="numeric"
+              autoComplete="cc-number"
+              className={fieldClass('cardNumber')}
             />
             {errors.cardNumber && (
               <p className="text-xs text-destructive">{errors.cardNumber}</p>
@@ -524,7 +641,9 @@ export function PaymentForm({
                   onChange={(e) => handleInputChange('cardExpirationDate', e.target.value)}
                   placeholder="MM/AA"
                   maxLength={5}
-                  className={`h-10 rounded-xl pl-10 text-sm ${errors.cardExpirationDate ? "border-destructive" : ""}`}
+                  inputMode="numeric"
+                  autoComplete="cc-exp"
+                  className={fieldClass('cardExpirationDate', 'pl-10')}
                 />
               </div>
               {errors.cardExpirationDate && (
@@ -544,7 +663,9 @@ export function PaymentForm({
                   onChange={(e) => handleInputChange('cardCvv', e.target.value)}
                   placeholder="123"
                   maxLength={4}
-                  className={`h-10 rounded-xl pl-10 text-sm ${errors.cardCvv ? "border-destructive" : ""}`}
+                  inputMode="numeric"
+                  autoComplete="cc-csc"
+                  className={fieldClass('cardCvv', 'pl-10')}
                 />
               </div>
               {errors.cardCvv && (
@@ -566,7 +687,7 @@ export function PaymentForm({
                 // CORREÇÃO: usar !== undefined para não tratar 0 como falsy
                 const displayValue = (amountDisplay !== undefined && amountDisplay > 0) ? amountDisplay : amount;
                 const installmentValue = installments > 0 ? displayValue / installments : displayValue;
-                
+
                 return (
                   <>
                     <div className="flex justify-between items-center text-sm">
@@ -606,7 +727,7 @@ export function PaymentForm({
                 Cancelar
               </Button>
             )}
-            
+
             <Button
               type="submit"
               disabled={paymentState.isProcessing || disableSubmit}
