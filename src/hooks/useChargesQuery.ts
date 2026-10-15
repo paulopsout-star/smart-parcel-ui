@@ -63,11 +63,11 @@ export const CHARGE_STATUSES: ReadonlyArray<{ value: string; label: string }> = 
   { value: 'processing', label: 'Processando' },
   { value: 'pre_authorized', label: 'Pré-autorizado' },
   { value: 'boleto_linked', label: 'Boleto vinculado' },
-  { value: 'awaiting_validation', label: 'Aguardando validação' },
-  { value: 'validating', label: 'Validando' },
-  { value: 'approved', label: 'Aprovado' },
+  { value: 'awaiting_validation', label: 'Aguardando PIN' },        // Quita+ 7 AwaitingPayerValidation
+  { value: 'validating', label: 'Em análise de risco' },           // Quita+ 8 ValidatingPayment
+  { value: 'approved', label: 'Aprovado' },                        // Quita+ 6 PaymentValidated
   { value: 'completed', label: 'Pago' },
-  { value: 'payment_denied', label: 'Pagamento negado' },
+  { value: 'payment_denied', label: 'Negado pelo risco' },
   { value: 'failed', label: 'Falhou' },
   { value: 'cancelled', label: 'Cancelado' },
   { value: 'refunded', label: 'Estornado' },

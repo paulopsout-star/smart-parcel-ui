@@ -1287,9 +1287,9 @@ export default function ChargeHistory() {
       pre_authorized: 'Pré-autorizado',
       boleto_linked: 'Boleto Vinculado',
       approved: 'Aprovado',
-      awaiting_validation: 'Aguardando Validação',
-      validating: 'Validando',
-      payment_denied: 'Pagamento Negado',
+      awaiting_validation: 'Aguardando PIN',
+      validating: 'Em Análise de Risco',
+      payment_denied: 'Negado pelo Risco',
       refunded: 'Estornado'
     };
     return labels[status] || status;
@@ -1861,20 +1861,7 @@ export default function ChargeHistory() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {[
-                              { value: 'pending', label: 'Pendente' },
-                              { value: 'processing', label: 'Processando' },
-                              { value: 'completed', label: 'Pago' },
-                              { value: 'failed', label: 'Falhou' },
-                              { value: 'cancelled', label: 'Cancelado' },
-                              { value: 'pre_authorized', label: 'Pré-autorizado' },
-                              { value: 'boleto_linked', label: 'Boleto vinculado' },
-                              { value: 'approved', label: 'Aprovado' },
-                              { value: 'awaiting_validation', label: 'Aguardando validação' },
-                              { value: 'validating', label: 'Validando' },
-                              { value: 'payment_denied', label: 'Pagamento negado' },
-                              { value: 'refunded', label: 'Estornado' },
-                            ].map(s => (
+                            {CHARGE_STATUSES.map(s => (
                               <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                             ))}
                           </SelectContent>
