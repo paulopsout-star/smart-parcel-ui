@@ -109,6 +109,26 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
+  // No combinado o cartão é derivado: cartão = total − PIX pago − PIX a pagar.
+  // Assim a soma sempre bate com o total cadastrado, sem o operador precisar calcular.
+  const applyDerivedCard = (next: FormState): FormState => {
+    if (!isCombined) return next;
+    const card = currencyToCents(next.amount) - paidPix - currencyToCents(next.pix_amount);
+    return { ...next, card_amount: card > 0 ? centsToInput(card) : '' };
+  };
+
+  const setPix = (raw: string) => {
+    const pix_amount = formatCurrencyInput(raw);
+    setForm((prev) => (prev ? applyDerivedCard({ ...prev, pix_amount }) : prev));
+    setErrors((prev) => ({ ...prev, pix_amount: undefined, card_amount: undefined }));
+  };
+
+  const setTotal = (raw: string) => {
+    const amount = formatCurrencyInput(raw);
+    setForm((prev) => (prev ? applyDerivedCard({ ...prev, amount }) : prev));
+    setErrors((prev) => ({ ...prev, amount: undefined, card_amount: undefined }));
+  };
+
   const validate = (): boolean => {
     const e: FormErrors = {};
     if (!form.payer_name.trim()) e.payer_name = 'Nome é obrigatório';
@@ -125,7 +145,11 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
       const pix = currencyToCents(form.pix_amount); // parte do PIX ainda a pagar (0 = sem novo PIX)
       const card = currencyToCents(form.card_amount);
       if (!hasPaidPix && pix <= 0) e.pix_amount = 'Valor do PIX é obrigatório';
-      if (card <= 0) e.card_amount = 'Valor do cartão é obrigatório';
+      if (paidPix + pix >= amount) {
+        e.pix_amount = `${hasPaidPix ? 'PIX pago + novo PIX' : 'PIX'} (${formatBRL(paidPix + pix)}) precisa ser menor que o total (${formatBRL(amount)}) para sobrar valor no cartão`;
+      } else if (card <= 0) {
+        e.card_amount = 'Valor do cartão é obrigatório';
+      }
       const sum = paidPix + pix + card;
       if (card > 0 && sum !== amount) {
         e.card_amount = `${hasPaidPix ? 'PIX pago + novo PIX + Cartão' : 'PIX + Cartão'} (${formatBRL(sum)}) deve ser igual ao total (${formatBRL(amount)})`;
@@ -237,19 +261,29 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
           <div className={`grid grid-cols-1 ${isCombined ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-3`}>
             <div className="space-y-1.5">
               <Label htmlFor="edit-amount">Valor total (R$)</Label>
-              <Input id="edit-amount" inputMode="numeric" value={form.amount} onChange={(e) => set('amount', formatCurrencyInput(e.target.value))} className={errors.amount ? 'border-destructive' : ''} />
+              <Input
+                id="edit-amount"
+                inputMode="numeric"
+                value={form.amount}
+                onChange={(e) => setTotal(e.target.value)}
+                // Com PIX já pago o total cadastrado fica travado: só o saldo é redistribuído
+                disabled={hasPaidPix}
+                className={errors.amount ? 'border-destructive' : ''}
+              />
+              {hasPaidPix && <p className="text-xs text-muted-foreground">Travado: já houve pagamento.</p>}
               {fieldError('amount')}
             </div>
             {isCombined && (
               <>
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-pix-amount">{hasPaidPix ? 'Novo PIX (R$)' : 'Valor PIX (R$)'}</Label>
-                  <Input id="edit-pix-amount" inputMode="numeric" value={form.pix_amount} onChange={(e) => set('pix_amount', formatCurrencyInput(e.target.value))} placeholder={hasPaidPix ? 'Vazio = sem novo PIX' : undefined} className={errors.pix_amount ? 'border-destructive' : ''} />
+                  <Input id="edit-pix-amount" inputMode="numeric" value={form.pix_amount} onChange={(e) => setPix(e.target.value)} placeholder={hasPaidPix ? 'Vazio = sem novo PIX' : undefined} className={errors.pix_amount ? 'border-destructive' : ''} />
                   {fieldError('pix_amount')}
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-card-amount">Valor Cartão (R$)</Label>
-                  <Input id="edit-card-amount" inputMode="numeric" value={form.card_amount} onChange={(e) => set('card_amount', formatCurrencyInput(e.target.value))} className={errors.card_amount ? 'border-destructive' : ''} />
+                  <Input id="edit-card-amount" inputMode="numeric" value={form.card_amount} readOnly className={`bg-muted/50 ${errors.card_amount ? 'border-destructive' : ''}`} />
+                  <p className="text-xs text-muted-foreground">Calculado: total − PIX{hasPaidPix ? ' pago − novo PIX' : ''}.</p>
                   {fieldError('card_amount')}
                 </div>
               </>
