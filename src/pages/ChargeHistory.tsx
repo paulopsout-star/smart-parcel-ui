@@ -322,8 +322,11 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
 
   // Cálculos para Cartão - usar valores do split diretamente
   // amount_cents = valor original sem juros; display_amount_cents = valor com juros
-  const cardBase = cardSplit?.amount_cents || 0;
-  const cardTotalWithInterest = cardSplit?.display_amount_cents || cardSplit?.amount_cents || 0;
+  // Sem split (link ainda não aberto pelo cliente): usar o valor do cartão cadastrado na cobrança,
+  // mesmo fallback que o PIX já faz com charge.pix_amount. Os splits só nascem no Checkout.
+  const cardBase = cardSplit?.amount_cents
+    || (charge.payment_method === 'cartao_pix' ? (charge.card_amount || 0) : 0);
+  const cardTotalWithInterest = cardSplit?.display_amount_cents || cardSplit?.amount_cents || cardBase;
   const cardTotal = cardTotalWithInterest;
   const cardFeeAmount = cardTotalWithInterest - cardBase;
   const cardFee = cardFeeAmount;

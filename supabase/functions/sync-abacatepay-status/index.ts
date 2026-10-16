@@ -11,8 +11,8 @@ import {
 /**
  * sync-abacatepay-status — equivalente da sync-treeal-status para QRs AbacatePay (v2).
  *
- * Varre splits PIX pendentes dos últimos 7 dias cujo mp_payment_id tem prefixo
- * "pix_char_" e consulta o status de cada um. Deve rodar via cron a cada 5 min
+ * Varre splits PIX pendentes com QR AbacatePay (prefixo "pix_char_") cuja validade
+ * ainda está dentro da janela e consulta o status de cada um. Deve rodar via cron a cada 5 min
  * (ver migration cron_sync_abacatepay_status) e pelo botão "Sincronizar" do admin.
  */
 
@@ -33,7 +33,10 @@ Deno.serve(async (req) => {
     const config = loadAbacatePayConfig();
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    // Janela pela VALIDADE do QR, não pela data do split: um split antigo pode receber um QR novo
+    // (reabertura do link) e precisa continuar sendo sincronizado. QRs vencidos há mais de 3 dias
+    // já foram marcados como failed numa varredura anterior.
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
 
     const { data: pendingSplits, error: fetchError } = await supabase
       .from("payment_splits")
@@ -41,7 +44,7 @@ Deno.serve(async (req) => {
       .eq("method", "pix")
       .eq("status", "pending")
       .like("mp_payment_id", "pix_char_%")
-      .gte("created_at", sevenDaysAgo)
+      .or(`mp_date_of_expiration.is.null,mp_date_of_expiration.gte.${threeDaysAgo}`)
       .order("created_at", { ascending: true })
       .limit(50);
 
