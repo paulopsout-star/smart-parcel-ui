@@ -11,8 +11,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ChargeRefundTimeline } from '@/components/ChargeRefundTimeline';
 import { ChargeExecutions } from '@/components/ChargeExecutions';
 import { CheckoutSuccessModal } from '@/components/CheckoutSuccessModal';
-import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2, Download, FileSpreadsheet, Clock, Users } from 'lucide-react';
+import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, Mail, Phone, Calendar as CalendarIcon, CreditCard, FileText, Filter, X, Search, AlertCircle, Info, ArrowLeft, QrCode, Wallet, TrendingUp, Percent, Building2, Download, FileSpreadsheet, Clock, Users, Pencil } from 'lucide-react';
 import { cardHolderRelationshipLabel } from '@/types/payment';
+import { EditChargeDialog } from '@/components/EditChargeDialog';
+import { canEditCharge } from '@/lib/charge-rules';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -69,6 +71,7 @@ interface Charge {
   payer_phone: string;
   payer_document: string;
   amount: number;
+  installments?: number | null;
   description: string;
   status: string;
   recurrence_type: string;
@@ -718,6 +721,7 @@ export default function ChargeHistory() {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
+  const [editingCharge, setEditingCharge] = useState(false);
   const [holderDetails, setHolderDetails] = useState<CardHolderDetails | null>(null);
 
   // Carrega o último portador de cartão registrado para a cobrança aberta nos detalhes
@@ -1672,7 +1676,36 @@ export default function ChargeHistory() {
                   <SheetDescription>
                     ID: {selectedCharge.id.slice(0, 8)}...
                   </SheetDescription>
+                  {(() => {
+                    const editability = canEditCharge(selectedCharge);
+                    return (
+                      <div className="pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditingCharge(true)}
+                          disabled={!editability.ok}
+                          title={editability.ok ? 'Editar dados da cobrança' : editability.reason}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Editar cobrança
+                        </Button>
+                        {!editability.ok && (
+                          <p className="text-xs text-ds-text-muted mt-1">{editability.reason}</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </SheetHeader>
+                <EditChargeDialog
+                  charge={selectedCharge}
+                  open={editingCharge}
+                  onOpenChange={setEditingCharge}
+                  onSaved={(updated) => {
+                    setSelectedCharge((prev) => (prev ? { ...prev, ...(updated as Partial<Charge>) } : prev));
+                    invalidateCharges();
+                  }}
+                />
                 <div className="space-y-6 py-6">
                   <div className="grid grid-cols-2 gap-4">
                     <InfoCard icon={User} label="Pagador" value={selectedCharge.payer_name} />

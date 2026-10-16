@@ -12,6 +12,7 @@ const CHARGES_SELECT = `
   payer_phone,
   payer_document,
   amount,
+  installments,
   description,
   status,
   recurrence_type,
