@@ -32,6 +32,7 @@ interface AbacatePixData {
 
 const PIX_EXPIRATION_SECONDS = 86400; // 24h, igual à Treeal
 const ABACATE_MIN_AMOUNT_CENTS = 100;
+const PIX_DESCRIPTION = "Pagamento PIX - Autonegocie";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -133,7 +134,9 @@ Deno.serve(async (req) => {
       data: {
         amount: amount_cents,
         expiresIn: PIX_EXPIRATION_SECONDS,
-        description: (description || "Pagamento PIX - Autonegocie").substring(0, 500),
+        // Texto neutro: a description da charge costuma ser anotação interna do operador e o
+        // pagador pode vê-la no app do banco. A API também limita a 140 chars (422 acima disso).
+        description: PIX_DESCRIPTION,
         ...(customer ? { customer } : {}),
         ...(payment_split_id ? { externalId: payment_split_id } : {}),
         metadata: {
