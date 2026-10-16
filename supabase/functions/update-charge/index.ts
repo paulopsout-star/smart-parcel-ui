@@ -14,16 +14,22 @@ import { corsHeaders } from "../_shared/cors.ts";
  *   - cartão não pago nem autorizado (sem split credit_card concluded / com pre_payment_key)
  *   - PIX já pago NÃO bloqueia no combinado: fica travado e o saldo pode ser redistribuído
  *     entre um novo PIX e o cartão. Regra: PIX pago + novo PIX + cartão = total.
+ *   - troca de tipo de pagamento só enquanto nada foi pago
  *
  * Splits PIX:
  *   - novo PIX > 0 sem split pendente → cria um split pendente (QR gerado ao abrir o link)
  *   - novo PIX > 0 com split pendente de outro valor → atualiza; se já tinha QR, cancela o
  *     antigo (mantendo o mp_payment_id para conciliação tardia) e cria outro
  *   - novo PIX = 0 com split pendente → cancela o split pendente
+ *
+ * Troca de tipo de pagamento: cancela os splits pendentes do método que saiu, cria os do
+ * método que entrou (se o link já foi aberto) e recalcula a URL do checkout
+ * (/checkout-pix/<charge> para PIX; /checkout/<link> para cartão e combinado).
  */
 
 interface UpdateChargeRequest {
   chargeId: string;
+  payment_method?: string | null;
   payer_name: string;
   payer_email: string;
   payer_phone: string;
@@ -38,6 +44,8 @@ interface UpdateChargeRequest {
 
 const PIX_FEE_PERCENT = 0.015; // mesma taxa aplicada no checkout
 const EDITABLE_STATUSES = ["pending"];
+const METHODS = ["pix", "cartao", "cartao_pix"];
+const PRODUCTION_DOMAIN = "https://pay1.autonegocie.com";
 
 const onlyDigits = (v: string | null | undefined) => (v || "").replace(/\D/g, "");
 
@@ -72,7 +80,7 @@ Deno.serve(async (req) => {
 
     const { data: charge, error: chargeError } = await supabase
       .from("charges")
-      .select("id, company_id, status, payment_method, amount, pix_amount, card_amount, installments, status_locked_at")
+      .select("id, company_id, status, payment_method, amount, pix_amount, card_amount, installments, status_locked_at, checkout_link_id")
       .eq("id", body.chargeId)
       .maybeSingle();
 
@@ -92,9 +100,13 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: false });
 
     const allSplits = splits || [];
-    const method = charge.payment_method || "cartao";
+    const currentMethod = METHODS.includes(charge.payment_method) ? charge.payment_method : "cartao";
+    const method = METHODS.includes(body.payment_method) ? body.payment_method : currentMethod;
+    const methodChanged = method !== currentMethod;
     const isCombined = method === "cartao_pix";
-    const requiresBoleto = method === "cartao" || isCombined;
+    const allowsPix = method === "pix" || isCombined;
+    const allowsCard = method === "cartao" || isCombined;
+    const requiresBoleto = allowsCard;
 
     if (!EDITABLE_STATUSES.includes(charge.status)) {
       return fail("not_editable", `Somente cobranças Pendentes podem ser editadas (status atual: ${charge.status})`, 409);
@@ -108,8 +120,11 @@ Deno.serve(async (req) => {
     }
     const paidPixSplits = allSplits.filter((s) => s.method === "pix" && s.status === "concluded");
     const paidPix = paidPixSplits.reduce((sum, s) => sum + (s.amount_cents || 0), 0);
-    if (paidPix > 0 && !isCombined) {
+    if (paidPix > 0 && currentMethod !== "cartao_pix") {
       return fail("not_editable", "Esta cobrança PIX já foi paga", 409);
+    }
+    if (methodChanged && paidPix > 0) {
+      return fail("not_editable", "Já existe PIX pago; o tipo de pagamento não pode ser alterado", 409);
     }
 
     // ---- Validação dos dados
@@ -145,15 +160,29 @@ Deno.serve(async (req) => {
       cardAmount = amount;
     }
 
-    const installments = Math.max(1, Math.round(Number(body.installments ?? charge.installments ?? 1)));
+    const installments = allowsCard
+      ? Math.max(1, Math.round(Number(body.installments ?? charge.installments ?? 1)))
+      : 1;
     const linha = onlyDigits(body.boleto_linha_digitavel);
     if (requiresBoleto && linha.length !== 47) {
       return fail("validation", "Linha digitável deve ter exatamente 47 dígitos");
     }
     const description = (body.description || "").trim() || null;
 
+    // ---- Link de pagamento ativo (usado para URL do checkout e para novos splits)
+    const { data: activeLink } = await supabase
+      .from("payment_links")
+      .select("id")
+      .eq("charge_id", charge.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const linkId: string | null = activeLink?.id ?? allSplits.find((s) => s.payment_link_id)?.payment_link_id ?? null;
+
     // ---- 1) charges
     const chargeUpdate: Record<string, unknown> = {
+      payment_method: method,
       payer_name: payerName,
       payer_email: payerEmail,
       payer_phone: payerPhone,
@@ -169,6 +198,23 @@ Deno.serve(async (req) => {
       chargeUpdate.boleto_pix_cartao_linha_digitavel = isCombined ? linha : null;
       chargeUpdate.has_boleto = true;
       chargeUpdate.has_boleto_link = true;
+    } else {
+      chargeUpdate.boleto_linha_digitavel = null;
+      chargeUpdate.boleto_pix_cartao_linha_digitavel = null;
+      chargeUpdate.has_boleto = false;
+      chargeUpdate.has_boleto_link = false;
+    }
+    if (methodChanged) {
+      // A rota do checkout depende do método: PIX puro usa o id da cobrança; os demais, o id do link
+      const origin = Deno.env.get("APP_ORIGIN") || PRODUCTION_DOMAIN;
+      if (method === "pix") {
+        chargeUpdate.checkout_url = `${origin}/checkout-pix/${charge.id}`;
+      } else if (linkId) {
+        chargeUpdate.checkout_url = `${origin}/checkout/${linkId}`;
+        chargeUpdate.checkout_link_id = linkId;
+      } else {
+        chargeUpdate.checkout_url = null; // charge-links gera sob demanda no painel
+      }
     }
 
     const { error: updErr } = await supabase.from("charges").update(chargeUpdate).eq("id", charge.id);
@@ -188,21 +234,25 @@ Deno.serve(async (req) => {
         payer_phone_number: payerPhone,
         description,
         installments,
+        order_type: method,
       })
       .eq("charge_id", charge.id);
     if (linkErr) console.error("[update-charge] Erro ao atualizar payment_links:", linkErr);
 
     // ---- 3) splits
     const changes: string[] = [];
-    const pendingPixSplit = allSplits.find((s) => s.method === "pix" && s.status === "pending"); // mais recente
-    const anyPaymentLinkId = allSplits.find((s) => s.payment_link_id)?.payment_link_id
-      ?? (await supabase.from("payment_links").select("id").eq("charge_id", charge.id).eq("status", "active").maybeSingle()).data?.id
-      ?? null;
+    if (methodChanged) changes.push("metodo_alterado");
+
+    const cancelPending = async (splitMethod: string, reason: string) => {
+      const ids = allSplits.filter((s) => s.method === splitMethod && s.status === "pending").map((s) => s.id);
+      if (ids.length === 0) return;
+      await supabase.from("payment_splits").update({ status: "cancelled", mp_status_detail: reason }).in("id", ids);
+    };
 
     const insertPendingPix = async (cents: number, orderIndex: number) => {
       const { error } = await supabase.from("payment_splits").insert({
         charge_id: charge.id,
-        payment_link_id: anyPaymentLinkId,
+        payment_link_id: linkId,
         method: "pix",
         amount_cents: cents,
         display_amount_cents: cents + Math.round(cents * PIX_FEE_PERCENT),
@@ -212,14 +262,33 @@ Deno.serve(async (req) => {
       if (error) console.error("[update-charge] Erro ao criar split PIX:", error);
     };
 
-    if (isCombined || method === "pix") {
+    const insertPendingCard = async (cents: number, orderIndex: number) => {
+      const { error } = await supabase.from("payment_splits").insert({
+        charge_id: charge.id,
+        payment_link_id: linkId,
+        method: "credit_card",
+        amount_cents: cents,
+        display_amount_cents: null,
+        installments,
+        status: "pending",
+        order_index: orderIndex,
+      });
+      if (error) console.error("[update-charge] Erro ao criar split cartão:", error);
+    };
+
+    // Métodos que saíram com a troca de tipo
+    if (!allowsPix) await cancelPending("pix", "cancelado: tipo de pagamento alterado");
+    if (!allowsCard) await cancelPending("credit_card", "cancelado: tipo de pagamento alterado");
+
+    // Só mexe em splits se o link já foi aberto (allSplits > 0); antes disso o Checkout cria a partir da charge
+    const hasSplits = allSplits.length > 0;
+
+    if (allowsPix && hasSplits) {
+      const pendingPixSplit = allSplits.find((s) => s.method === "pix" && s.status === "pending"); // mais recente
       if (pendingPix > 0) {
         if (!pendingPixSplit) {
-          // Só cria se já existem splits (link aberto); antes disso o Checkout cria a partir da charge
-          if (allSplits.length > 0) {
-            await insertPendingPix(pendingPix, 1);
-            changes.push("novo_pix_criado");
-          }
+          await insertPendingPix(pendingPix, 1);
+          changes.push(methodChanged ? "split_pix_criado" : "novo_pix_criado");
         } else if (pendingPixSplit.amount_cents !== pendingPix) {
           const newDisplay = pendingPix + Math.round(pendingPix * PIX_FEE_PERCENT);
           if (pendingPixSplit.mp_payment_id) {
@@ -239,9 +308,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    const cardSplit = cardSplits.find((s) => s.status === "pending");
-    if (cardSplit && cardAmount !== null) {
-      if (cardSplit.amount_cents !== cardAmount || (cardSplit.installments ?? 1) !== installments) {
+    if (allowsCard && hasSplits && cardAmount !== null) {
+      const cardSplit = cardSplits.find((s) => s.status === "pending");
+      if (!cardSplit) {
+        await insertPendingCard(cardAmount, allowsPix ? 2 : 1);
+        changes.push("split_cartao_criado");
+      } else if (cardSplit.amount_cents !== cardAmount || (cardSplit.installments ?? 1) !== installments) {
         await supabase
           .from("payment_splits")
           .update({ amount_cents: cardAmount, display_amount_cents: null, installments })
@@ -250,7 +322,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log("[update-charge] Cobrança editada:", { chargeId: charge.id, user: user.id, method, amount, paidPix, pendingPix, cardAmount, changes });
+    console.log("[update-charge] Cobrança editada:", { chargeId: charge.id, user: user.id, method, methodChanged, amount, paidPix, pendingPix, cardAmount, changes });
 
     const { data: updated } = await supabase.from("charges").select("*").eq("id", charge.id).single();
     return json({ success: true, charge: updated, changes });

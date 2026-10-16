@@ -16,6 +16,25 @@ export interface ChargeEditabilityInput {
   splits?: ChargeSplitLike[];
 }
 
+/** Status que contam como "cobrança em aberto" (mesma lista da situação "Em andamento"). */
+export const OPEN_CHARGE_STATUSES = [
+  'pending',
+  'processing',
+  'pre_authorized',
+  'boleto_linked',
+  'awaiting_validation',
+  'validating',
+  'approved',
+] as const;
+
+export type PaymentMethod = 'pix' | 'cartao' | 'cartao_pix';
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  pix: 'PIX',
+  cartao: 'Cartão',
+  cartao_pix: 'PIX + Cartão',
+};
+
 /** Soma dos PIX já pagos (splits concluded). Esse valor fica travado na edição. */
 export function paidPixCents(charge: { splits?: ChargeSplitLike[] }): number {
   return (charge.splits ?? [])
@@ -43,6 +62,16 @@ export function canEditCharge(charge: ChargeEditabilityInput): { ok: boolean; re
   const pixPaid = splits.some((s) => s.method === 'pix' && s.status === 'concluded');
   if (pixPaid && charge.payment_method !== 'cartao_pix') {
     return { ok: false, reason: 'Esta cobrança PIX já foi paga.' };
+  }
+  return { ok: true };
+}
+
+/** O tipo de pagamento só pode mudar enquanto nenhum valor foi pago. */
+export function canChangePaymentMethod(charge: ChargeEditabilityInput): { ok: boolean; reason?: string } {
+  const editable = canEditCharge(charge);
+  if (!editable.ok) return editable;
+  if (paidPixCents(charge) > 0) {
+    return { ok: false, reason: 'Já existe PIX pago; o tipo de pagamento não pode ser alterado.' };
   }
   return { ok: true };
 }

@@ -31,7 +31,7 @@ import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 interface PaymentSplitInfo {
   id: string;
@@ -772,6 +772,36 @@ export default function ChargeHistory() {
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
   const [editingCharge, setEditingCharge] = useState(false);
   const [holderDetails, setHolderDetails] = useState<CardHolderDetails | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link: /charges?charge=<id>[&edit=1] abre a cobrança (e o editor, se permitido),
+  // independentemente dos filtros/página da lista. Usado pelo pop-up de duplicidade do NewCharge.
+  useEffect(() => {
+    const chargeId = searchParams.get('charge');
+    if (!chargeId) return;
+    const wantEdit = searchParams.get('edit') === '1';
+    let cancelled = false;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from('charges')
+        .select(CHARGES_SELECT)
+        .eq('id', chargeId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error || !data) {
+        toast({ title: 'Cobrança não encontrada', description: 'O link aponta para uma cobrança inexistente ou sem acesso.', variant: 'destructive' });
+      } else {
+        const [charge] = deduplicateSplits([data]) as unknown as Charge[];
+        setSelectedCharge(charge);
+        if (wantEdit && canEditCharge(charge).ok) setEditingCharge(true);
+      }
+      setSearchParams({}, { replace: true });
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Carrega o último portador de cartão registrado para a cobrança aberta nos detalhes
   useEffect(() => {

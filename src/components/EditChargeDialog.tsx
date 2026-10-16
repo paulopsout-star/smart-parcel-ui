@@ -5,11 +5,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { getFunctionErrorMessage } from '@/lib/functionError';
 import { currencyToCents, formatCurrencyInput, formatDocument, formatPhone, unformatDocument, unformatPhone } from '@/lib/input-masks';
-import { paidPixCents } from '@/lib/charge-rules';
-import type { ChargeSplitLike } from '@/lib/charge-rules';
+import { PAYMENT_METHOD_LABELS, canChangePaymentMethod, paidPixCents } from '@/lib/charge-rules';
+import type { ChargeSplitLike, PaymentMethod } from '@/lib/charge-rules';
 import { toast } from '@/hooks/use-toast';
 
 const formatBRL = (cents: number) =>
@@ -18,6 +19,7 @@ const formatBRL = (cents: number) =>
 /** Subconjunto da cobrança necessário para edição. */
 export interface EditableCharge {
   id: string;
+  status: string;
   payer_name: string;
   payer_email: string;
   payer_phone: string;
@@ -42,13 +44,14 @@ interface EditChargeDialogProps {
 }
 
 interface FormState {
+  payment_method: PaymentMethod;
   payer_name: string;
   payer_email: string;
   payer_phone: string;
   payer_document: string;
   amount: string;       // "1.234,56"
-  pix_amount: string;
-  card_amount: string;
+  pix_amount: string;   // combinado: parte do PIX ainda a pagar
+  card_amount: string;  // combinado: derivado (total − PIX pago − PIX a pagar)
   installments: string;
   boleto_linha_digitavel: string;
   description: string;
@@ -56,21 +59,25 @@ interface FormState {
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
 
+const asMethod = (m: string | null | undefined): PaymentMethod =>
+  m === 'pix' || m === 'cartao_pix' ? m : 'cartao';
+
 const centsToInput = (cents: number | null | undefined) =>
   cents && cents > 0 ? formatCurrencyInput(String(cents)) : '';
 
 const buildInitialState = (charge: EditableCharge): FormState => {
-  const method = charge.payment_method || 'cartao';
+  const method = asMethod(charge.payment_method);
   // No combinado, o campo de PIX representa só a parte AINDA A PAGAR (o já pago fica travado)
   const pendingPix = Math.max(0, (charge.pix_amount || 0) - paidPixCents(charge));
   return {
+    payment_method: method,
     payer_name: charge.payer_name || '',
     payer_email: charge.payer_email || '',
     payer_phone: formatPhone(charge.payer_phone || ''),
     payer_document: formatDocument(charge.payer_document || ''),
     amount: centsToInput(charge.amount),
-    pix_amount: centsToInput(pendingPix),
-    card_amount: centsToInput(charge.card_amount),
+    pix_amount: method === 'cartao_pix' ? centsToInput(pendingPix) : '',
+    card_amount: method === 'cartao_pix' ? centsToInput(charge.card_amount) : '',
     installments: String(charge.installments || 1),
     boleto_linha_digitavel: (method === 'cartao_pix' ? charge.boleto_pix_cartao_linha_digitavel : charge.boleto_linha_digitavel) || '',
     description: charge.description || '',
@@ -92,11 +99,13 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
 
   if (!charge || !form) return null;
 
-  const method = charge.payment_method || 'cartao';
+  const method = form.payment_method;
   const isCombined = method === 'cartao_pix';
   const hasCard = method === 'cartao' || isCombined;
-  const paidPix = isCombined ? paidPixCents(charge) : 0;
+  const paidPix = paidPixCents(charge);
   const hasPaidPix = paidPix > 0;
+  const methodChange = canChangePaymentMethod(charge);
+  const methodChanged = method !== asMethod(charge.payment_method);
 
   // Soma ao vivo para o operador conferir: PIX pago + novo PIX + cartão
   const liveSum = isCombined
@@ -112,7 +121,7 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
   // No combinado o cartão é derivado: cartão = total − PIX pago − PIX a pagar.
   // Assim a soma sempre bate com o total cadastrado, sem o operador precisar calcular.
   const applyDerivedCard = (next: FormState): FormState => {
-    if (!isCombined) return next;
+    if (next.payment_method !== 'cartao_pix') return next;
     const card = currencyToCents(next.amount) - paidPix - currencyToCents(next.pix_amount);
     return { ...next, card_amount: card > 0 ? centsToInput(card) : '' };
   };
@@ -127,6 +136,11 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
     const amount = formatCurrencyInput(raw);
     setForm((prev) => (prev ? applyDerivedCard({ ...prev, amount }) : prev));
     setErrors((prev) => ({ ...prev, amount: undefined, card_amount: undefined }));
+  };
+
+  const setMethod = (value: PaymentMethod) => {
+    setForm((prev) => (prev ? applyDerivedCard({ ...prev, payment_method: value, pix_amount: '', card_amount: '' }) : prev));
+    setErrors({});
   };
 
   const validate = (): boolean => {
@@ -176,6 +190,7 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
       const { data, error } = await supabase.functions.invoke('update-charge', {
         body: {
           chargeId: charge.id,
+          payment_method: method,
           payer_name: form.payer_name.trim(),
           payer_email: form.payer_email.trim(),
           payer_phone: unformatPhone(form.payer_phone),
@@ -198,14 +213,16 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
       }
 
       const changes: string[] = data.changes || [];
-      const pixMsg = changes.includes('novo_pix_criado')
+      const msg = changes.includes('metodo_alterado')
+        ? `Tipo de pagamento alterado para ${PAYMENT_METHOD_LABELS[method]}; o link de pagamento foi atualizado.`
+        : changes.includes('novo_pix_criado')
         ? 'Um novo PIX foi criado para o saldo informado; o QR Code é gerado quando o cliente abrir o link.'
         : changes.includes('qr_pix_regenerado')
         ? 'Valor do PIX alterado: um novo QR Code será gerado quando o cliente abrir o link.'
         : changes.includes('pix_pendente_cancelado')
         ? 'O PIX pendente foi cancelado; o saldo ficou todo no cartão.'
         : 'Os dados da cobrança e do link de pagamento foram atualizados.';
-      toast({ title: 'Cobrança atualizada', description: pixMsg });
+      toast({ title: 'Cobrança atualizada', description: msg });
       onSaved(data.charge);
       onOpenChange(false);
     } catch (err) {
@@ -228,11 +245,31 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
         <DialogHeader>
           <DialogTitle>Editar cobrança</DialogTitle>
           <DialogDescription>
-            Disponível enquanto nenhum pagamento for concluído. O link de pagamento é atualizado junto.
+            Disponível enquanto a cobrança estiver Pendente. O link de pagamento é atualizado junto.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-method">Tipo de pagamento</Label>
+            <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)} disabled={!methodChange.ok}>
+              <SelectTrigger id="edit-method">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
+                  <SelectItem key={m} value={m}>{PAYMENT_METHOD_LABELS[m]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!methodChange.ok && <p className="text-xs text-muted-foreground">{methodChange.reason}</p>}
+            {methodChanged && (
+              <p className="text-xs text-amber-700">
+                Ao salvar, o link de pagamento passa a usar o novo tipo e os valores pendentes são reconfigurados.
+              </p>
+            )}
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="edit-payer-name">Nome Completo</Label>
             <Input id="edit-payer-name" value={form.payer_name} onChange={(e) => set('payer_name', e.target.value)} className={errors.payer_name ? 'border-destructive' : ''} />

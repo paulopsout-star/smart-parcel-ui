@@ -23,6 +23,28 @@ import { formatPhone, formatDocument, formatCurrencyInput, unformatPhone, unform
 import { cn } from '@/lib/utils';
 import { SimulatorModal } from '@/components/SimulatorModal';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { OPEN_CHARGE_STATUSES, PAYMENT_METHOD_LABELS } from '@/lib/charge-rules';
+import type { PaymentMethod } from '@/lib/charge-rules';
+
+/** Cobrança em aberto encontrada para o mesmo CPF/CNPJ na mesma empresa. */
+interface OpenCharge {
+  id: string;
+  payer_name: string;
+  amount: number;
+  payment_method: string | null;
+  status: string;
+  created_at: string;
+}
 
 interface Company {
   id: string;
@@ -159,6 +181,63 @@ export default function NewCharge() {
   const { profile, loading: authLoading, isAdmin } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Duplicidade: aviso quando já existe cobrança em aberto para o mesmo CPF/CNPJ na empresa.
+  // O operador pode abrir a existente (editar, se Pendente) ou criar outra mesmo assim (override auditado).
+  const [openCharge, setOpenCharge] = useState<OpenCharge | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [duplicateOverrideDoc, setDuplicateOverrideDoc] = useState<string>('');
+  const [pendingSubmit, setPendingSubmit] = useState<FormData | null>(null);
+
+  const findOpenCharge = async (docDigits: string): Promise<OpenCharge | null> => {
+    if (!profile) return null;
+    const companyId = isAdmin && selectedCompanyId ? selectedCompanyId : profile.company_id;
+    if (!companyId) return null;
+    const { data, error } = await supabase
+      .from('charges')
+      .select('id, payer_name, amount, payment_method, status, created_at')
+      .eq('company_id', companyId)
+      .eq('payer_document', docDigits)
+      .in('status', [...OPEN_CHARGE_STATUSES])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.warn('[NewCharge] Falha ao verificar duplicidade:', error.message);
+      return null;
+    }
+    return data as OpenCharge | null;
+  };
+
+  const checkDuplicateOnBlur = async (rawDoc: string) => {
+    const digits = unformatDocument(rawDoc);
+    if (digits.length !== 11 && digits.length !== 14) return;
+    if (digits === duplicateOverrideDoc) return;
+    const found = await findOpenCharge(digits);
+    if (found) {
+      setOpenCharge(found);
+      setShowDuplicateDialog(true);
+    }
+  };
+
+  const openExistingCharge = () => {
+    if (!openCharge) return;
+    const editable = openCharge.status === 'pending';
+    setShowDuplicateDialog(false);
+    navigate(`/charges?charge=${openCharge.id}${editable ? '&edit=1' : ''}`);
+  };
+
+  const continueCreating = () => {
+    const docDigits = unformatDocument(getValues('payer_document') || '');
+    setDuplicateOverrideDoc(docDigits);
+    setShowDuplicateDialog(false);
+    if (pendingSubmit) {
+      const data = pendingSubmit;
+      setPendingSubmit(null);
+      // Reenvia com o override já registrado para este CPF
+      void onSubmit(data, docDigits);
+    }
+  };
 
   const {
     register,
@@ -306,7 +385,9 @@ export default function NewCharge() {
     }, 100);
   };
 
-  const onSubmit = async (data: FormData) => {
+  // 2º argumento: react-hook-form passa o evento; o override explícito só vem de continueCreating
+  const onSubmit = async (data: FormData, overrideArg?: unknown) => {
+    const overrideDoc = typeof overrideArg === 'string' ? overrideArg : duplicateOverrideDoc;
     console.log('✅ Iniciando criação de cobrança:', {
       valor: data.amount,
       pagador: data.payer_name
@@ -333,7 +414,19 @@ export default function NewCharge() {
     }
     
     if (!profile) return;
-    
+
+    // Revalida a duplicidade na gravação (outro operador pode ter criado nesse meio-tempo)
+    const docDigits = unformatDocument(data.payer_document);
+    if (docDigits !== overrideDoc) {
+      const found = await findOpenCharge(docDigits);
+      if (found) {
+        setOpenCharge(found);
+        setPendingSubmit(data);
+        setShowDuplicateDialog(true);
+        return;
+      }
+    }
+
     setIsLoading(true);
     
     if (!isSettingsValid) {
@@ -429,6 +522,8 @@ export default function NewCharge() {
           fee_percentage: feePercentage,
           metadata: {
             created_via: 'web_interface',
+            // Auditoria: operador optou por criar mesmo havendo cobrança em aberto para o CPF
+            ...(docDigits === overrideDoc && openCharge ? { duplicate_override_of: openCharge.id } : {}),
             user_agent: navigator.userAgent,
             original_amount: data.payment_method === 'pix' ? formatAmount(data.amount) : undefined
           }
@@ -586,6 +681,41 @@ export default function NewCharge() {
           </Alert>
         )}
 
+        <AlertDialog open={showDuplicateDialog} onOpenChange={(v) => { if (!v) { setShowDuplicateDialog(false); setPendingSubmit(null); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {openCharge?.status === 'pending'
+                  ? 'Já existe uma cobrança em aberto para este cliente'
+                  : 'Este cliente tem uma cobrança em processamento'}
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2 text-sm">
+                  {openCharge && (
+                    <div className="rounded-lg border bg-muted/40 p-3 space-y-1">
+                      <div className="font-medium text-foreground">{openCharge.payer_name}</div>
+                      <div>Valor: <strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(openCharge.amount / 100)}</strong></div>
+                      <div>Tipo: {PAYMENT_METHOD_LABELS[(openCharge.payment_method as PaymentMethod)] ?? openCharge.payment_method ?? '-'}</div>
+                      <div>Status: {openCharge.status === 'pending' ? 'Pendente' : 'Em andamento'} · criada em {new Date(openCharge.created_at).toLocaleDateString('pt-BR')}</div>
+                    </div>
+                  )}
+                  <p>
+                    {openCharge?.status === 'pending'
+                      ? 'Para corrigir valor ou tipo de pagamento, abra e edite a cobrança existente em vez de criar outra.'
+                      : 'Essa cobrança já avançou no pagamento e não pode ser editada. Verifique antes de criar uma nova.'}
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={continueCreating}>Criar nova mesmo assim</AlertDialogCancel>
+              <AlertDialogAction onClick={openExistingCharge}>
+                {openCharge?.status === 'pending' ? 'Abrir e editar' : 'Ver cobrança'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <form onSubmit={handleSubmit(onSubmit, onValidationError)} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Form */}
@@ -691,6 +821,7 @@ export default function NewCharge() {
                           <Input
                             {...field}
                             onChange={(e) => field.onChange(formatDocument(e.target.value))}
+                            onBlur={(e) => { field.onBlur(); void checkDuplicateOnBlur(e.target.value); }}
                             placeholder="000.000.000-00"
                             className={errors.payer_document ? "border-destructive" : ""}
                           />
