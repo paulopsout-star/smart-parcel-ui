@@ -3,20 +3,23 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
 import { corsHeaders } from "../_shared/cors.ts";
 
 /**
- * update-charge — edição de uma cobrança ainda não paga (PIX, cartão ou combinado).
+ * update-charge — edição de uma cobrança Pendente (PIX, cartão ou combinado).
  *
  * Por que uma edge function: o link de pagamento (payment_links) carrega cópia do valor e
  * dos dados do pagador e só aceita UPDATE por service role. Aqui a edição é propagada de
- * forma consistente para charges → payment_links → payment_splits pendentes.
+ * forma consistente para charges → payment_links → payment_splits.
  *
- * Regra de elegibilidade (checada no servidor, não só na UI):
+ * Elegibilidade (checada no servidor, não só na UI):
  *   - status da charge exatamente "pending"
- *   - nenhum split concluded
- *   - nenhum split de cartão com pre_payment_key (cartão já autorizado no Quita+)
+ *   - cartão não pago nem autorizado (sem split credit_card concluded / com pre_payment_key)
+ *   - PIX já pago NÃO bloqueia no combinado: fica travado e o saldo pode ser redistribuído
+ *     entre um novo PIX e o cartão. Regra: PIX pago + novo PIX + cartão = total.
  *
- * Se o valor do PIX mudar e já existir QR, o split antigo é CANCELADO (mantendo o
- * mp_payment_id, para que um pagamento tardio do QR antigo continue conciliável) e um
- * novo split pendente é criado com o valor novo.
+ * Splits PIX:
+ *   - novo PIX > 0 sem split pendente → cria um split pendente (QR gerado ao abrir o link)
+ *   - novo PIX > 0 com split pendente de outro valor → atualiza; se já tinha QR, cancela o
+ *     antigo (mantendo o mp_payment_id para conciliação tardia) e cria outro
+ *   - novo PIX = 0 com split pendente → cancela o split pendente
  */
 
 interface UpdateChargeRequest {
@@ -26,7 +29,7 @@ interface UpdateChargeRequest {
   payer_phone: string;
   payer_document: string;
   amount: number;              // centavos (total)
-  pix_amount?: number | null;  // centavos (só cartao_pix)
+  pix_amount?: number | null;  // centavos — parte do PIX AINDA A PAGAR (só cartao_pix)
   card_amount?: number | null; // centavos (só cartao_pix)
   description?: string | null;
   installments?: number | null;
@@ -89,14 +92,24 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: false });
 
     const allSplits = splits || [];
+    const method = charge.payment_method || "cartao";
+    const isCombined = method === "cartao_pix";
+    const requiresBoleto = method === "cartao" || isCombined;
+
     if (!EDITABLE_STATUSES.includes(charge.status)) {
       return fail("not_editable", `Somente cobranças Pendentes podem ser editadas (status atual: ${charge.status})`, 409);
     }
-    if (allSplits.some((s) => s.status === "concluded")) {
-      return fail("not_editable", "Esta cobrança já tem um pagamento concluído", 409);
+    const cardSplits = allSplits.filter((s) => s.method === "credit_card");
+    if (cardSplits.some((s) => s.status === "concluded")) {
+      return fail("not_editable", "O cartão desta cobrança já foi pago", 409);
     }
-    if (allSplits.some((s) => s.method === "credit_card" && s.pre_payment_key)) {
+    if (cardSplits.some((s) => s.pre_payment_key)) {
       return fail("not_editable", "O cartão desta cobrança já foi autorizado; não é possível editar", 409);
+    }
+    const paidPixSplits = allSplits.filter((s) => s.method === "pix" && s.status === "concluded");
+    const paidPix = paidPixSplits.reduce((sum, s) => sum + (s.amount_cents || 0), 0);
+    if (paidPix > 0 && !isCombined) {
+      return fail("not_editable", "Esta cobrança PIX já foi paga", 409);
     }
 
     // ---- Validação dos dados
@@ -105,9 +118,6 @@ Deno.serve(async (req) => {
     const payerPhone = onlyDigits(body.payer_phone);
     const payerDocument = onlyDigits(body.payer_document);
     const amount = Math.round(Number(body.amount));
-    const method = charge.payment_method || "cartao";
-    const isCombined = method === "cartao_pix";
-    const requiresBoleto = method === "cartao" || isCombined;
 
     if (!payerName) return fail("validation", "Nome do pagador é obrigatório");
     if (!/\S+@\S+\.\S+/.test(payerEmail)) return fail("validation", "E-mail inválido");
@@ -115,23 +125,30 @@ Deno.serve(async (req) => {
     if (payerDocument.length !== 11 && payerDocument.length !== 14) return fail("validation", "CPF deve ter 11 dígitos ou CNPJ 14");
     if (!Number.isFinite(amount) || amount <= 0) return fail("validation", "Valor inválido");
 
+    // pendingPix = parte do PIX ainda a pagar; pixAmount (charges.pix_amount) = pago + pendente
+    let pendingPix = 0;
     let pixAmount: number | null = null;
     let cardAmount: number | null = null;
     if (isCombined) {
-      pixAmount = Math.round(Number(body.pix_amount ?? 0));
+      pendingPix = Math.max(0, Math.round(Number(body.pix_amount ?? 0)));
       cardAmount = Math.round(Number(body.card_amount ?? 0));
-      if (pixAmount <= 0 || cardAmount <= 0) return fail("validation", "Valores de PIX e cartão são obrigatórios");
-      if (pixAmount + cardAmount !== amount) return fail("validation", "Soma PIX + Cartão deve ser igual ao total");
+      if (paidPix === 0 && pendingPix <= 0) return fail("validation", "Valor do PIX é obrigatório");
+      if (cardAmount <= 0) return fail("validation", "Valor do cartão é obrigatório");
+      if (paidPix + pendingPix + cardAmount !== amount) {
+        return fail("validation", `PIX pago (${paidPix}) + novo PIX (${pendingPix}) + cartão (${cardAmount}) deve ser igual ao total (${amount})`);
+      }
+      pixAmount = paidPix + pendingPix;
     } else if (method === "pix") {
       pixAmount = amount;
+      pendingPix = amount;
     } else {
       cardAmount = amount;
     }
 
     const installments = Math.max(1, Math.round(Number(body.installments ?? charge.installments ?? 1)));
     const linha = onlyDigits(body.boleto_linha_digitavel);
-    if (requiresBoleto) {
-      if (linha.length !== 47) return fail("validation", "Linha digitável deve ter exatamente 47 dígitos");
+    if (requiresBoleto && linha.length !== 47) {
+      return fail("validation", "Linha digitável deve ter exatamente 47 dígitos");
     }
     const description = (body.description || "").trim() || null;
 
@@ -175,39 +192,55 @@ Deno.serve(async (req) => {
       .eq("charge_id", charge.id);
     if (linkErr) console.error("[update-charge] Erro ao atualizar payment_links:", linkErr);
 
-    // ---- 3) splits pendentes (só o mais recente de cada método importa para o checkout)
-    const latestByMethod = new Map<string, (typeof allSplits)[number]>();
-    for (const s of allSplits) if (!latestByMethod.has(s.method)) latestByMethod.set(s.method, s);
-
+    // ---- 3) splits
     const changes: string[] = [];
+    const pendingPixSplit = allSplits.find((s) => s.method === "pix" && s.status === "pending"); // mais recente
+    const anyPaymentLinkId = allSplits.find((s) => s.payment_link_id)?.payment_link_id
+      ?? (await supabase.from("payment_links").select("id").eq("charge_id", charge.id).eq("status", "active").maybeSingle()).data?.id
+      ?? null;
 
-    const pixSplit = latestByMethod.get("pix");
-    if (pixSplit && pixSplit.status === "pending" && pixAmount !== null) {
-      const newDisplay = pixAmount + Math.round(pixAmount * PIX_FEE_PERCENT);
-      if (pixSplit.amount_cents !== pixAmount) {
-        if (pixSplit.mp_payment_id) {
-          // QR já emitido com outro valor: cancela e cria um novo split pendente
-          await supabase.from("payment_splits").update({ status: "cancelled", mp_status_detail: "cancelado: valor editado" }).eq("id", pixSplit.id);
-          const { error: insErr } = await supabase.from("payment_splits").insert({
-            charge_id: charge.id,
-            payment_link_id: pixSplit.payment_link_id,
-            method: "pix",
-            amount_cents: pixAmount,
-            display_amount_cents: newDisplay,
-            status: "pending",
-            order_index: pixSplit.order_index ?? 1,
-          });
-          if (insErr) console.error("[update-charge] Erro ao criar novo split PIX:", insErr);
-          changes.push("qr_pix_regenerado");
-        } else {
-          await supabase.from("payment_splits").update({ amount_cents: pixAmount, display_amount_cents: newDisplay }).eq("id", pixSplit.id);
-          changes.push("split_pix_atualizado");
+    const insertPendingPix = async (cents: number, orderIndex: number) => {
+      const { error } = await supabase.from("payment_splits").insert({
+        charge_id: charge.id,
+        payment_link_id: anyPaymentLinkId,
+        method: "pix",
+        amount_cents: cents,
+        display_amount_cents: cents + Math.round(cents * PIX_FEE_PERCENT),
+        status: "pending",
+        order_index: orderIndex,
+      });
+      if (error) console.error("[update-charge] Erro ao criar split PIX:", error);
+    };
+
+    if (isCombined || method === "pix") {
+      if (pendingPix > 0) {
+        if (!pendingPixSplit) {
+          // Só cria se já existem splits (link aberto); antes disso o Checkout cria a partir da charge
+          if (allSplits.length > 0) {
+            await insertPendingPix(pendingPix, 1);
+            changes.push("novo_pix_criado");
+          }
+        } else if (pendingPixSplit.amount_cents !== pendingPix) {
+          const newDisplay = pendingPix + Math.round(pendingPix * PIX_FEE_PERCENT);
+          if (pendingPixSplit.mp_payment_id) {
+            // QR já emitido com outro valor: cancela e cria um novo split pendente
+            await supabase.from("payment_splits").update({ status: "cancelled", mp_status_detail: "cancelado: valor editado" }).eq("id", pendingPixSplit.id);
+            await insertPendingPix(pendingPix, pendingPixSplit.order_index ?? 1);
+            changes.push("qr_pix_regenerado");
+          } else {
+            await supabase.from("payment_splits").update({ amount_cents: pendingPix, display_amount_cents: newDisplay }).eq("id", pendingPixSplit.id);
+            changes.push("split_pix_atualizado");
+          }
         }
+      } else if (pendingPixSplit) {
+        // Nada mais a pagar por PIX: o split pendente sai de cena
+        await supabase.from("payment_splits").update({ status: "cancelled", mp_status_detail: "cancelado: sem saldo PIX após edição" }).eq("id", pendingPixSplit.id);
+        changes.push("pix_pendente_cancelado");
       }
     }
 
-    const cardSplit = latestByMethod.get("credit_card");
-    if (cardSplit && cardSplit.status === "pending" && cardAmount !== null) {
+    const cardSplit = cardSplits.find((s) => s.status === "pending");
+    if (cardSplit && cardAmount !== null) {
       if (cardSplit.amount_cents !== cardAmount || (cardSplit.installments ?? 1) !== installments) {
         await supabase
           .from("payment_splits")
@@ -217,7 +250,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log("[update-charge] Cobrança editada:", { chargeId: charge.id, user: user.id, method, amount, changes });
+    console.log("[update-charge] Cobrança editada:", { chargeId: charge.id, user: user.id, method, amount, paidPix, pendingPix, cardAmount, changes });
 
     const { data: updated } = await supabase.from("charges").select("*").eq("id", charge.id).single();
     return json({ success: true, charge: updated, changes });

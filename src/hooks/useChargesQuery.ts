@@ -107,24 +107,30 @@ const DEFAULT_FILTERS: ChargeFilters = {
   company_id: 'all',
 };
 
+/**
+ * Mantém 1 split por método em `charge.splits` (o "representante" do método) e guarda a lista
+ * completa, sem cancelados, em `charge.all_splits`.
+ *
+ * Prioridade do representante: concluded > com pre_payment_key > mais recente. Um PIX pago
+ * precisa continuar representando o método mesmo que exista um segundo PIX pendente mais novo
+ * (criado pela edição da cobrança), senão o status "Parcialmente Pago" e os totais se perdem.
+ */
 function deduplicateSplits(charges: any[]) {
+  const rank = (s: any) => (s.status === 'concluded' ? 2 : s.pre_payment_key ? 1 : 0);
   return charges.map(charge => {
     if (charge.splits && charge.splits.length > 0) {
+      charge.all_splits = charge.splits.filter((s: any) => s.status !== 'cancelled');
       const splitsByMethod = new Map<string, any>();
       charge.splits.forEach((split: any) => {
         const existing = splitsByMethod.get(split.method);
         if (!existing) {
           splitsByMethod.set(split.method, split);
-        } else {
-          const existingHasKey = !!existing.pre_payment_key;
-          const newHasKey = !!split.pre_payment_key;
-          if (newHasKey && !existingHasKey) {
-            splitsByMethod.set(split.method, split);
-          } else if (!newHasKey && existingHasKey) {
-            // manter o existente que já tem pre_payment_key
-          } else if (new Date(split.created_at) > new Date(existing.created_at)) {
-            splitsByMethod.set(split.method, split);
-          }
+          return;
+        }
+        const r = rank(split);
+        const re = rank(existing);
+        if (r > re || (r === re && new Date(split.created_at) > new Date(existing.created_at))) {
+          splitsByMethod.set(split.method, split);
         }
       });
       charge.splits = Array.from(splitsByMethod.values()).sort((a: any, b: any) => a.order_index - b.order_index);

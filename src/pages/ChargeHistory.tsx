@@ -108,6 +108,8 @@ interface Charge {
     payment_link_url: string | null;
   }>;
   splits?: PaymentSplitInfo[];
+  /** Todos os splits não cancelados (pode haver mais de um PIX: pago + novo pendente) */
+  all_splits?: PaymentSplitInfo[];
 }
 
 // ChargeFilters is now imported from the hook
@@ -269,9 +271,16 @@ const getPaymentMethodBadge = (method: string) => {
 // Componente para exibir os métodos de pagamento (splits) com breakdown de taxas
 const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: boolean }) => {
   const splits = charge.splits || [];
-  
+
   const pixSplit = splits.find(s => s.method === 'pix');
   const cardSplit = splits.find(s => s.method === 'credit_card');
+  // PIX adicionais pendentes (criados pela edição depois de um PIX já pago)
+  const extraPixSplits = (charge.all_splits || []).filter(
+    s => s.method === 'pix' && s.status === 'pending' && s.id !== pixSplit?.id
+  );
+  const extraPixPending = extraPixSplits.reduce(
+    (sum, s) => sum + (s.display_amount_cents || Math.round(s.amount_cents * 1.015)), 0
+  );
 
   // ✅ STATUS ÚNICO: usar getComputedStatus como fonte da verdade para exibição
   const displayStatus = getComputedStatus(charge);
@@ -419,6 +428,43 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
           </div>
         )}
 
+        {/* PIX adicional (pendente) — criado na edição após o primeiro PIX ter sido pago */}
+        {extraPixSplits.map((s) => {
+          const base = s.amount_cents;
+          const total = s.display_amount_cents || Math.round(base * 1.015);
+          return (
+            <div key={s.id} className="p-4 bg-green-500/5 rounded-card border border-dashed border-green-500/30">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-green-500/10">
+                    <QrCode className="h-4 w-4 text-green-600" />
+                  </div>
+                  <span className="font-medium text-green-700">PIX adicional</span>
+                </div>
+                <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>
+              </div>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between text-ds-text-muted">
+                  <span>Valor original:</span>
+                  <span>{formatCurrency(base)}</span>
+                </div>
+                {isAdmin && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Taxa PIX (1.5%):</span>
+                    <span>+ {formatCurrency(total - base)}</span>
+                  </div>
+                )}
+                <div className="border-t border-green-500/10 pt-1.5 mt-1.5">
+                  <div className="flex justify-between font-semibold text-amber-600">
+                    <span>Valor:</span>
+                    <span>{formatCurrency(total)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
         {/* Card Card */}
         {hasCard && (
           <div className="p-4 bg-blue-500/5 rounded-card border border-blue-500/10">
@@ -460,7 +506,7 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
         const pixPaid = isSplitPaid(pixSplit, true);
         const cardPaid = isSplitPaid(cardSplit, false);
         const totalPaid = (pixPaid ? pixTotal : 0) + (cardPaid ? cardTotal : 0);
-        const totalPending = (!pixPaid ? pixTotal : 0) + (!cardPaid ? cardTotal : 0);
+        const totalPending = (!pixPaid ? pixTotal : 0) + (!cardPaid ? cardTotal : 0) + extraPixPending;
         
         return (
           <div className="space-y-2">

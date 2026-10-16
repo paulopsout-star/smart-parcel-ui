@@ -8,7 +8,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/integrations/supabase/client';
 import { getFunctionErrorMessage } from '@/lib/functionError';
 import { currencyToCents, formatCurrencyInput, formatDocument, formatPhone, unformatDocument, unformatPhone } from '@/lib/input-masks';
+import { paidPixCents } from '@/lib/charge-rules';
+import type { ChargeSplitLike } from '@/lib/charge-rules';
 import { toast } from '@/hooks/use-toast';
+
+const formatBRL = (cents: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 
 /** Subconjunto da cobrança necessário para edição. */
 export interface EditableCharge {
@@ -25,6 +30,7 @@ export interface EditableCharge {
   installments?: number | null;
   boleto_linha_digitavel?: string | null;
   boleto_pix_cartao_linha_digitavel?: string | null;
+  splits?: ChargeSplitLike[];
 }
 
 interface EditChargeDialogProps {
@@ -55,13 +61,15 @@ const centsToInput = (cents: number | null | undefined) =>
 
 const buildInitialState = (charge: EditableCharge): FormState => {
   const method = charge.payment_method || 'cartao';
+  // No combinado, o campo de PIX representa só a parte AINDA A PAGAR (o já pago fica travado)
+  const pendingPix = Math.max(0, (charge.pix_amount || 0) - paidPixCents(charge));
   return {
     payer_name: charge.payer_name || '',
     payer_email: charge.payer_email || '',
     payer_phone: formatPhone(charge.payer_phone || ''),
     payer_document: formatDocument(charge.payer_document || ''),
     amount: centsToInput(charge.amount),
-    pix_amount: centsToInput(charge.pix_amount),
+    pix_amount: centsToInput(pendingPix),
     card_amount: centsToInput(charge.card_amount),
     installments: String(charge.installments || 1),
     boleto_linha_digitavel: (method === 'cartao_pix' ? charge.boleto_pix_cartao_linha_digitavel : charge.boleto_linha_digitavel) || '',
@@ -87,6 +95,14 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
   const method = charge.payment_method || 'cartao';
   const isCombined = method === 'cartao_pix';
   const hasCard = method === 'cartao' || isCombined;
+  const paidPix = isCombined ? paidPixCents(charge) : 0;
+  const hasPaidPix = paidPix > 0;
+
+  // Soma ao vivo para o operador conferir: PIX pago + novo PIX + cartão
+  const liveSum = isCombined
+    ? paidPix + currencyToCents(form.pix_amount) + currencyToCents(form.card_amount)
+    : null;
+  const liveTotal = currencyToCents(form.amount);
 
   const set = (field: keyof FormState, value: string) => {
     setForm((prev) => (prev ? { ...prev, [field]: value } : prev));
@@ -106,12 +122,13 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
     if (amount <= 0) e.amount = 'Valor é obrigatório';
 
     if (isCombined) {
-      const pix = currencyToCents(form.pix_amount);
+      const pix = currencyToCents(form.pix_amount); // parte do PIX ainda a pagar (0 = sem novo PIX)
       const card = currencyToCents(form.card_amount);
-      if (pix <= 0) e.pix_amount = 'Valor do PIX é obrigatório';
+      if (!hasPaidPix && pix <= 0) e.pix_amount = 'Valor do PIX é obrigatório';
       if (card <= 0) e.card_amount = 'Valor do cartão é obrigatório';
-      if (pix > 0 && card > 0 && pix + card !== amount) {
-        e.card_amount = `Soma PIX + Cartão (R$ ${((pix + card) / 100).toFixed(2)}) deve ser igual ao total (R$ ${(amount / 100).toFixed(2)})`;
+      const sum = paidPix + pix + card;
+      if (card > 0 && sum !== amount) {
+        e.card_amount = `${hasPaidPix ? 'PIX pago + novo PIX + Cartão' : 'PIX + Cartão'} (${formatBRL(sum)}) deve ser igual ao total (${formatBRL(amount)})`;
       }
     }
 
@@ -157,12 +174,14 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
       }
 
       const changes: string[] = data.changes || [];
-      toast({
-        title: 'Cobrança atualizada',
-        description: changes.includes('qr_pix_regenerado')
-          ? 'Valor do PIX alterado: um novo QR Code será gerado quando o cliente abrir o link.'
-          : 'Os dados da cobrança e do link de pagamento foram atualizados.',
-      });
+      const pixMsg = changes.includes('novo_pix_criado')
+        ? 'Um novo PIX foi criado para o saldo informado; o QR Code é gerado quando o cliente abrir o link.'
+        : changes.includes('qr_pix_regenerado')
+        ? 'Valor do PIX alterado: um novo QR Code será gerado quando o cliente abrir o link.'
+        : changes.includes('pix_pendente_cancelado')
+        ? 'O PIX pendente foi cancelado; o saldo ficou todo no cartão.'
+        : 'Os dados da cobrança e do link de pagamento foram atualizados.';
+      toast({ title: 'Cobrança atualizada', description: pixMsg });
       onSaved(data.charge);
       onOpenChange(false);
     } catch (err) {
@@ -224,8 +243,8 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
             {isCombined && (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="edit-pix-amount">Valor PIX (R$)</Label>
-                  <Input id="edit-pix-amount" inputMode="numeric" value={form.pix_amount} onChange={(e) => set('pix_amount', formatCurrencyInput(e.target.value))} className={errors.pix_amount ? 'border-destructive' : ''} />
+                  <Label htmlFor="edit-pix-amount">{hasPaidPix ? 'Novo PIX (R$)' : 'Valor PIX (R$)'}</Label>
+                  <Input id="edit-pix-amount" inputMode="numeric" value={form.pix_amount} onChange={(e) => set('pix_amount', formatCurrencyInput(e.target.value))} placeholder={hasPaidPix ? 'Vazio = sem novo PIX' : undefined} className={errors.pix_amount ? 'border-destructive' : ''} />
                   {fieldError('pix_amount')}
                 </div>
                 <div className="space-y-1.5">
@@ -243,6 +262,25 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
               </div>
             )}
           </div>
+
+          {isCombined && (
+            <div className={`rounded-lg border p-3 text-sm ${liveSum === liveTotal ? 'border-green-500/30 bg-green-500/5' : 'border-amber-500/30 bg-amber-500/5'}`}>
+              {hasPaidPix && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">PIX já pago (travado)</span>
+                  <span className="font-medium">{formatBRL(paidPix)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{hasPaidPix ? 'PIX pago + novo PIX + cartão' : 'PIX + cartão'}</span>
+                <span className="font-medium">{formatBRL(liveSum ?? 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total da cobrança</span>
+                <span className={`font-semibold ${liveSum === liveTotal ? 'text-green-700' : 'text-amber-700'}`}>{formatBRL(liveTotal)}</span>
+              </div>
+            </div>
+          )}
 
           {isCombined && (
             <div className="space-y-1.5 sm:w-1/3">
