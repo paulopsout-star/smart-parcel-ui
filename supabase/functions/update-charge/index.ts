@@ -10,7 +10,7 @@ import { corsHeaders } from "../_shared/cors.ts";
  * forma consistente para charges → payment_links → payment_splits pendentes.
  *
  * Regra de elegibilidade (checada no servidor, não só na UI):
- *   - status da charge em pending/processing
+ *   - status da charge exatamente "pending"
  *   - nenhum split concluded
  *   - nenhum split de cartão com pre_payment_key (cartão já autorizado no Quita+)
  *
@@ -34,7 +34,7 @@ interface UpdateChargeRequest {
 }
 
 const PIX_FEE_PERCENT = 0.015; // mesma taxa aplicada no checkout
-const EDITABLE_STATUSES = ["pending", "processing"];
+const EDITABLE_STATUSES = ["pending"];
 
 const onlyDigits = (v: string | null | undefined) => (v || "").replace(/\D/g, "");
 
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
 
     const allSplits = splits || [];
     if (!EDITABLE_STATUSES.includes(charge.status)) {
-      return fail("not_editable", `Cobrança com status "${charge.status}" não pode ser editada`, 409);
+      return fail("not_editable", `Somente cobranças Pendentes podem ser editadas (status atual: ${charge.status})`, 409);
     }
     if (allSplits.some((s) => s.status === "concluded")) {
       return fail("not_editable", "Esta cobrança já tem um pagamento concluído", 409);

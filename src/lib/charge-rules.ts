@@ -8,12 +8,10 @@ export interface ChargeEditabilityInput {
   splits?: Array<{ method: string; status: string; pre_payment_key?: string | null }>;
 }
 
-const EDITABLE_STATUSES = ['pending', 'processing'];
-
-/** Uma cobrança pode ser editada enquanto nenhum pagamento foi concluído nem cartão autorizado. */
+/** Só cobranças Pendentes podem ser editadas; qualquer outro status bloqueia. */
 export function canEditCharge(charge: ChargeEditabilityInput): { ok: boolean; reason?: string } {
-  if (!EDITABLE_STATUSES.includes(charge.status)) {
-    return { ok: false, reason: 'A cobrança já avançou no processo de pagamento.' };
+  if (charge.status !== 'pending') {
+    return { ok: false, reason: 'Somente cobranças com status Pendente podem ser editadas.' };
   }
   const splits = charge.splits ?? [];
   if (splits.some((s) => s.status === 'concluded')) {
