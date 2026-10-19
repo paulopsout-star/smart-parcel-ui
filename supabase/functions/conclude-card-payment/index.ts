@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { deriveChargeStatus } from '../_shared/charge-status.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -229,24 +230,8 @@ Deno.serve(async (req) => {
 
       // GUARD: Só atualizar charge se houver splits (evita marcar como failed sem pagamento iniciado)
       if (allSplits && allSplits.length > 0) {
-        const allConcluded = allSplits.every(s => s.status === 'concluded');
-        const anyAnalyzing = allSplits.some(s => s.status === 'analyzing');
-        const anyFailed = allSplits.some(s => s.status === 'failed' || s.status === 'expired');
-        const anyCancelled = allSplits.some(s => s.status === 'cancelled');
-        const anyConcluded = allSplits.some(s => s.status === 'concluded');
-
-        let chargeStatus = 'pending';
-        if (allConcluded && allSplits.length > 0) {
-          chargeStatus = 'completed';
-        } else if (anyCancelled && !anyConcluded) {
-          chargeStatus = 'cancelled'; // Cancelado pela API Quita+
-        } else if (anyFailed && !anyConcluded) {
-          chargeStatus = 'failed';
-        } else if (anyAnalyzing) {
-          chargeStatus = 'processing'; // Em análise - aguardando confirmação
-        } else if (anyConcluded) {
-          chargeStatus = 'processing'; // Parcialmente pago
-        }
+        // Lógica única (etapa do cartão reflete na cobrança) — _shared/charge-status.ts
+        const chargeStatus = deriveChargeStatus(allSplits);
 
         // Check if status is manually locked by admin
         const { data: chargeCheck } = await supabase

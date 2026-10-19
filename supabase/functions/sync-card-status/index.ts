@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { deriveChargeStatus } from '../_shared/charge-status.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,6 +24,43 @@ const statusCodeMap: Record<number, string> = {
 
 // Rate limiting: esperar 1 segundo entre chamadas à API
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Recalcula o status da cobrança a partir de todos os splits e grava se mudou.
+ * Chamado mesmo quando o split não mudou, para corrigir cobranças cujo status
+ * ficou desalinhado (ex.: "processing" com cartão pré-autorizado aguardando boleto).
+ * Retorna true se a cobrança foi atualizada.
+ */
+async function refreshChargeStatus(supabase: ReturnType<typeof createClient>, chargeId: string): Promise<boolean> {
+  const { data: allChargeSplits } = await supabase
+    .from('payment_splits')
+    .select('status, method')
+    .eq('charge_id', chargeId);
+
+  // GUARD: Só atualizar charge se houver splits (evita marcar como failed sem pagamento iniciado)
+  if (!allChargeSplits || allChargeSplits.length === 0) {
+    console.log('[sync-card-status] Skipping charge update - no splits found for charge:', chargeId);
+    return false;
+  }
+
+  const chargeStatus = deriveChargeStatus(allChargeSplits);
+
+  const { data: chargeCheck } = await supabase
+    .from('charges')
+    .select('status, status_locked_at')
+    .eq('id', chargeId)
+    .single();
+
+  if (chargeCheck?.status_locked_at) {
+    console.log('[sync-card-status] Status locked manually for charge', chargeId, '- skipping auto update');
+    return false;
+  }
+  if (chargeCheck?.status === chargeStatus) return false;
+
+  await supabase.from('charges').update({ status: chargeStatus }).eq('id', chargeId);
+  console.log('[sync-card-status] Updated charge', chargeId, 'status', chargeCheck?.status, '->', chargeStatus);
+  return true;
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -150,6 +188,10 @@ Deno.serve(async (req) => {
         if (!needsUpdate) {
           console.log('[sync-card-status] No update needed for split:', split.id);
           stats.unchanged++;
+          // A cobrança ainda pode estar desalinhada em relação ao split
+          if (split.charge_id && await refreshChargeStatus(supabase, split.charge_id)) {
+            updatedCharges.add(split.charge_id);
+          }
           continue;
         }
 
@@ -193,51 +235,9 @@ Deno.serve(async (req) => {
           stats.failed++;
         }
 
-        // Atualizar status do charge se necessário
+        // Atualizar status do charge se necessário (lógica única em _shared/charge-status.ts)
         if (split.charge_id) {
-          const { data: allChargeSplits } = await supabase
-            .from('payment_splits')
-            .select('status')
-            .eq('charge_id', split.charge_id);
-
-          // GUARD: Só atualizar charge se houver splits (evita marcar como failed sem pagamento iniciado)
-          if (allChargeSplits && allChargeSplits.length > 0) {
-            const allConcluded = allChargeSplits.every(s => s.status === 'concluded');
-            const anyFailed = allChargeSplits.some(s => s.status === 'failed' || s.status === 'expired');
-            const anyCancelled = allChargeSplits.some(s => s.status === 'cancelled');
-            const anyConcluded = allChargeSplits.some(s => s.status === 'concluded');
-
-            let chargeStatus = 'pending';
-            if (allConcluded && allChargeSplits.length > 0) {
-              chargeStatus = 'completed';
-            } else if (anyCancelled && !anyConcluded) {
-              chargeStatus = 'cancelled'; // Cancelado pela API
-            } else if (anyFailed && !anyConcluded) {
-              chargeStatus = 'failed';
-            } else if (anyConcluded) {
-              chargeStatus = 'processing';
-            }
-
-            // Check if status is manually locked by admin
-            const { data: chargeCheck } = await supabase
-              .from('charges')
-              .select('status_locked_at')
-              .eq('id', split.charge_id)
-              .single();
-
-            if (chargeCheck?.status_locked_at) {
-              console.log('[sync-card-status] Status locked manually for charge', split.charge_id, '- skipping auto update');
-            } else {
-              await supabase
-                .from('charges')
-                .update({ status: chargeStatus })
-                .eq('id', split.charge_id);
-            }
-
-            console.log('[sync-card-status] Updated charge', split.charge_id, 'status to:', chargeStatus);
-          } else {
-            console.log('[sync-card-status] Skipping charge update - no splits found for charge:', split.charge_id);
-          }
+          await refreshChargeStatus(supabase, split.charge_id);
         }
 
       } catch (error) {

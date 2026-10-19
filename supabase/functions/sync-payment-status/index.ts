@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import { deriveChargeStatus } from "../_shared/charge-status.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,26 +46,11 @@ const SYNC_DAYS_WINDOW = 90;
 const MAX_SYNC_ATTEMPTS = 5;
 
 /**
- * Deriva o status do charge a partir dos status de TODOS os splits.
- * Mesma lógica usada no sync-card-status para consistência.
+ * Deriva o status do charge a partir dos splits — lógica única em _shared/charge-status.ts
+ * (a etapa do cartão, ex.: pre_authorized, passa a refletir na cobrança).
  */
-function deriveChargeStatusFromSplits(splits: Array<{ status: string }>): string {
-  if (!splits || splits.length === 0) return "pending";
-
-  const statuses = splits.map(s => s.status);
-  const allConcluded = statuses.every(s => s === "concluded");
-  const someConcluded = statuses.some(s => s === "concluded");
-  const someCancelled = statuses.some(s => s === "cancelled");
-  const someFailed = statuses.some(s => s === "failed");
-  const someAnalyzing = statuses.some(s => s === "analyzing");
-  const someProcessing = statuses.some(s => ["validating", "approved", "awaiting_validation", "boleto_linked"].includes(s));
-
-  if (allConcluded) return "completed";
-  if (someConcluded) return "processing"; // Parcialmente pago
-  if (someCancelled && !someConcluded) return "cancelled";
-  if (someFailed && !someConcluded) return "failed";
-  if (someAnalyzing || someProcessing) return "processing";
-  return "pending";
+function deriveChargeStatusFromSplits(splits: Array<{ status: string; method: string }>): string {
+  return deriveChargeStatus(splits);
 }
 
 serve(async (req) => {
