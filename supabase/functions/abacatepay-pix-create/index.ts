@@ -93,6 +93,7 @@ Deno.serve(async (req) => {
 
     // Reaproveita QR AbacatePay ainda pendente. QR de outro provedor (Treeal) é substituído.
     let replacedProviderId: string | null = null;
+    let existingStatus: string | null = null;
     if (payment_split_id) {
       const { data: existingSplit } = await supabase
         .from("payment_splits")
@@ -100,6 +101,7 @@ Deno.serve(async (req) => {
         .eq("id", payment_split_id)
         .single();
 
+      existingStatus = existingSplit?.status ?? null;
       if (existingSplit?.mp_payment_id && existingSplit?.mp_qr_code) {
         if (isAbacatePayId(existingSplit.mp_payment_id) && existingSplit.status === "pending") {
           console.log("[abacatepay-pix-create] Returning existing PIX:", existingSplit.mp_payment_id);
@@ -188,6 +190,12 @@ Deno.serve(async (req) => {
       // Rastreabilidade: se um QR Treeal foi substituído, guarda o txid antigo
       if (replacedProviderId) {
         update.mp_status_detail = `substituiu QR Treeal ${replacedProviderId}`;
+      }
+      // QR anterior expirou (split failed): com QR novo o split volta a pendente, senão o cron
+      // de sync não o acompanha e o painel segue mostrando "expirado"
+      if (existingStatus === "failed") {
+        update.status = "pending";
+        update.pix_paid_at = null;
       }
 
       const { error: updateError } = await supabase

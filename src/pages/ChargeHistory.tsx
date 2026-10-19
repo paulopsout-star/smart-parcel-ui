@@ -45,7 +45,13 @@ interface PaymentSplitInfo {
   processed_at?: string;
   order_index: number;
   installments?: number;
+  mp_status?: string | null;
 }
+
+// QR PIX que venceu sem pagamento (AbacatePay EXPIRED / Treeal REMOVIDA_PELO_PSP) — não é recusa
+const isExpiredPix = (split: { method: string; status: string; mp_status?: string | null } | undefined) =>
+  !!split && split.method === 'pix' && split.status === 'failed' &&
+  ['EXPIRED', 'REMOVIDA_PELO_PSP'].includes(split.mp_status || '');
 
 interface Company {
   id: string;
@@ -365,7 +371,12 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
         if (isPaid) return <Badge variant="success" className="text-xs">✓ Pago</Badge>;
       }
     }
-    
+
+    // QR vencido: o cliente gera outro ao reabrir o link
+    if (splitMethod === 'pix' && isExpiredPix(pixSplit)) {
+      return <Badge variant="secondary" className="text-xs">⏱ QR expirado</Badge>;
+    }
+
     return <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>;
   };
 
@@ -2174,6 +2185,7 @@ export default function ChargeHistory() {
                                 }
                                 
                                 // Status normal do split
+                                if (isExpiredPix(split)) return { variant: 'secondary' as const, label: '⏱ QR expirado' };
                                 if (split.status === 'failed') return { variant: 'destructive' as const, label: '✗ Recusado' };
                                 if (split.status === 'cancelled') return { variant: 'secondary' as const, label: '✗ Cancelado' };
                                 

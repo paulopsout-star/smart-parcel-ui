@@ -54,6 +54,7 @@ const CHARGES_SELECT = `
     processed_at,
     order_index,
     installments,
+    mp_status,
     created_at
   )
 `;
