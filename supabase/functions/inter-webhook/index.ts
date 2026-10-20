@@ -12,8 +12,9 @@ import { interConfig, recuperarCobranca } from '../_shared/inter.ts';
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('ok', { status: 200 });
 
-  const expected = Deno.env.get('INTER_WEBHOOK_TOKEN');
-  const token = new URL(req.url).searchParams.get('token');
+  // trim: o secret pode ter sido colado com quebra de linha no final
+  const expected = (Deno.env.get('INTER_WEBHOOK_TOKEN') || '').trim();
+  const token = (new URL(req.url).searchParams.get('token') || '').trim();
   if (expected && token !== expected) {
     console.warn('[inter-webhook] token inválido');
     return new Response('forbidden', { status: 403 });
