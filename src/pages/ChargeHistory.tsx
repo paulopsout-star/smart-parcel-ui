@@ -121,7 +121,7 @@ interface Charge {
 }
 
 // ChargeFilters is now imported from the hook
-import { useChargesQuery, DEFAULT_FILTERS, PAGE_SIZE, deduplicateSplits, CHARGES_SELECT, CHARGE_SITUATIONS, CHARGE_STATUSES } from '@/hooks/useChargesQuery';
+import { useChargesQuery, DEFAULT_FILTERS, PAGE_SIZE, deduplicateSplits, CHARGES_SELECT, CHARGE_SITUATIONS, CHARGE_STATUSES, PARTIAL_STATUS_FILTER } from '@/hooks/useChargesQuery';
 import type { ChargeFilters } from '@/hooks/useChargesQuery';
 
 // Helper functions
@@ -1594,6 +1594,10 @@ export default function ChargeHistory() {
                         .map(s => (
                           <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                         ))}
+                      {/* Calculado dos splits (PIX + Cartão com um dos meios pago) — só faz sentido em andamento */}
+                      {(filters.situation === 'all' || filters.situation === 'in_progress') && (
+                        <SelectItem value={PARTIAL_STATUS_FILTER.value}>{PARTIAL_STATUS_FILTER.label}</SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>

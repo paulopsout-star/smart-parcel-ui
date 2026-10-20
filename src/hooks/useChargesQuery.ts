@@ -75,6 +75,13 @@ export const CHARGE_STATUSES: ReadonlyArray<{ value: string; label: string }> = 
   { value: 'refunded', label: 'Estornado' },
 ];
 
+/**
+ * "Parcialmente pago" não é um status gravado: é calculado dos splits (um dos dois meios do
+ * combinado pago, o outro não). Entra só no FILTRO de Status — nunca no select de alteração
+ * manual — e é resolvido no servidor pela função partially_paid_charge_ids().
+ */
+export const PARTIAL_STATUS_FILTER = { value: 'partial', label: 'Parcialmente pago' } as const;
+
 /** Situação = agrupamento das etapas acima (conclusão, andamento, etc.). */
 export const CHARGE_SITUATIONS: ReadonlyArray<{ value: string; label: string; statuses: string[] }> = [
   {
@@ -166,7 +173,16 @@ async function fetchChargesPage(
   }
 
   // Server-side status filter (etapa exata; combina com a situação por AND)
-  if (filters.status !== 'all') {
+  if (filters.status === PARTIAL_STATUS_FILTER.value) {
+    // Calculado dos splits no banco (ver PARTIAL_STATUS_FILTER)
+    const { data: partialIds, error: partialError } = await supabase.rpc('partially_paid_charge_ids');
+    if (partialError) throw partialError;
+    const ids = (partialIds || []) as string[];
+    if (ids.length === 0) {
+      return { charges: [], totalCount: 0, hasMore: false };
+    }
+    query = query.in('id', ids);
+  } else if (filters.status !== 'all') {
     query = query.eq('status', filters.status as any);
   }
 

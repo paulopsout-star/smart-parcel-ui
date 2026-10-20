@@ -1143,6 +1143,7 @@ export type Database = {
         Returns: boolean
       }
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
+      partially_paid_charge_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
