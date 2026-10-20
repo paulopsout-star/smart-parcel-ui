@@ -855,6 +855,7 @@ export default function ChargeHistory() {
   const [adminAllowMismatch, setAdminAllowMismatch] = useState(false);
   const [adminAllowExpired, setAdminAllowExpired] = useState(false);
   const [linkingBoleto, setLinkingBoleto] = useState(false);
+  const [interIssuing, setInterIssuing] = useState(false);
   
   // Estado para alteração de empresa (admin)
   const [editingCompany, setEditingCompany] = useState(false);
@@ -1160,6 +1161,42 @@ export default function ChargeHistory() {
   };
 
   // Função para admin vincular boleto manualmente
+  // Emite boleto no Banco Inter com o valor do cartão e vincula no Quita+ (sem digitar linha)
+  const handleInterIssue = async (charge: Charge) => {
+    setInterIssuing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('inter-boleto-issue', {
+        body: { chargeId: charge.id, source: 'admin' },
+      });
+      if (error) {
+        toast({ title: 'Erro ao emitir no Inter', description: error.message || 'Erro desconhecido', variant: 'destructive' });
+        return;
+      }
+      if (data?.success === false) {
+        toast({
+          title: data.error === 'inter_nao_configurado' ? 'Integração Inter não configurada'
+            : data.error === 'vinculo_falhou' ? 'Boleto emitido, mas o vínculo falhou'
+            : data.error === 'ja_emitido' ? 'Boleto já emitido'
+            : (data.error || 'Erro ao emitir no Inter'),
+          description: data.message || 'Erro desconhecido',
+          variant: 'destructive',
+        });
+        return;
+      }
+      toast({
+        title: '✓ Boleto emitido e vinculado',
+        description: `Inter · ${formatCurrency(data.valorCents)} · vence ${data.dataVencimento?.split('-').reverse().join('/')}`,
+      });
+      setAdminLinhaDigitavel('');
+      setSelectedCharge(null);
+      await invalidateCharges();
+    } catch (err: any) {
+      toast({ title: 'Erro inesperado', description: err?.message || 'Falha ao emitir no Inter.', variant: 'destructive' });
+    } finally {
+      setInterIssuing(false);
+    }
+  };
+
   const handleAdminLinkBoleto = async (charge: Charge) => {
     if (!adminLinhaDigitavel.trim()) {
       toast({
@@ -2402,6 +2439,20 @@ export default function ChargeHistory() {
                         )}
                         {linkingBoleto ? 'Vinculando...' : 'Vincular Boleto'}
                       </Button>
+                      <div className="relative py-1">
+                        <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-blue-200 dark:border-blue-800" /></div>
+                        <div className="relative flex justify-center text-[10px] uppercase tracking-wide text-blue-500"><span className="bg-blue-50 dark:bg-blue-950/30 px-2">ou</span></div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleInterIssue(selectedCharge)}
+                        disabled={interIssuing || linkingBoleto}
+                        className="w-full gap-2"
+                        title="Emite um boleto no Banco Inter com o valor exato do cartão e vincula no Quita+"
+                      >
+                        {interIssuing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />}
+                        {interIssuing ? 'Emitindo no Inter...' : `Emitir no Inter e vincular${expectedCents ? ` (${formatCurrency(expectedCents)})` : ''}`}
+                      </Button>
                     </div>
                     );
                   })()}
@@ -2425,6 +2476,17 @@ export default function ChargeHistory() {
                               expectedCents={selectedCharge.splits?.find((s: any) => s.method === 'credit_card' && s.status !== 'cancelled')?.amount_cents ?? selectedCharge.card_amount ?? null}
                               className="mt-2"
                             />
+                            {(() => {
+                              const inter = (selectedCharge.metadata as any)?.inter_cobranca;
+                              if (!inter?.codigoSolicitacao || inter.linhaDigitavel !== selectedCharge.boleto_admin_linha_digitavel) return null;
+                              return (
+                                <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                  Emitido pelo Banco Inter{inter.env === 'sandbox' ? ' (sandbox)' : ''} · solicitação {String(inter.codigoSolicitacao).slice(0, 8)}…
+                                  {inter.situacao ? ` · ${inter.situacao}` : ''}
+                                  {inter.paid_at ? ' · pago' : ''}
+                                </p>
+                              );
+                            })()}
                           </>
                         )}
                       </div>

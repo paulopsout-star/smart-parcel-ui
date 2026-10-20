@@ -644,7 +644,19 @@ DETALHES TÉCNICOS:
           console.log('[quitaplus-prepayment] Pagamento combinado (PIX + Cartão) detectado.');
           console.log('[quitaplus-prepayment] Vínculo automático de boleto DESABILITADO para este tipo de pagamento.');
           console.log('[quitaplus-prepayment] O administrador deve vincular manualmente via painel.');
-          // Não faz nada - o admin vai vincular manualmente depois
+          // Emissão automática no Banco Inter (boleto com o valor do cartão) — só com INTER_AUTO_ISSUE=true.
+          // Roda depois da resposta (waitUntil) para não atrasar o checkout; falha não afeta o fluxo.
+          if (Deno.env.get('INTER_AUTO_ISSUE') === 'true') {
+            const issue = fetch(`${supabaseUrl}/functions/v1/inter-boleto-issue`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` },
+              body: JSON.stringify({ chargeId: requestData.chargeId, source: 'prepayment' }),
+            }).then(async (r) => console.log('[quitaplus-prepayment] inter-boleto-issue:', r.status, (await r.text()).slice(0, 300)))
+              .catch((e) => console.error('[quitaplus-prepayment] inter-boleto-issue falhou:', e));
+            // deno-lint-ignore no-explicit-any
+            const rt = (globalThis as any).EdgeRuntime;
+            if (rt?.waitUntil) rt.waitUntil(issue); else await issue;
+          }
         } else if (charge?.boleto_linha_digitavel && prePaymentKey) {
           // Fluxo original para pagamentos APENAS cartão (não combinado)
           console.log('[quitaplus-prepayment] Pagamento apenas cartão - vinculando boleto automaticamente...', {
