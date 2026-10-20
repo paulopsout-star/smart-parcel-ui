@@ -34,7 +34,12 @@ export function deriveChargeStatus(splits: SplitLike[]): string {
   const isFailed = (s: SplitLike) => s.status === "failed" || s.status === "expired";
   const anyConcluded = splits.some(isConcluded);
 
-  if (active.length > 0 && active.every(isConcluded)) return "completed";
+  // Completa só quando CADA método presente na cobrança tem um split concluído (mesma regra do
+  // tryCompleteCharge). Cancelados contam para "método presente": PIX pago + cartão cancelado
+  // NÃO é cobrança paga.
+  const methods = Array.from(new Set(splits.map((s) => s.method)));
+  const allMethodsCovered = methods.every((m) => splits.some((s) => s.method === m && isConcluded(s)));
+  if (allMethodsCovered) return "completed";
 
   // Cartão em andamento manda no status da cobrança (mesmo com PIX já pago no combinado)
   const cardStage = active.find((s) => s.method === "credit_card" && CARD_STAGE_TO_CHARGE[s.status]);
