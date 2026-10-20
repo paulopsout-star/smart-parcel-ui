@@ -15,7 +15,8 @@ import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, M
 import { cardHolderRelationshipLabel } from '@/types/payment';
 import { EditChargeDialog } from '@/components/EditChargeDialog';
 import { canEditCharge } from '@/lib/charge-rules';
-import { boletoValueCents } from '@/lib/boleto';
+import { parseBoleto, boletoDueInfo } from '@/lib/boleto';
+import { BoletoValidity, dueLabel } from '@/components/BoletoValidity';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -852,6 +853,7 @@ export default function ChargeHistory() {
   // Estado para vinculação manual de boleto (admin)
   const [adminLinhaDigitavel, setAdminLinhaDigitavel] = useState('');
   const [adminAllowMismatch, setAdminAllowMismatch] = useState(false);
+  const [adminAllowExpired, setAdminAllowExpired] = useState(false);
   const [linkingBoleto, setLinkingBoleto] = useState(false);
   
   // Estado para alteração de empresa (admin)
@@ -1177,6 +1179,15 @@ export default function ChargeHistory() {
       });
       return;
     }
+    const boletoInfo = parseBoleto(sanitized);
+    if (boletoInfo.kind === 'invalid' && sanitized.length === 47) {
+      toast({
+        title: "Linha digitável inválida",
+        description: `Dígitos verificadores não conferem (${boletoInfo.problems.join(', ')}). Confira a digitação.`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLinkingBoleto(true);
     try {
@@ -1189,6 +1200,7 @@ export default function ChargeHistory() {
           chargeId: charge.id,
           linhaDigitavel: sanitized,
           allowValueMismatch: adminAllowMismatch,
+          allowExpired: adminAllowExpired,
         },
       });
 
@@ -1206,7 +1218,10 @@ export default function ChargeHistory() {
 
       if (data && data.success === false) {
         toast({
-          title: data.error === 'valor_divergente' ? 'Valor do boleto diferente do cartão' : (data.error || "Erro ao vincular boleto"),
+          title: data.error === 'valor_divergente' ? 'Valor do boleto diferente do cartão'
+            : data.error === 'boleto_vencido' ? 'Boleto vencido'
+            : data.error === 'linha_invalida' ? 'Linha digitável inválida'
+            : (data.error || "Erro ao vincular boleto"),
           description: data.message || 'Erro desconhecido',
           variant: "destructive",
         });
@@ -1220,6 +1235,7 @@ export default function ChargeHistory() {
 
       setAdminLinhaDigitavel('');
       setAdminAllowMismatch(false);
+      setAdminAllowExpired(false);
       setSelectedCharge(null);
       await invalidateCharges();
     } catch (err: any) {
@@ -2279,6 +2295,7 @@ export default function ChargeHistory() {
                               <Copy className="h-4 w-4" />
                             </Button>
                           </div>
+                          <BoletoValidity linha={linhaCadastro} className="mt-2" />
                           <p className="text-xs text-amber-600 dark:text-amber-300 mt-1 flex items-center gap-1">
                             <Info className="h-3 w-3" />
                             {adminJaVinculou
@@ -2309,9 +2326,16 @@ export default function ChargeHistory() {
                     const isRelink = !!selectedCharge.boleto_admin_linha_digitavel;
                     const cardSplit = selectedCharge.splits?.find((s: any) => s.method === 'credit_card' && s.status !== 'cancelled');
                     const expectedCents = cardSplit?.amount_cents ?? selectedCharge.card_amount ?? null;
-                    const boletoCents = boletoValueCents(adminLinhaDigitavel);
+                    const typedDigits = adminLinhaDigitavel.replace(/\D/g, '');
+                    const boletoInfo = typedDigits.length >= 47 ? parseBoleto(typedDigits) : null;
+                    const boletoCents = boletoInfo?.valueCents ?? null;
+                    const due = boletoInfo ? boletoDueInfo(boletoInfo) : null;
+                    // Linha de 47 com DV errado bloqueia; de 48 (arrecadação) só avisa
+                    const invalidBlocks = !!boletoInfo && boletoInfo.kind === 'invalid' && typedDigits.length === 47;
+                    const expired = due?.status === 'expired';
                     const mismatch = boletoCents !== null && !!expectedCents && boletoCents !== expectedCents;
-                    const canSubmit = adminLinhaDigitavel.replace(/\D/g, '').length >= 47 && !linkingBoleto && (!mismatch || adminAllowMismatch);
+                    const canSubmit = typedDigits.length >= 47 && !linkingBoleto && !invalidBlocks
+                      && (!mismatch || adminAllowMismatch) && (!expired || adminAllowExpired);
                     return (
                     <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
                       <h4 className="font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2">
@@ -2326,13 +2350,31 @@ export default function ChargeHistory() {
                       <Input
                         placeholder="Digite a linha digitável (47 ou 48 dígitos)"
                         value={adminLinhaDigitavel}
-                        onChange={(e) => { setAdminLinhaDigitavel(e.target.value); setAdminAllowMismatch(false); }}
+                        onChange={(e) => { setAdminLinhaDigitavel(e.target.value); setAdminAllowMismatch(false); setAdminAllowExpired(false); }}
                         className="font-mono text-sm"
                       />
-                      {boletoCents !== null && (
-                        <div className={`text-xs rounded-md p-2 ${mismatch ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-200'}`}>
+                      {boletoInfo && (
+                        <div className={`text-xs rounded-md p-2 space-y-1 ${invalidBlocks || expired ? 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200' : mismatch ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-200'}`}>
+                          <BoletoValidity linha={typedDigits} />
+                          {invalidBlocks && (
+                            <p>Os dígitos verificadores não conferem. Confira a digitação — a Cappta recusaria essa linha.</p>
+                          )}
+                          {boletoInfo.kind === 'invalid' && typedDigits.length === 48 && (
+                            <p>Não foi possível conferir os dígitos desta linha de arrecadação. Revise antes de vincular.</p>
+                          )}
+                          {expired && due && (
+                            <div className="space-y-1">
+                              <p><strong>{dueLabel(due)}.</strong> Boleto vencido pode ser recusado ou ter o valor recalculado com juros, o que diverge do cartão.</p>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={adminAllowExpired} onChange={(e) => setAdminAllowExpired(e.target.checked)} />
+                                Vincular mesmo vencido
+                              </label>
+                            </div>
+                          )}
+                          {boletoCents !== null && (<p>
                           Valor do boleto: <strong>{formatCurrency(boletoCents)}</strong>
                           {expectedCents ? <> · Cartão autorizado: <strong>{formatCurrency(expectedCents)}</strong></> : null}
+                          </p>)}
                           {mismatch && (
                             <div className="mt-2 space-y-1">
                               <p>Valores diferentes. Boleto com valor diferente do cartão costuma ser <strong>cancelado pela Cappta</strong>.</p>
@@ -2372,7 +2414,14 @@ export default function ChargeHistory() {
                           <Badge variant="success">✓ Vinculado</Badge>
                         </div>
                         {isAdmin && (
-                          <code className="text-xs break-all text-green-800 dark:text-green-200">{selectedCharge.boleto_admin_linha_digitavel}</code>
+                          <>
+                            <code className="text-xs break-all text-green-800 dark:text-green-200">{selectedCharge.boleto_admin_linha_digitavel}</code>
+                            <BoletoValidity
+                              linha={selectedCharge.boleto_admin_linha_digitavel}
+                              expectedCents={selectedCharge.splits?.find((s: any) => s.method === 'credit_card' && s.status !== 'cancelled')?.amount_cents ?? selectedCharge.card_amount ?? null}
+                              className="mt-2"
+                            />
+                          </>
                         )}
                       </div>
                     </div>

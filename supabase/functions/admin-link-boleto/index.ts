@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { parseBoleto, boletoDueInfo } from '../_shared/boleto.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,14 +12,8 @@ interface AdminLinkBoletoRequest {
   linhaDigitavel: string;
   /** Admin confirmou vincular mesmo com valor do boleto diferente do valor do cartão */
   allowValueMismatch?: boolean;
-}
-
-/** Valor (centavos) da linha digitável de 47 dígitos — posições 38–47. 0/inválido → null. */
-function boletoValueCents(linha: string): number | null {
-  const digits = linha.replace(/\D/g, '');
-  if (digits.length !== 47) return null;
-  const value = parseInt(digits.slice(37, 47), 10);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  /** Admin confirmou vincular mesmo com o boleto vencido */
+  allowExpired?: boolean;
 }
 
 serve(async (req) => {
@@ -80,6 +75,23 @@ serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // ====== DÍGITOS VERIFICADORES (offline) ======
+    // Linha bancária (47) com DV errado é erro de digitação: bloqueia. Arrecadação (48) só avisa no front.
+    const boletoInfo = parseBoleto(sanitizedLinha);
+    if (boletoInfo.kind === 'invalid' && sanitizedLinha.length === 47) {
+      console.warn('[admin-link-boleto] Linha digitável com DV inválido', boletoInfo.problems);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'linha_invalida',
+          message: `Dígitos verificadores não conferem (${boletoInfo.problems.join(', ')}). Confira a digitação.`,
+          problems: boletoInfo.problems,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const boletoDue = boletoDueInfo(boletoInfo);
 
     // Buscar cobrança
     const { data: charge, error: chargeError } = await supabase
@@ -188,7 +200,7 @@ serve(async (req) => {
 
     // ====== VALOR: comparar o valor do boleto com o valor do cartão ======
     // Boleto com valor diferente do pré-pagamento costuma ser cancelado pela Cappta (statusCode 2).
-    const boletoCents = boletoValueCents(sanitizedLinha);
+    const boletoCents = boletoInfo.valueCents;
     const { data: cardSplit } = await supabase
       .from('payment_splits')
       .select('amount_cents')
@@ -214,7 +226,23 @@ serve(async (req) => {
       );
     }
 
-    console.log('[admin-link-boleto] Pré-pagamento válido, prosseguindo com vínculo do boleto...', { boletoCents, expectedCents, isRelink });
+    // ====== VENCIMENTO: boleto vencido só com confirmação do admin ======
+    if (boletoDue.status === 'expired' && !requestData.allowExpired) {
+      const diasVencido = Math.abs(boletoDue.days ?? 0);
+      console.warn('[admin-link-boleto] Boleto vencido', { dueDate: boletoDue.dueDate, diasVencido });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'boleto_vencido',
+          message: `O boleto venceu em ${boletoDue.dueDate!.split('-').reverse().join('/')} (há ${diasVencido} dia${diasVencido === 1 ? '' : 's'}). Boleto vencido pode ser recusado ou ter o valor recalculado com juros.`,
+          dueDate: boletoDue.dueDate,
+          daysOverdue: diasVencido,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[admin-link-boleto] Pré-pagamento válido, prosseguindo com vínculo do boleto...', { boletoCents, expectedCents, isRelink, dueDate: boletoDue.dueDate, dueStatus: boletoDue.status });
 
     // Obter credenciais padrão
     const creditorName = Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || '';
