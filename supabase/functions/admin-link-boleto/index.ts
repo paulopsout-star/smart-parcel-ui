@@ -9,6 +9,16 @@ const corsHeaders = {
 interface AdminLinkBoletoRequest {
   chargeId: string;
   linhaDigitavel: string;
+  /** Admin confirmou vincular mesmo com valor do boleto diferente do valor do cartão */
+  allowValueMismatch?: boolean;
+}
+
+/** Valor (centavos) da linha digitável de 47 dígitos — posições 38–47. 0/inválido → null. */
+function boletoValueCents(linha: string): number | null {
+  const digits = linha.replace(/\D/g, '');
+  if (digits.length !== 47) return null;
+  const value = parseInt(digits.slice(37, 47), 10);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 serve(async (req) => {
@@ -74,7 +84,7 @@ serve(async (req) => {
     // Buscar cobrança
     const { data: charge, error: chargeError } = await supabase
       .from('charges')
-      .select('id, pre_payment_key, payment_method, creditor_document, creditor_name, status, boleto_admin_linha_digitavel')
+      .select('id, pre_payment_key, payment_method, creditor_document, creditor_name, status, boleto_admin_linha_digitavel, boleto_linked_at, card_amount, metadata')
       .eq('id', requestData.chargeId)
       .single();
 
@@ -109,17 +119,10 @@ serve(async (req) => {
       );
     }
 
-    // Verificar se já foi vinculado
-    if (charge.boleto_admin_linha_digitavel) {
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: 'Já vinculado', 
-          message: 'Esta cobrança já possui um boleto vinculado manualmente' 
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Já houve vínculo antes? Só bloqueia depois de consultar o status: se a Cappta cancelou o
+    // pré-pagamento anterior e o cliente autorizou de novo, o pré-pagamento ATUAL está em
+    // Received (1) sem boleto e precisa receber o vínculo outra vez.
+    const previousLinha: string | null = charge.boleto_admin_linha_digitavel || null;
 
     // ====== PRÉ-VALIDAÇÃO: Verificar status do pré-pagamento na API antes de vincular ======
     console.log('[admin-link-boleto] Verificando status do pré-pagamento na API...');
@@ -168,7 +171,50 @@ serve(async (req) => {
       );
     }
 
-    console.log('[admin-link-boleto] Pré-pagamento válido, prosseguindo com vínculo do boleto...');
+    if (previousLinha && statusCode !== 1) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Já vinculado',
+          message: 'Esta cobrança já possui um boleto vinculado ao pré-pagamento atual',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    const isRelink = !!previousLinha;
+    if (isRelink) {
+      console.log('[admin-link-boleto] Revínculo: pré-pagamento atual em Received sem boleto; linha anterior será substituída', { previousLinha });
+    }
+
+    // ====== VALOR: comparar o valor do boleto com o valor do cartão ======
+    // Boleto com valor diferente do pré-pagamento costuma ser cancelado pela Cappta (statusCode 2).
+    const boletoCents = boletoValueCents(sanitizedLinha);
+    const { data: cardSplit } = await supabase
+      .from('payment_splits')
+      .select('amount_cents')
+      .eq('charge_id', charge.id)
+      .eq('method', 'credit_card')
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const expectedCents: number | null = cardSplit?.amount_cents ?? charge.card_amount ?? null;
+
+    if (boletoCents !== null && expectedCents && boletoCents !== expectedCents && !requestData.allowValueMismatch) {
+      console.warn('[admin-link-boleto] Valor do boleto difere do cartão', { boletoCents, expectedCents });
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'valor_divergente',
+          message: `O boleto é de R$ ${(boletoCents / 100).toFixed(2)} e o cartão foi autorizado em R$ ${(expectedCents / 100).toFixed(2)}. Boleto com valor diferente costuma ser cancelado pela Cappta.`,
+          boletoValueCents: boletoCents,
+          expectedCents,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[admin-link-boleto] Pré-pagamento válido, prosseguindo com vínculo do boleto...', { boletoCents, expectedCents, isRelink });
 
     // Obter credenciais padrão
     const creditorName = Deno.env.get('QUITA_MAIS_CREDITOR_NAME') || '';
@@ -222,14 +268,34 @@ serve(async (req) => {
       // Continuar apenas se não houver indicadores de erro
     }
 
-    // Sucesso - Atualizar cobrança
+    // Sucesso - Atualizar cobrança (guardando histórico se for revínculo)
+    const chargeUpdate: Record<string, unknown> = {
+      boleto_admin_linha_digitavel: sanitizedLinha,
+      status: 'boleto_linked',
+      boleto_linked_at: new Date().toISOString(),
+    };
+    if (isRelink) {
+      const metadata = (charge.metadata && typeof charge.metadata === 'object') ? charge.metadata as Record<string, unknown> : {};
+      const history = Array.isArray(metadata.boleto_links_history) ? metadata.boleto_links_history : [];
+      chargeUpdate.metadata = {
+        ...metadata,
+        boleto_links_history: [
+          ...history,
+          {
+            linha: previousLinha,
+            linked_at: charge.boleto_linked_at,
+            replaced_at: new Date().toISOString(),
+            replaced_by: sanitizedLinha,
+            pre_payment_key: charge.pre_payment_key,
+            replaced_by_user: user.id,
+          },
+        ],
+      };
+    }
+
     const { error: updateError } = await supabase
       .from('charges')
-      .update({
-        boleto_admin_linha_digitavel: sanitizedLinha,
-        status: 'boleto_linked',
-        boleto_linked_at: new Date().toISOString(),
-      })
+      .update(chargeUpdate)
       .eq('id', requestData.chargeId);
 
     if (updateError) {

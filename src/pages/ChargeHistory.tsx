@@ -15,6 +15,7 @@ import { Loader2, Eye, RefreshCw, ExternalLink, Copy, Plus, List, Link2, User, M
 import { cardHolderRelationshipLabel } from '@/types/payment';
 import { EditChargeDialog } from '@/components/EditChargeDialog';
 import { canEditCharge } from '@/lib/charge-rules';
+import { boletoValueCents } from '@/lib/boleto';
 import { useChargeLinks } from '@/hooks/useChargeLinks';
 import { toast } from '@/hooks/use-toast';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -850,6 +851,7 @@ export default function ChargeHistory() {
   
   // Estado para vinculação manual de boleto (admin)
   const [adminLinhaDigitavel, setAdminLinhaDigitavel] = useState('');
+  const [adminAllowMismatch, setAdminAllowMismatch] = useState(false);
   const [linkingBoleto, setLinkingBoleto] = useState(false);
   
   // Estado para alteração de empresa (admin)
@@ -1186,6 +1188,7 @@ export default function ChargeHistory() {
         body: {
           chargeId: charge.id,
           linhaDigitavel: sanitized,
+          allowValueMismatch: adminAllowMismatch,
         },
       });
 
@@ -1203,7 +1206,7 @@ export default function ChargeHistory() {
 
       if (data && data.success === false) {
         toast({
-          title: data.error || "Erro ao vincular boleto",
+          title: data.error === 'valor_divergente' ? 'Valor do boleto diferente do cartão' : (data.error || "Erro ao vincular boleto"),
           description: data.message || 'Erro desconhecido',
           variant: "destructive",
         });
@@ -1216,6 +1219,7 @@ export default function ChargeHistory() {
       });
 
       setAdminLinhaDigitavel('');
+      setAdminAllowMismatch(false);
       setSelectedCharge(null);
       await invalidateCharges();
     } catch (err: any) {
@@ -2294,29 +2298,55 @@ export default function ChargeHistory() {
                     );
                   })()}
 
-                  {/* ADMIN: Campo para vincular boleto manualmente (pagamentos combinados) */}
-                  {isAdmin && 
+                  {/* ADMIN: Campo para vincular boleto manualmente (pagamentos combinados).
+                      Também aparece quando já houve vínculo mas o pré-pagamento ATUAL está em
+                      Pré-autorizado (a Cappta cancelou o anterior e o cliente autorizou de novo). */}
+                  {isAdmin &&
                    selectedCharge.payment_method === 'cartao_pix' &&
                    selectedCharge.pre_payment_key &&
-                   !selectedCharge.boleto_admin_linha_digitavel &&
-                   selectedCharge.splits?.some((s: any) => s.method === 'credit_card' && s.status === 'analyzing') && (
+                   (!selectedCharge.boleto_admin_linha_digitavel || selectedCharge.status === 'pre_authorized') &&
+                   selectedCharge.splits?.some((s: any) => s.method === 'credit_card' && s.status === 'analyzing') && (() => {
+                    const isRelink = !!selectedCharge.boleto_admin_linha_digitavel;
+                    const cardSplit = selectedCharge.splits?.find((s: any) => s.method === 'credit_card' && s.status !== 'cancelled');
+                    const expectedCents = cardSplit?.amount_cents ?? selectedCharge.card_amount ?? null;
+                    const boletoCents = boletoValueCents(adminLinhaDigitavel);
+                    const mismatch = boletoCents !== null && !!expectedCents && boletoCents !== expectedCents;
+                    const canSubmit = adminLinhaDigitavel.replace(/\D/g, '').length >= 47 && !linkingBoleto && (!mismatch || adminAllowMismatch);
+                    return (
                     <div className="space-y-3 p-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
                       <h4 className="font-medium text-blue-800 dark:text-blue-200 flex items-center gap-2">
                         <Link2 className="h-4 w-4" />
-                        Vincular Boleto Manualmente
+                        {isRelink ? 'Vincular Boleto Novamente' : 'Vincular Boleto Manualmente'}
                       </h4>
                       <p className="text-xs text-blue-600 dark:text-blue-300">
-                        Informe a linha digitável do boleto que será vinculado ao pagamento do cartão.
+                        {isRelink
+                          ? 'O pré-pagamento atual do cartão está pré-autorizado e sem boleto (o anterior foi cancelado pela Cappta). Vincule o boleto de novo.'
+                          : 'Informe a linha digitável do boleto que será vinculado ao pagamento do cartão.'}
                       </p>
                       <Input
                         placeholder="Digite a linha digitável (47 ou 48 dígitos)"
                         value={adminLinhaDigitavel}
-                        onChange={(e) => setAdminLinhaDigitavel(e.target.value)}
+                        onChange={(e) => { setAdminLinhaDigitavel(e.target.value); setAdminAllowMismatch(false); }}
                         className="font-mono text-sm"
                       />
-                      <Button 
+                      {boletoCents !== null && (
+                        <div className={`text-xs rounded-md p-2 ${mismatch ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-200'}`}>
+                          Valor do boleto: <strong>{formatCurrency(boletoCents)}</strong>
+                          {expectedCents ? <> · Cartão autorizado: <strong>{formatCurrency(expectedCents)}</strong></> : null}
+                          {mismatch && (
+                            <div className="mt-2 space-y-1">
+                              <p>Valores diferentes. Boleto com valor diferente do cartão costuma ser <strong>cancelado pela Cappta</strong>.</p>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={adminAllowMismatch} onChange={(e) => setAdminAllowMismatch(e.target.checked)} />
+                                Vincular mesmo assim
+                              </label>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <Button
                         onClick={() => handleAdminLinkBoleto(selectedCharge)}
-                        disabled={adminLinhaDigitavel.replace(/\D/g, '').length < 47 || linkingBoleto}
+                        disabled={!canSubmit}
                         className="w-full gap-2"
                       >
                         {linkingBoleto ? (
@@ -2327,7 +2357,8 @@ export default function ChargeHistory() {
                         {linkingBoleto ? 'Vinculando...' : 'Vincular Boleto'}
                       </Button>
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Status do vínculo manual (visível para todos) */}
                   {selectedCharge.payment_method === 'cartao_pix' && selectedCharge.boleto_admin_linha_digitavel && (
