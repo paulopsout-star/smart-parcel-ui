@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { getFunctionErrorMessage } from '@/lib/functionError';
 import { currencyToCents, formatCurrencyInput, formatDocument, formatPhone, unformatDocument, unformatPhone } from '@/lib/input-masks';
-import { PAYMENT_METHOD_LABELS, canChangePaymentMethod, paidPixCents } from '@/lib/charge-rules';
+import { PAYMENT_METHOD_LABELS, canChangePaymentMethod, paidPixCents, validatePayerName } from '@/lib/charge-rules';
 import type { ChargeSplitLike, PaymentMethod } from '@/lib/charge-rules';
 import { toast } from '@/hooks/use-toast';
 
@@ -145,7 +145,8 @@ export function EditChargeDialog({ charge, open, onOpenChange, onSaved }: EditCh
 
   const validate = (): boolean => {
     const e: FormErrors = {};
-    if (!form.payer_name.trim()) e.payer_name = 'Nome é obrigatório';
+    const nameError = validatePayerName(form.payer_name);
+    if (nameError) e.payer_name = nameError;
     if (!/\S+@\S+\.\S+/.test(form.payer_email)) e.payer_email = 'E-mail inválido';
     const phone = unformatPhone(form.payer_phone);
     if (phone.length < 10 || phone.length > 11) e.payer_phone = 'Telefone deve ter 10 ou 11 dígitos';

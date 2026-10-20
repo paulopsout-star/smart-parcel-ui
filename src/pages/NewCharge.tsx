@@ -33,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { OPEN_CHARGE_STATUSES, PAYMENT_METHOD_LABELS } from '@/lib/charge-rules';
+import { OPEN_CHARGE_STATUSES, PAYMENT_METHOD_LABELS, validatePayerName } from '@/lib/charge-rules';
 import type { PaymentMethod } from '@/lib/charge-rules';
 
 /** Cobrança em aberto encontrada para o mesmo CPF/CNPJ na mesma empresa. */
@@ -52,7 +52,11 @@ interface Company {
 }
 
 const formSchema = z.object({
-  payer_name: z.string().min(1, "Nome é obrigatório").max(200, "Nome deve ter no máximo 200 caracteres"),
+  payer_name: z.string().min(1, "Nome é obrigatório").max(200, "Nome deve ter no máximo 200 caracteres")
+    .superRefine((v, ctx) => {
+      const err = validatePayerName(v);
+      if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err });
+    }),
   payer_email: z.string().email("Email inválido"),
   payer_phone: z.string()
     .min(1, "Telefone é obrigatório")

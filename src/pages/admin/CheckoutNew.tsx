@@ -16,11 +16,16 @@ import { PaymentLinkRequest, OrderType } from "@/types/quitamais";
 import { formatAmount, formatCurrency } from "@/lib/quitamais-validation";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
+import { validatePayerName } from "@/lib/charge-rules";
 
 const formSchema = z.object({
   amount: z.string().min(1, "Valor é obrigatório"),
   // Payer
-  payerName: z.string().min(1, "Nome é obrigatório").max(200, "Nome deve ter no máximo 200 caracteres"),
+  payerName: z.string().min(1, "Nome é obrigatório").max(200, "Nome deve ter no máximo 200 caracteres")
+    .superRefine((v, ctx) => {
+      const err = validatePayerName(v);
+      if (err) ctx.addIssue({ code: z.ZodIssueCode.custom, message: err });
+    }),
   payerEmail: z.string().email("Email inválido").max(50, "Email deve ter no máximo 50 caracteres"),
   payerPhone: z.string().min(10, "Telefone deve ter pelo menos 10 dígitos").max(11, "Telefone deve ter no máximo 11 dígitos"),
   payerDocument: z.string().min(11, "Documento inválido"),

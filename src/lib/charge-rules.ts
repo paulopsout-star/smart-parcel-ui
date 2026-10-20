@@ -35,6 +35,26 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   cartao_pix: 'PIX + Cartão',
 };
 
+/**
+ * Valida o nome do pagador. Retorna a mensagem de erro ou null se válido.
+ *
+ * Motivo: o sistema de origem (negociação) exibe o nome do meio mascarado com asteriscos
+ * ("VAGNO ********** SILVA") e operadores colavam assim. Esse nome vai ao Quita+/Cappta como
+ * PayerName e para o comprovante, então precisa ser o nome completo real.
+ */
+export function validatePayerName(raw: string | null | undefined): string | null {
+  const name = (raw || '').replace(/\s+/g, ' ').trim();
+  if (!name) return 'Nome é obrigatório';
+  if (/[*#]/.test(name)) {
+    return 'Nome com asteriscos: digite o nome completo. O sistema de origem exibe o nome mascarado; não copie assim.';
+  }
+  if (/\d/.test(name)) return 'Nome não pode conter números';
+  if (!/^[\p{L}' .-]+$/u.test(name)) return 'Nome contém caracteres inválidos';
+  const words = name.split(' ').filter((w) => /\p{L}/u.test(w));
+  if (words.length < 2) return 'Informe nome e sobrenome';
+  return null;
+}
+
 /** Soma dos PIX já pagos (splits concluded). Esse valor fica travado na edição. */
 export function paidPixCents(charge: { splits?: ChargeSplitLike[] }): number {
   return (charge.splits ?? [])

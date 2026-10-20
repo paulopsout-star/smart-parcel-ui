@@ -49,6 +49,18 @@ const PRODUCTION_DOMAIN = "https://pay1.autonegocie.com";
 
 const onlyDigits = (v: string | null | undefined) => (v || "").replace(/\D/g, "");
 
+/** Mesma regra de src/lib/charge-rules.ts (validatePayerName): nome completo real, sem máscara. */
+function validatePayerName(raw: string | null | undefined): string | null {
+  const name = (raw || "").replace(/\s+/g, " ").trim();
+  if (!name) return "Nome do pagador é obrigatório";
+  if (/[*#]/.test(name)) return "Nome com asteriscos: digite o nome completo (o sistema de origem exibe o nome mascarado)";
+  if (/\d/.test(name)) return "Nome não pode conter números";
+  if (!/^[\p{L}' .-]+$/u.test(name)) return "Nome contém caracteres inválidos";
+  const words = name.split(" ").filter((w) => /\p{L}/u.test(w));
+  if (words.length < 2) return "Informe nome e sobrenome";
+  return null;
+}
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -134,7 +146,8 @@ Deno.serve(async (req) => {
     const payerDocument = onlyDigits(body.payer_document);
     const amount = Math.round(Number(body.amount));
 
-    if (!payerName) return fail("validation", "Nome do pagador é obrigatório");
+    const nameError = validatePayerName(payerName);
+    if (nameError) return fail("validation", nameError);
     if (!/\S+@\S+\.\S+/.test(payerEmail)) return fail("validation", "E-mail inválido");
     if (payerPhone.length < 10 || payerPhone.length > 11) return fail("validation", "Telefone deve ter 10 ou 11 dígitos");
     if (payerDocument.length !== 11 && payerDocument.length !== 14) return fail("validation", "CPF deve ter 11 dígitos ou CNPJ 14");
