@@ -27,7 +27,7 @@ no Inter e o erro fica em `metadata.inter_cobranca.link_error`.
 | `INTER_CLIENT_ID` / `INTER_CLIENT_SECRET` | da aplicação cadastrada no Internet Banking PJ |
 | `INTER_CERT` | certificado da aplicação (`.crt`) em **base64** (ou o PEM puro) |
 | `INTER_KEY` | chave privada (`.key`) em **base64** (ou o PEM puro) |
-| `INTER_ENV` | `sandbox` (padrão) ou `production` |
+| `INTER_ENV` | `production` (padrão) ou `sandbox` — o sandbox exige credenciais próprias do portal de desenvolvedores |
 | `INTER_CONTA_CORRENTE` | só se a aplicação enxerga mais de uma conta |
 | `INTER_PAGADOR_ENDERECO` | JSON `{"endereco":"...","bairro":"...","cidade":"...","uf":"UF","cep":"00000000"}` — a API exige endereço do pagador e a cobrança não guarda endereço; usa-se o da empresa |
 | `INTER_WEBHOOK_TOKEN` | string aleatória; a URL cadastrada no Inter leva `?token=` |

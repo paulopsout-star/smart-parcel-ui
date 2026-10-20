@@ -10,7 +10,7 @@
  *   INTER_CERT   — certificado da aplicação (PEM) ou o PEM em base64
  *   INTER_KEY    — chave privada da aplicação (PEM) ou o PEM em base64
  *   INTER_CONTA_CORRENTE — opcional; só quando a aplicação enxerga mais de uma conta
- *   INTER_ENV    — 'production' | 'sandbox' (padrão: sandbox)
+ *   INTER_ENV    — 'production' | 'sandbox' (padrão: production)
  *   INTER_PAGADOR_ENDERECO — JSON {"endereco","bairro","cidade","uf","cep"} usado quando a
  *                            cobrança não tem endereço do pagador (a API exige endereço)
  *
@@ -92,7 +92,9 @@ function decodePem(value: string): string {
 }
 
 export function interConfig(): InterConfig {
-  const env = (Deno.env.get('INTER_ENV') || 'sandbox') === 'production' ? 'production' : 'sandbox';
+  // Padrão: production — as credenciais vêm da aplicação do Internet Banking (produção);
+  // o sandbox do Inter usa credenciais próprias do portal de desenvolvedores.
+  const env = (Deno.env.get('INTER_ENV') || 'production') === 'sandbox' ? 'sandbox' : 'production';
   const clientId = Deno.env.get('INTER_CLIENT_ID') || '';
   const clientSecret = Deno.env.get('INTER_CLIENT_SECRET') || '';
   const certRaw = Deno.env.get('INTER_CERT') || '';
