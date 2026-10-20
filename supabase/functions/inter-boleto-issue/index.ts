@@ -116,7 +116,15 @@ Deno.serve(async (req) => {
     };
 
     // ---- emitir
-    const seuNumero = charge.id.replace(/-/g, '').slice(0, 15);
+    // seuNumero ("Cód. de controle" no painel do Inter, máx. 15 chars) = nome da empresa da cobrança,
+    // sem acentos/espaços. A referência da cobrança vai na mensagem impressa no boleto.
+    const { data: company } = await supabase.from('companies').select('name').eq('id', charge.company_id).maybeSingle();
+    const companyName = String(company?.name || '').trim();
+    const seuNumero = companyName
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^A-Za-z0-9]/g, '')
+      .toUpperCase()
+      .slice(0, 15) || charge.id.replace(/-/g, '').slice(0, 15);
     const dataVencimento = vencimentoPadrao();
     const emitReq = {
       seuNumero,
@@ -124,7 +132,10 @@ Deno.serve(async (req) => {
       dataVencimento,
       numDiasAgenda: 0,
       pagador,
-      mensagem: { linha1: `Cobranca ${charge.id.slice(0, 8)} - cartao` },
+      mensagem: {
+        linha1: (companyName ? `${companyName} - ` : '') + `cobranca ${charge.id.slice(0, 8)}`,
+        linha2: 'Pagamento do cartao (PIX + Cartao)',
+      },
     };
     console.log('[inter-boleto-issue] emitindo', { seuNumero, valorNominal: emitReq.valorNominal, dataVencimento, env: cfg.env });
 
