@@ -282,13 +282,17 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
 
   const pixSplit = splits.find(s => s.method === 'pix');
   const cardSplit = splits.find(s => s.method === 'credit_card');
-  // PIX adicionais pendentes (criados pela edição depois de um PIX já pago)
+  // PIX adicionais (criados pela edição depois de um PIX já pago) — pagos OU pendentes.
+  // charge.splits guarda 1 representante por método; os demais PIX vivem em all_splits.
   const extraPixSplits = (charge.all_splits || []).filter(
-    s => s.method === 'pix' && s.status === 'pending' && s.id !== pixSplit?.id
+    s => s.method === 'pix' && s.id !== pixSplit?.id && s.status !== 'cancelled'
   );
-  const extraPixPending = extraPixSplits.reduce(
-    (sum, s) => sum + (s.display_amount_cents || Math.round(s.amount_cents * 1.015)), 0
-  );
+  const extraPixTotal = (s: PaymentSplitInfo) => s.display_amount_cents || Math.round(s.amount_cents * 1.015);
+  const isExtraPixPaid = (s: PaymentSplitInfo) => s.status === 'concluded' || !!s.pix_paid_at;
+  const extraPixPaid = extraPixSplits.filter(isExtraPixPaid).reduce((sum, s) => sum + extraPixTotal(s), 0);
+  const extraPixPending = extraPixSplits
+    .filter(s => !isExtraPixPaid(s) && s.status === 'pending')
+    .reduce((sum, s) => sum + extraPixTotal(s), 0);
 
   // ✅ STATUS ÚNICO: usar getComputedStatus como fonte da verdade para exibição
   const displayStatus = getComputedStatus(charge);
@@ -441,10 +445,12 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
           </div>
         )}
 
-        {/* PIX adicional (pendente) — criado na edição após o primeiro PIX ter sido pago */}
+        {/* PIX adicional — criado na edição após o primeiro PIX ter sido pago (pode já estar pago) */}
         {extraPixSplits.map((s) => {
           const base = s.amount_cents;
-          const total = s.display_amount_cents || Math.round(base * 1.015);
+          const total = extraPixTotal(s);
+          const paid = !isTerminalStatus && isExtraPixPaid(s);
+          const expired = !paid && isExpiredPix(s);
           return (
             <div key={s.id} className="p-4 bg-green-500/5 rounded-card border border-dashed border-green-500/30">
               <div className="flex items-center justify-between mb-3">
@@ -454,7 +460,11 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                   </div>
                   <span className="font-medium text-green-700">PIX adicional</span>
                 </div>
-                <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>
+                {paid
+                  ? <Badge variant="success" className="text-xs">✓ Pago</Badge>
+                  : expired
+                    ? <Badge variant="secondary" className="text-xs">⏱ QR expirado</Badge>
+                    : <Badge variant="warning" className="text-xs">⏳ Pendente</Badge>}
               </div>
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between text-ds-text-muted">
@@ -468,8 +478,8 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                   </div>
                 )}
                 <div className="border-t border-green-500/10 pt-1.5 mt-1.5">
-                  <div className="flex justify-between font-semibold text-amber-600">
-                    <span>Valor:</span>
+                  <div className={`flex justify-between font-semibold ${paid ? 'text-green-700' : 'text-amber-600'}`}>
+                    <span>{paid ? 'Total pago:' : 'Valor:'}</span>
                     <span>{formatCurrency(total)}</span>
                   </div>
                 </div>
@@ -518,7 +528,7 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
       {hasPix && hasCard && !isTerminalStatus && (() => {
         const pixPaid = isSplitPaid(pixSplit, true);
         const cardPaid = isSplitPaid(cardSplit, false);
-        const totalPaid = (pixPaid ? pixTotal : 0) + (cardPaid ? cardTotal : 0);
+        const totalPaid = (pixPaid ? pixTotal : 0) + (cardPaid ? cardTotal : 0) + extraPixPaid;
         const totalPending = (!pixPaid ? pixTotal : 0) + (!cardPaid ? cardTotal : 0) + extraPixPending;
         
         return (
