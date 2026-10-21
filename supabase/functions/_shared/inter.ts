@@ -247,12 +247,13 @@ export function enderecoPadrao(): Pick<InterPagador, 'endereco' | 'bairro' | 'ci
   }
 }
 
-/** Vencimento: hoje (fuso SP) se antes das 19:00, senão amanhã. YYYY-MM-DD. */
-export function vencimentoPadrao(): string {
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false });
+/** Dias entre a emissão e o vencimento do boleto emitido pela integração. */
+export const VENCIMENTO_DIAS = 5;
+
+/** Vencimento: data de hoje no fuso de São Paulo + VENCIMENTO_DIAS. YYYY-MM-DD. */
+export function vencimentoPadrao(dias: number = VENCIMENTO_DIAS): string {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
   const parts = Object.fromEntries(fmt.formatToParts(new Date()).map((p) => [p.type, p.value]));
-  const hour = parseInt(parts.hour, 10);
   const today = Date.UTC(+parts.year, +parts.month - 1, +parts.day);
-  const target = hour >= 19 ? today + 86_400_000 : today;
-  return new Date(target).toISOString().slice(0, 10);
+  return new Date(today + dias * 86_400_000).toISOString().slice(0, 10);
 }

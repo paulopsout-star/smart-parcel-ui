@@ -57,7 +57,7 @@ chave e certificado* (download único). O "Certificado Webhook" que o portal ofe
 ## Limites conhecidos
 
 - Token: 5 pedidos/min, validade 1 h (cacheado por isolate). Cobrança: 120 chamadas/min.
-- Vencimento no mesmo dia só até 19:59 (o cliente usa amanhã a partir das 19:00).
+- Vencimento: emissão + 5 dias (`VENCIMENTO_DIAS` em `_shared/inter.ts`), sem dias de agenda após o vencimento.
 - Valor mínimo R$ 2,50. Pagador precisa de CPF/CNPJ e endereço completo.
 - Certificado da aplicação vale 1 ano — renovar no Internet Banking e atualizar os secrets.
 - Nomes de campos/caminhos vieram de SDKs públicos; a referência oficial é
