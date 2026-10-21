@@ -115,7 +115,9 @@ function CheckoutPixContent() {
           return;
         }
 
-        setCharge(chargeData);
+        // ATENÇÃO: setCharge só DEPOIS de resolver o split existente. Antes, o efeito que chama
+        // createPixPayment disparava com splitId ainda nulo e inseria um split pendente novo a
+        // cada carregamento (dezenas de "PIX adicional" em cobranças com QR falhando).
 
         // Check if there's an existing PIX split (payment_splits has public read RLS)
         // Fetch ALL pix splits to find one with active QR or concluded status
@@ -179,6 +181,7 @@ function CheckoutPixContent() {
           }
         }
 
+        setCharge(chargeData);
         setLoading(false);
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -206,21 +209,27 @@ function CheckoutPixContent() {
       let currentSplitId = splitId;
 
       if (!currentSplitId) {
-        // Double-check: look for any existing pending pix split with QR for this charge
+        // Double-check: reaproveitar QUALQUER split PIX pendente desta cobrança antes de criar outro.
+        // Preferência: split com QR do provedor ativo; senão o pendente mais recente (sem QR ou com
+        // QR de outro provedor — o create sobrescreve os dados do QR).
         const { data: pendingPixSplits } = await supabase
           .from('payment_splits')
           .select('id, mp_payment_id')
           .eq('charge_id', charge.id)
           .eq('method', 'pix')
           .eq('status', 'pending')
-          .not('mp_payment_id', 'is', null)
           .order('created_at', { ascending: false });
 
-        // Só reaproveita split cujo QR foi emitido pelo provedor ativo
-        const existingPix = pendingPixSplits?.find(s => pixProviderOf(s.mp_payment_id) === ACTIVE_PIX_PROVIDER);
+        const existingPix =
+          pendingPixSplits?.find(s => s.mp_payment_id && pixProviderOf(s.mp_payment_id) === ACTIVE_PIX_PROVIDER)
+          || pendingPixSplits?.[0];
 
         if (existingPix) {
-          console.log('[CheckoutPix] Reusing existing split with QR:', existingPix.id);
+          console.log('[CheckoutPix] Reusing existing pending split:', existingPix.id);
+          await supabase
+            .from('payment_splits')
+            .update({ amount_cents: baseCents, display_amount_cents: totalCents })
+            .eq('id', existingPix.id);
           currentSplitId = existingPix.id;
           setSplitId(currentSplitId);
         } else {
@@ -293,10 +302,10 @@ function CheckoutPixContent() {
 
   // Create PIX after charge is loaded
   useEffect(() => {
-    if (charge && !pixData && !creating && !error) {
+    if (charge && !loading && !pixData && !creating && !error) {
       createPixPayment();
     }
-  }, [charge, pixData, creating, error, createPixPayment]);
+  }, [charge, loading, pixData, creating, error, createPixPayment]);
 
   // Poll for payment status
   useEffect(() => {

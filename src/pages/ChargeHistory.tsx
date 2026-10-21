@@ -284,11 +284,17 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
   const cardSplit = splits.find(s => s.method === 'credit_card');
   // PIX adicionais (criados pela edição depois de um PIX já pago) — pagos OU pendentes.
   // charge.splits guarda 1 representante por método; os demais PIX vivem em all_splits.
-  const extraPixSplits = (charge.all_splits || []).filter(
-    s => s.method === 'pix' && s.id !== pixSplit?.id && s.status !== 'cancelled'
-  );
   const extraPixTotal = (s: PaymentSplitInfo) => s.display_amount_cents || Math.round(s.amount_cents * 1.015);
   const isExtraPixPaid = (s: PaymentSplitInfo) => s.status === 'concluded' || !!s.pix_paid_at;
+  // Só existe UM PIX em aberto por vez (um QR ativo). Splits pendentes repetidos são sobras de
+  // tentativas de gerar QR que falharam — exibir todos os pagos e no máximo 1 pendente (o mais novo).
+  const extraPixAll = (charge.all_splits || []).filter(
+    s => s.method === 'pix' && s.id !== pixSplit?.id && s.status !== 'cancelled'
+  );
+  const newestPendingExtra = extraPixAll
+    .filter(s => !isExtraPixPaid(s))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+  const extraPixSplits = extraPixAll.filter(s => isExtraPixPaid(s) || s.id === newestPendingExtra?.id);
   const extraPixPaid = extraPixSplits.filter(isExtraPixPaid).reduce((sum, s) => sum + extraPixTotal(s), 0);
   const extraPixPending = extraPixSplits
     .filter(s => !isExtraPixPaid(s) && s.status === 'pending')
