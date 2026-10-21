@@ -48,6 +48,7 @@ interface PaymentSplitInfo {
   order_index: number;
   installments?: number;
   mp_status?: string | null;
+  created_at?: string;
 }
 
 // QR PIX que venceu sem pagamento (AbacatePay EXPIRED / Treeal REMOVIDA_PELO_PSP) — não é recusa
@@ -293,7 +294,7 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
   );
   const newestPendingExtra = extraPixAll
     .filter(s => !isExtraPixPaid(s))
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
   const extraPixSplits = extraPixAll.filter(s => isExtraPixPaid(s) || s.id === newestPendingExtra?.id);
   const extraPixPaid = extraPixSplits.filter(isExtraPixPaid).reduce((sum, s) => sum + extraPixTotal(s), 0);
   const extraPixPending = extraPixSplits
