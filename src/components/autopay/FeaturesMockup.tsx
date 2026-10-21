@@ -121,7 +121,7 @@ const FeaturesMockup = () => {
                 </div>
                 <div className="flex-1">
                   <p className="text-[10px] font-medium text-autopay-text">Cartão</p>
-                  <p className="text-[8px] text-gray-400">Em 6x sem juros</p>
+                  <p className="text-[8px] text-gray-400">Em até 21x</p>
                 </div>
                 <p className="text-[10px] font-bold text-autopay-text">R$ 750</p>
               </div>

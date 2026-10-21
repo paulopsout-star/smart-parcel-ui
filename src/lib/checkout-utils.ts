@@ -43,7 +43,7 @@ export const calculatePaymentOptions = (
     
     options.push({
       id: 'popular',
-      title: `${config.popularInstallments}x sem juros`,
+      title: `${config.popularInstallments}x no cartão`,
       type: 'popular',
       totalCents: adjustedTotal,
       installments: config.popularInstallments,
@@ -169,7 +169,7 @@ export const mapSimulationToPaymentOptions = (
   if (popular) {
     options.push({
       id: 'popular',
-      title: '6x sem juros',
+      title: '6x no cartão',
       type: 'popular',
       totalCents: popular.totalAmount,
       installments: 6,
