@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { PaymentSimulator } from '@/components/PaymentSimulator';
 import { SemJurosSimulator } from '@/components/SemJurosSimulator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatCents, toCents } from '@/lib/currency-utils';
 import { InstallmentCondition } from '@/hooks/usePaymentSimulation';
 import { Calculator, QrCode, CreditCard } from 'lucide-react';
@@ -75,7 +76,10 @@ export function SimulatorModal({ open, onOpenChange, initialAmount }: SimulatorM
       : '1.000,00'
   );
   const [selectedCondition, setSelectedCondition] = useState<InstallmentCondition | null>(null);
-  const [tab, setTab] = useState<'sem_juros' | 'com_juros'>('sem_juros');
+  const { isAdmin } = useAuth();
+  const [tab, setTab] = useState<'sem_juros' | 'com_juros'>('com_juros');
+  // Aba "Sem juros" restrita a administradores por enquanto
+  const activeTab = isAdmin ? tab : 'com_juros';
 
   const pixCents = toCents(pixInput);
   const cardCents = toCents(cardInput);
@@ -116,16 +120,18 @@ export function SimulatorModal({ open, onOpenChange, initialAmount }: SimulatorM
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as 'sem_juros' | 'com_juros')} className="mt-2">
-          <TabsList className="w-full">
-            <TabsTrigger value="sem_juros" className="flex-1">Sem juros</TabsTrigger>
-            <TabsTrigger value="com_juros" className="flex-1">Com juros (Quita+)</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {isAdmin && (
+          <Tabs value={activeTab} onValueChange={(v) => setTab(v as 'sem_juros' | 'com_juros')} className="mt-2">
+            <TabsList className="w-full">
+              <TabsTrigger value="com_juros" className="flex-1">Com juros (Quita+)</TabsTrigger>
+              <TabsTrigger value="sem_juros" className="flex-1">Sem juros</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
 
-        {tab === 'sem_juros' && <SemJurosSimulator compact showOperationDetails />}
+        {activeTab === 'sem_juros' && <SemJurosSimulator compact showOperationDetails />}
 
-        {tab === 'com_juros' && (
+        {activeTab === 'com_juros' && (
         <div className="space-y-5 mt-2">
           {/* Entradas */}
           <div className="grid grid-cols-2 gap-4">

@@ -63,8 +63,10 @@ function CurrencyInput({
 
 export default function Simulator() {
   const { toast } = useToast();
-  const { user } = useAuth();
-  const [mode, setMode] = useState<Mode>('sem_juros');
+  const { isAdmin } = useAuth();
+  const [mode, setMode] = useState<Mode>('total');
+  // Aba "Sem juros" restrita a administradores por enquanto (a página é pública)
+  const activeMode: Mode = mode === 'sem_juros' && !isAdmin ? 'total' : mode;
   const [copied, setCopied] = useState(false);
 
   // Modo Total
@@ -87,9 +89,9 @@ export default function Simulator() {
   const pixCentsSplit = toCents(pixInput);
   const cardCentsSplit = toCents(cardInput);
 
-  const activePixCents = mode === 'total' ? pixCentsFromTotal : pixCentsSplit;
-  const activeCardCents = mode === 'total' ? cardCentsFromTotal : cardCentsSplit;
-  const activeTotalCents = mode === 'total' ? totalCents : pixCentsSplit + cardCentsSplit;
+  const activePixCents = activeMode === 'total' ? pixCentsFromTotal : pixCentsSplit;
+  const activeCardCents = activeMode === 'total' ? cardCentsFromTotal : cardCentsSplit;
+  const activeTotalCents = activeMode === 'total' ? totalCents : pixCentsSplit + cardCentsSplit;
 
   const summary = calculateSplitSummary(activePixCents, selectedCondition);
 
@@ -180,11 +182,13 @@ export default function Simulator() {
           </div>
 
           {/* ── Seletor de modo ── */}
-          <Tabs value={mode} onValueChange={handleModeChange}>
+          <Tabs value={activeMode} onValueChange={handleModeChange}>
             <TabsList className="w-full">
-              <TabsTrigger value="sem_juros" className="flex-1">
-                Sem juros
-              </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="sem_juros" className="flex-1">
+                  Sem juros
+                </TabsTrigger>
+              )}
               <TabsTrigger value="total" className="flex-1">
                 Valor Total com Divisão
               </TabsTrigger>
@@ -194,24 +198,24 @@ export default function Simulator() {
             </TabsList>
           </Tabs>
 
-          {mode === 'sem_juros' ? (
-            <SemJurosSimulator showOperationDetails={!!user} />
+          {activeMode === 'sem_juros' ? (
+            <SemJurosSimulator showOperationDetails />
           ) : (
             <>
           {/* ── Entradas ── */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">
-                {mode === 'total' ? 'Valor total e distribuição' : 'Valores independentes'}
+                {activeMode === 'total' ? 'Valor total e distribuição' : 'Valores independentes'}
               </CardTitle>
               <CardDescription>
-                {mode === 'total'
+                {activeMode === 'total'
                   ? 'Defina o valor total e arraste o slider para dividir entre PIX e Cartão'
                   : 'Informe livremente quanto será pago via PIX e quanto via Cartão'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              {mode === 'total' ? (
+              {activeMode === 'total' ? (
                 <>
                   <CurrencyInput
                     id="total"
