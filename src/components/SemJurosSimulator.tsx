@@ -10,11 +10,7 @@ import { PaymentSimulator } from '@/components/PaymentSimulator';
 import { formatCents, toCents } from '@/lib/currency-utils';
 import {
   calcularSemJuros,
-  formatarPct,
-  DESCONTO_MINIMO_SEM_JUROS,
-  DESCONTO_MAXIMO_RETIDO,
   PARCELA_MINIMA_CENTS,
-  TABELA_SEM_JUROS,
   type OpcaoParcela,
   type ResultadoSemJuros,
 } from '@/lib/sem-juros';
@@ -61,8 +57,8 @@ interface SemJurosSimulatorProps {
 
 export function SemJurosSimulator({ showOperationDetails = false, compact = false, onSelect }: SemJurosSimulatorProps) {
   const { toast } = useToast();
-  const [dividaInput, setDividaInput] = useState('10.000,00');
-  const [aVistaInput, setAVistaInput] = useState('7.000,00');
+  const [dividaInput, setDividaInput] = useState('');
+  const [aVistaInput, setAVistaInput] = useState('');
   const [pixInput, setPixInput] = useState('');
   const [parcelasSelecionadas, setParcelasSelecionadas] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
@@ -77,6 +73,8 @@ export function SemJurosSimulator({ showOperationDetails = false, compact = fals
   );
 
   const opcaoSelecionada = resultado.opcoes.find((o) => o.parcelas === parcelasSelecionadas) ?? null;
+  const camposPreenchidos = toCents(dividaInput) > 0 && toCents(aVistaInput) > 0;
+  const erroVisivel = camposPreenchidos ? resultado.erro : undefined;
 
   const onDivida = useCallback((v: string) => { setDividaInput(v); setParcelasSelecionadas(null); }, []);
   const onAVista = useCallback((v: string) => { setAVistaInput(v); setParcelasSelecionadas(null); }, []);
@@ -95,7 +93,7 @@ export function SemJurosSimulator({ showOperationDetails = false, compact = fals
     const linhas = [
       '💳 Simulação de pagamento sem juros',
       '',
-      `Dívida: ${formatCents(resultado.dividaCents)} | À vista: ${formatCents(resultado.aVistaCents)} (desconto ${formatarPct(resultado.descontoPct)})`,
+      `Dívida: ${formatCents(resultado.dividaCents)} | À vista: ${formatCents(resultado.aVistaCents)}`,
       resultado.pixCents > 0 ? `PIX: ${formatCents(resultado.pixCents)}` : null,
       `Cartão: ${parcelaTxt}`,
       '',
@@ -138,20 +136,19 @@ export function SemJurosSimulator({ showOperationDetails = false, compact = fals
             hint="Pagamento combinado: o restante do total vai para o cartão, nas parcelas sem juros."
           />
 
-          {resultado.erro && (
+          {erroVisivel && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{resultado.erro}</AlertDescription>
+              <AlertDescription>{erroVisivel}</AlertDescription>
             </Alert>
           )}
 
           {resultado.valido && (
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <Badge variant="secondary">Desconto do credor: {formatarPct(resultado.descontoPct)}</Badge>
               {resultado.elegivel ? (
                 <Badge className="bg-green-600 hover:bg-green-600">Sem juros em até {resultado.parcelasMaximas}x</Badge>
               ) : (
-                <Badge variant="outline">Sem opção sem juros (mínimo {formatarPct(DESCONTO_MINIMO_SEM_JUROS, 0)})</Badge>
+                <Badge variant="outline">Sem opção sem juros para este desconto</Badge>
               )}
               {resultado.abatimentoCents > 0 && (
                 <Badge variant="outline" className="text-green-700 border-green-300">
@@ -169,7 +166,7 @@ export function SemJurosSimulator({ showOperationDetails = false, compact = fals
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Com {formatarPct(resultado.descontoPct)} de desconto não há parcelamento sem juros. Abaixo, a simulação
+              Este desconto não habilita parcelamento sem juros. Abaixo, a simulação
               padrão do Quita+ com juros para {formatCents(cartaoComJurosCents)} no cartão
               {resultado.pixCents > 0 ? ` (dívida de ${formatCents(resultado.dividaCents)} menos ${formatCents(resultado.pixCents)} no PIX)` : ''}.
             </AlertDescription>
@@ -308,14 +305,10 @@ export function SemJurosSimulator({ showOperationDetails = false, compact = fals
           {showOperationDetails && (
             <div className="text-xs text-muted-foreground p-3 rounded-lg border border-dashed space-y-1">
               <p className="font-medium text-foreground">Detalhes da operação</p>
-              <p>
-                Desconto retido: {formatarPct(resultado.descontoRetidoPct)} ({formatCents(resultado.descontoRetidoCents)})
-                {resultado.descontoPct > DESCONTO_MAXIMO_RETIDO && ` · limite de ${formatarPct(DESCONTO_MAXIMO_RETIDO, 0)}`}
-              </p>
+              <p>Desconto do credor: {formatCents(resultado.descontoCents)}</p>
+              <p>Desconto retido pela operação: {formatCents(resultado.descontoRetidoCents)}{resultado.abatimentoCents > 0 && ' (limite atingido)'}</p>
+              <p>Repasse ao cliente: {formatCents(resultado.abatimentoCents)}</p>
               <p>Margem bruta (total do cliente − à vista): {formatCents(resultado.margemOperacaoCents)}</p>
-              <p>
-                Tabela: {TABELA_SEM_JUROS.slice().reverse().map((f) => `${formatarPct(f.descontoMinimo, 0)} → ${f.parcelasMaximas}x`).join(' · ')}
-              </p>
             </div>
           )}
         </>
