@@ -129,7 +129,7 @@ export function SimulatorModal({ open, onOpenChange, initialAmount }: SimulatorM
           </Tabs>
         )}
 
-        {activeTab === 'sem_juros' && <SemJurosSimulator compact showOperationDetails />}
+        {activeTab === 'sem_juros' && <SemJurosSimulator compact />}
 
         {activeTab === 'com_juros' && (
         <div className="space-y-5 mt-2">

@@ -48,14 +48,12 @@ function CurrencyInput({
 }
 
 interface SemJurosSimulatorProps {
-  /** Mostra desconto retido e margem bruta (uso interno do operador). */
-  showOperationDetails?: boolean;
   /** Layout mais enxuto para uso em modal. */
   compact?: boolean;
   onSelect?: (resultado: ResultadoSemJuros, opcao: OpcaoParcela) => void;
 }
 
-export function SemJurosSimulator({ showOperationDetails = false, compact = false, onSelect }: SemJurosSimulatorProps) {
+export function SemJurosSimulator({ compact = false, onSelect }: SemJurosSimulatorProps) {
   const { toast } = useToast();
   const [dividaInput, setDividaInput] = useState('');
   const [aVistaInput, setAVistaInput] = useState('');
@@ -301,16 +299,6 @@ export function SemJurosSimulator({ showOperationDetails = false, compact = fals
             </Card>
           )}
 
-          {/* ── Detalhes da operação (interno) ── */}
-          {showOperationDetails && (
-            <div className="text-xs text-muted-foreground p-3 rounded-lg border border-dashed space-y-1">
-              <p className="font-medium text-foreground">Detalhes da operação</p>
-              <p>Desconto do credor: {formatCents(resultado.descontoCents)}</p>
-              <p>Desconto retido pela operação: {formatCents(resultado.descontoRetidoCents)}{resultado.abatimentoCents > 0 && ' (limite atingido)'}</p>
-              <p>Repasse ao cliente: {formatCents(resultado.abatimentoCents)}</p>
-              <p>Margem bruta (total do cliente − à vista): {formatCents(resultado.margemOperacaoCents)}</p>
-            </div>
-          )}
         </>
       )}
     </div>

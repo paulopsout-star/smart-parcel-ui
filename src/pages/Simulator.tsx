@@ -199,7 +199,7 @@ export default function Simulator() {
           </Tabs>
 
           {activeMode === 'sem_juros' ? (
-            <SemJurosSimulator showOperationDetails />
+            <SemJurosSimulator />
           ) : (
             <>
           {/* ── Entradas ── */}
