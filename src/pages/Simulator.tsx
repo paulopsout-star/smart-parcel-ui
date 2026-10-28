@@ -7,6 +7,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
 import { Separator } from '@/components/ui/separator';
 import { PaymentSimulator } from '@/components/PaymentSimulator';
+import { SemJurosSimulator } from '@/components/SemJurosSimulator';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatCents, toCents } from '@/lib/currency-utils';
 import { calculateSplitSummary } from '@/lib/checkout-utils';
 import { InstallmentCondition } from '@/hooks/usePaymentSimulation';
@@ -14,7 +16,7 @@ import { ArrowLeft, Copy, Check, QrCode, CreditCard, Calculator } from 'lucide-r
 import { Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 
-type Mode = 'total' | 'split';
+type Mode = 'sem_juros' | 'total' | 'split';
 
 function parseCurrencyInput(value: string): string {
   const raw = value.replace(/\D/g, '');
@@ -61,7 +63,8 @@ function CurrencyInput({
 
 export default function Simulator() {
   const { toast } = useToast();
-  const [mode, setMode] = useState<Mode>('total');
+  const { user } = useAuth();
+  const [mode, setMode] = useState<Mode>('sem_juros');
   const [copied, setCopied] = useState(false);
 
   // Modo Total
@@ -171,7 +174,7 @@ export default function Simulator() {
             <div>
               <h1 className="text-2xl font-bold">Simulador de Pagamento</h1>
               <p className="text-sm text-muted-foreground">
-                Simule combinações de PIX e Cartão e veja o custo real com juros
+                Parcelamento sem juros pela tabela de desconto do credor, ou PIX e Cartão com juros
               </p>
             </div>
           </div>
@@ -179,6 +182,9 @@ export default function Simulator() {
           {/* ── Seletor de modo ── */}
           <Tabs value={mode} onValueChange={handleModeChange}>
             <TabsList className="w-full">
+              <TabsTrigger value="sem_juros" className="flex-1">
+                Sem juros
+              </TabsTrigger>
               <TabsTrigger value="total" className="flex-1">
                 Valor Total com Divisão
               </TabsTrigger>
@@ -188,6 +194,10 @@ export default function Simulator() {
             </TabsList>
           </Tabs>
 
+          {mode === 'sem_juros' ? (
+            <SemJurosSimulator showOperationDetails={!!user} />
+          ) : (
+            <>
           {/* ── Entradas ── */}
           <Card>
             <CardHeader className="pb-3">
@@ -353,6 +363,8 @@ export default function Simulator() {
                 )}
               </CardContent>
             </Card>
+          )}
+            </>
           )}
         </div>
       </div>
