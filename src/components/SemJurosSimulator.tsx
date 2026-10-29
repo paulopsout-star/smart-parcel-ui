@@ -1,9 +1,10 @@
 import { useMemo, useState, useCallback } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { PaymentSimulator } from '@/components/PaymentSimulator';
@@ -15,7 +16,7 @@ import {
   type ResultadoSemJuros,
 } from '@/lib/sem-juros';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, BadgePercent, Check, Copy, CreditCard, Info, QrCode } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, Info } from 'lucide-react';
 
 function parseCurrencyInput(value: string): string {
   const raw = value.replace(/\D/g, '');
@@ -24,25 +25,30 @@ function parseCurrencyInput(value: string): string {
   return (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function CurrencyInput({
-  id, label, value, onChange, hint,
-}: { id: string; label: string; value: string; onChange: (v: string) => void; hint?: string }) {
+function CurrencyField({
+  id, label, value, onChange,
+}: { id: string; label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
-      <div className="relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">R$</span>
-        <Input
-          id={id}
-          type="text"
-          inputMode="numeric"
-          value={value}
-          onChange={(e) => onChange(parseCurrencyInput(e.target.value))}
-          placeholder="0,00"
-          className="pl-10 text-right font-medium"
-        />
-      </div>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
+      <Input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onChange(parseCurrencyInput(e.target.value))}
+        placeholder="0,00"
+        className="h-11 text-right font-medium"
+      />
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className={strong ? 'font-semibold' : 'text-sm text-muted-foreground'}>{label}</span>
+      <span className={strong ? 'text-xl font-bold' : 'text-sm font-medium'}>{value}</span>
     </div>
   );
 }
@@ -50,13 +56,15 @@ function CurrencyInput({
 interface SemJurosSimulatorProps {
   /** Layout mais enxuto para uso em modal. */
   compact?: boolean;
-  onSelect?: (resultado: ResultadoSemJuros, opcao: OpcaoParcela) => void;
+  /** Chamado ao clicar em "Continuar" com uma opção escolhida. Sem ele, o resumo é copiado. */
+  onSelect?: (resultado: ResultadoSemJuros, opcao: OpcaoParcela | null) => void;
 }
 
 export function SemJurosSimulator({ compact = false, onSelect }: SemJurosSimulatorProps) {
   const { toast } = useToast();
   const [dividaInput, setDividaInput] = useState('');
   const [aVistaInput, setAVistaInput] = useState('');
+  const [combinarPix, setCombinarPix] = useState(false);
   const [pixInput, setPixInput] = useState('');
   const [parcelasSelecionadas, setParcelasSelecionadas] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
@@ -65,108 +73,117 @@ export function SemJurosSimulator({ compact = false, onSelect }: SemJurosSimulat
     () => calcularSemJuros({
       dividaCents: toCents(dividaInput),
       aVistaCents: toCents(aVistaInput),
-      pixCents: toCents(pixInput),
+      pixCents: combinarPix ? toCents(pixInput) : 0,
     }),
-    [dividaInput, aVistaInput, pixInput],
+    [dividaInput, aVistaInput, pixInput, combinarPix],
   );
 
-  const opcaoSelecionada = resultado.opcoes.find((o) => o.parcelas === parcelasSelecionadas) ?? null;
   const camposPreenchidos = toCents(dividaInput) > 0 && toCents(aVistaInput) > 0;
   const erroVisivel = camposPreenchidos ? resultado.erro : undefined;
+  const opcaoSelecionada = resultado.opcoes.find((o) => o.parcelas === parcelasSelecionadas) ?? null;
+  const pixCobreTudo = resultado.valido && resultado.elegivel && resultado.cartaoCents === 0;
+  const podeContinuar = resultado.valido && resultado.elegivel && (!!opcaoSelecionada || pixCobreTudo);
 
   const onDivida = useCallback((v: string) => { setDividaInput(v); setParcelasSelecionadas(null); }, []);
   const onAVista = useCallback((v: string) => { setAVistaInput(v); setParcelasSelecionadas(null); }, []);
   const onPix = useCallback((v: string) => { setPixInput(v); setParcelasSelecionadas(null); }, []);
+  const onCombinar = useCallback((v: boolean) => { setCombinarPix(v); setParcelasSelecionadas(null); }, []);
 
-  const selecionar = useCallback((opcao: OpcaoParcela) => {
-    setParcelasSelecionadas(opcao.parcelas);
-    onSelect?.(resultado, opcao);
-  }, [onSelect, resultado]);
-
-  const copiarResumo = useCallback(() => {
-    if (!opcaoSelecionada) return;
-    const parcelaTxt = opcaoSelecionada.parcelas === 1
-      ? `à vista no cartão ${formatCents(opcaoSelecionada.totalCents)}`
-      : `${opcaoSelecionada.parcelas}x de ${formatCents(opcaoSelecionada.valorParcelaCents)} sem juros = ${formatCents(opcaoSelecionada.totalCents)}`;
-    const linhas = [
+  const textoResumo = useCallback(() => {
+    const cartao = opcaoSelecionada
+      ? (opcaoSelecionada.parcelas === 1
+        ? `Cartão à vista: ${formatCents(opcaoSelecionada.totalCents)}`
+        : `Cartão: ${opcaoSelecionada.parcelas}x de ${formatCents(opcaoSelecionada.valorParcelaCents)} sem juros = ${formatCents(opcaoSelecionada.totalCents)}`)
+      : null;
+    return [
       '💳 Simulação de pagamento sem juros',
       '',
-      `Dívida: ${formatCents(resultado.dividaCents)} | À vista: ${formatCents(resultado.aVistaCents)}`,
-      resultado.pixCents > 0 ? `PIX: ${formatCents(resultado.pixCents)}` : null,
-      `Cartão: ${parcelaTxt}`,
+      `Valor original da dívida: ${formatCents(resultado.dividaCents)}`,
+      `Valor à vista (boleto): ${formatCents(resultado.aVistaCents)}`,
       '',
-      `Total a pagar: ${formatCents(resultado.totalClienteCents)}`,
-      resultado.abatimentoCents > 0 ? `Economia em relação à dívida: ${formatCents(resultado.abatimentoCents)}` : null,
-    ].filter(Boolean).join('\n');
+      resultado.pixCents > 0 ? `PIX: ${formatCents(resultado.pixCents)}` : null,
+      cartao,
+      '',
+      `Total do cliente: ${formatCents(resultado.totalClienteCents)}`,
+    ].filter((l) => l !== null).join('\n');
+  }, [opcaoSelecionada, resultado]);
 
-    navigator.clipboard.writeText(linhas).then(() => {
+  const continuar = useCallback(() => {
+    if (!podeContinuar) return;
+    if (onSelect) {
+      onSelect(resultado, opcaoSelecionada);
+      return;
+    }
+    navigator.clipboard.writeText(textoResumo()).then(() => {
       setCopied(true);
       toast({ title: 'Resumo copiado!', description: 'Cole no WhatsApp ou onde preferir.' });
       setTimeout(() => setCopied(false), 2000);
     });
-  }, [opcaoSelecionada, resultado, toast]);
+  }, [podeContinuar, onSelect, resultado, opcaoSelecionada, textoResumo, toast]);
 
   const cartaoComJurosCents = Math.max(0, resultado.dividaCents - resultado.pixCents);
+  const pad = compact ? 'p-4' : 'p-5';
 
   return (
-    <div className={compact ? 'space-y-4' : 'space-y-6'}>
-      {/* ── Entradas ── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <BadgePercent className="h-4 w-4" />
-            Desconto do credor
-          </CardTitle>
-          <CardDescription>
-            A diferença entre a dívida e o valor à vista financia o parcelamento sem juros.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <CurrencyInput id="sj-divida" label="Valor da dívida" value={dividaInput} onChange={onDivida} />
-            <CurrencyInput id="sj-avista" label="Valor à vista (boleto)" value={aVistaInput} onChange={onAVista} />
+    <Card className="divide-y">
+      {/* ── 1. Valores ── */}
+      <section className={`${pad} space-y-4`}>
+        <div>
+          <h3 className="font-semibold">Configure seu pagamento</h3>
+          <p className="text-sm text-muted-foreground">Informe os valores e escolha como deseja realizar o pagamento.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <CurrencyField id="sj-divida" label="Valor da dívida (R$)" value={dividaInput} onChange={onDivida} />
+          <CurrencyField id="sj-avista" label="Valor à vista – boleto (R$)" value={aVistaInput} onChange={onAVista} />
+        </div>
+        {resultado.valido && (
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Info className="h-3.5 w-3.5" />
+            Diferença entre dívida e boleto: {formatCents(resultado.descontoCents)}
+          </p>
+        )}
+        {erroVisivel && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{erroVisivel}</AlertDescription>
+          </Alert>
+        )}
+      </section>
+
+      {/* ── 2. Combinar PIX + cartão ── */}
+      <section className={`${pad} space-y-4`}>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-semibold">Combinar PIX + cartão</h3>
+            <p className="text-sm text-muted-foreground">Deseja pagar uma parte via PIX?</p>
           </div>
-          <CurrencyInput
-            id="sj-pix"
-            label="Cliente paga no PIX (opcional)"
-            value={pixInput}
-            onChange={onPix}
-            hint="Pagamento combinado: o restante do total vai para o cartão, nas parcelas sem juros."
+          <Switch
+            checked={combinarPix}
+            onCheckedChange={onCombinar}
+            aria-label="Combinar PIX e cartão"
+            className="data-[state=checked]:bg-green-600"
           />
+        </div>
+        {combinarPix && (
+          <div className="space-y-2">
+            <CurrencyField id="sj-pix" label="Valor PIX (R$)" value={pixInput} onChange={onPix} />
+            {resultado.valido && (
+              <p className="text-xs text-muted-foreground">
+                O valor restante será distribuído ao cartão: <span className="font-medium text-foreground">{formatCents(resultado.cartaoCents)}</span>
+              </p>
+            )}
+          </div>
+        )}
+      </section>
 
-          {erroVisivel && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{erroVisivel}</AlertDescription>
-            </Alert>
-          )}
-
-          {resultado.valido && (
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              {resultado.elegivel ? (
-                <Badge className="bg-green-600 hover:bg-green-600">Sem juros em até {resultado.parcelasMaximas}x</Badge>
-              ) : (
-                <Badge variant="outline">Sem opção sem juros para este desconto</Badge>
-              )}
-              {resultado.abatimentoCents > 0 && (
-                <Badge variant="outline" className="text-green-700 border-green-300">
-                  Repasse ao cliente: {formatCents(resultado.abatimentoCents)}
-                </Badge>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Não elegível: fluxo atual com juros ── */}
+      {/* ── 3. Parcelamento ── */}
       {resultado.valido && !resultado.elegivel && (
-        <>
+        <section className={`${pad} space-y-4`}>
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Este desconto não habilita parcelamento sem juros. Abaixo, a simulação
-              padrão do Quita+ com juros para {formatCents(cartaoComJurosCents)} no cartão
-              {resultado.pixCents > 0 ? ` (dívida de ${formatCents(resultado.dividaCents)} menos ${formatCents(resultado.pixCents)} no PIX)` : ''}.
+              Este desconto não habilita parcelamento sem juros. Abaixo, a simulação padrão do Quita+ com juros
+              para {formatCents(cartaoComJurosCents)} no cartão.
             </AlertDescription>
           </Alert>
           {cartaoComJurosCents > 0 && (
@@ -176,131 +193,96 @@ export function SemJurosSimulator({ compact = false, onSelect }: SemJurosSimulat
               subtitle={`Parcele os ${formatCents(cartaoComJurosCents)} do cartão`}
             />
           )}
-        </>
+        </section>
       )}
 
-      {/* ── Elegível: totais e opções sem juros ── */}
       {resultado.valido && resultado.elegivel && (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="p-3 rounded-lg bg-muted">
-              <p className="text-xs text-muted-foreground">Total do cliente</p>
-              <p className="text-lg font-bold">{formatCents(resultado.totalClienteCents)}</p>
-              {resultado.abatimentoCents > 0 && (
-                <p className="text-xs text-green-700">dívida {formatCents(resultado.dividaCents)} − {formatCents(resultado.abatimentoCents)}</p>
-              )}
+        <section className={`${pad} space-y-4`}>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-semibold">Parcelamento no cartão</h3>
+              <p className="text-sm text-muted-foreground">
+                {pixCobreTudo ? 'O PIX cobre todo o valor. Não há parcela no cartão.' : 'Selecione em quantas vezes deseja pagar.'}
+              </p>
             </div>
-            <div className="p-3 rounded-lg bg-muted">
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><QrCode className="h-3 w-3" /> PIX</p>
-              <p className="text-lg font-bold">{formatCents(resultado.pixCents)}</p>
-              <p className="text-xs text-muted-foreground">sem taxa</p>
-            </div>
-            <div className="p-3 rounded-lg bg-muted">
-              <p className="text-xs text-muted-foreground flex items-center gap-1"><CreditCard className="h-3 w-3" /> Cartão</p>
-              <p className="text-lg font-bold">{formatCents(resultado.cartaoCents)}</p>
-              <p className="text-xs text-muted-foreground">em até {resultado.parcelasMaximas}x sem juros</p>
-            </div>
+            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 whitespace-nowrap">
+              Até {resultado.parcelasMaximas}x sem juros
+            </Badge>
           </div>
 
-          {resultado.cartaoCents > 0 ? (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Parcelamento sem juros</CardTitle>
-                <CardDescription>
-                  Escolha uma opção para montar o resumo. Parcela mínima de {formatCents(PARCELA_MINIMA_CENTS)}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {resultado.opcoes.map((opcao) => {
-                    const ativa = opcao.parcelas === parcelasSelecionadas;
-                    return (
-                      <button
-                        key={opcao.parcelas}
-                        type="button"
-                        onClick={() => selecionar(opcao)}
-                        className={`text-left p-3 rounded-lg border transition-colors ${
-                          ativa ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-primary/50 hover:bg-accent'
-                        }`}
-                      >
-                        <p className="font-semibold">
-                          {opcao.parcelas === 1 ? 'À vista' : `${opcao.parcelas}x de ${formatCents(opcao.valorParcelaCents)}`}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {opcao.parcelas === 1 ? formatCents(opcao.totalCents) : `total ${formatCents(opcao.totalCents)} · sem juros`}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-                {resultado.opcoes.length < resultado.parcelasMaximas && (
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Opções acima de {resultado.opcoes.length}x ficariam abaixo da parcela mínima de {formatCents(PARCELA_MINIMA_CENTS)}.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>O PIX cobre todo o valor a pagar. Não há parcela no cartão.</AlertDescription>
-            </Alert>
+          {!pixCobreTudo && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {resultado.opcoes.map((opcao) => {
+                  const ativa = opcao.parcelas === parcelasSelecionadas;
+                  return (
+                    <button
+                      key={opcao.parcelas}
+                      type="button"
+                      onClick={() => setParcelasSelecionadas(opcao.parcelas)}
+                      aria-pressed={ativa}
+                      className={`rounded-lg border px-3 py-3 text-center transition-colors ${
+                        ativa
+                          ? 'border-green-600 bg-green-50 ring-1 ring-green-600'
+                          : 'border-border hover:border-green-400 hover:bg-accent'
+                      }`}
+                    >
+                      <p className="font-semibold">{opcao.parcelas === 1 ? 'À vista' : `${opcao.parcelas}x`}</p>
+                      <p className="text-xs text-muted-foreground">{formatCents(opcao.valorParcelaCents)}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              {resultado.opcoes.length < resultado.parcelasMaximas && (
+                <p className="text-xs text-muted-foreground">
+                  Acima de {resultado.opcoes.length}x a parcela ficaria abaixo do mínimo de {formatCents(PARCELA_MINIMA_CENTS)}.
+                </p>
+              )}
+            </>
           )}
-
-          {/* ── Resumo ── */}
-          {(opcaoSelecionada || resultado.cartaoCents === 0) && (
-            <Card className="border-primary/30 bg-primary/5">
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Resumo do Pagamento</CardTitle>
-                  {opcaoSelecionada && (
-                    <Button variant="outline" size="sm" onClick={copiarResumo} className="h-8 gap-1.5">
-                      {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                      {copied ? 'Copiado!' : 'Copiar'}
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {resultado.pixCents > 0 && (
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-sm"><QrCode className="h-4 w-4 text-blue-500" /> PIX</span>
-                    <span className="font-semibold">{formatCents(resultado.pixCents)}</span>
-                  </div>
-                )}
-                {opcaoSelecionada && (
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-sm">
-                      <CreditCard className="h-4 w-4 text-violet-500" />
-                      {opcaoSelecionada.parcelas === 1
-                        ? 'Cartão à vista'
-                        : `Cartão ${opcaoSelecionada.parcelas}x de ${formatCents(opcaoSelecionada.valorParcelaCents)}`}
-                      <span className="text-xs text-green-600 font-medium">sem juros</span>
-                    </span>
-                    <span className="font-semibold">{formatCents(opcaoSelecionada.totalCents)}</span>
-                  </div>
-                )}
-                {opcaoSelecionada && opcaoSelecionada.ultimaParcelaCents !== opcaoSelecionada.valorParcelaCents && (
-                  <p className="text-xs text-muted-foreground pl-6">
-                    Última parcela de {formatCents(opcaoSelecionada.ultimaParcelaCents)} (ajuste de centavos).
-                  </p>
-                )}
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">Total a pagar</span>
-                  <span className="text-lg font-bold text-primary">{formatCents(resultado.totalClienteCents)}</span>
-                </div>
-                {resultado.abatimentoCents > 0 && (
-                  <p className="text-xs text-center text-green-700">
-                    O cliente economiza {formatCents(resultado.abatimentoCents)} em relação à dívida de {formatCents(resultado.dividaCents)}.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-        </>
+        </section>
       )}
-    </div>
+
+      {/* ── 4. Resumo ── */}
+      {resultado.valido && resultado.elegivel && (
+        <section className={`${pad} space-y-4`}>
+          <h3 className="font-semibold">Resumo do pagamento</h3>
+          <div className="space-y-2.5">
+            <SummaryRow label="Valor original da dívida" value={formatCents(resultado.dividaCents)} />
+            <SummaryRow label="Valor à vista (boleto)" value={formatCents(resultado.aVistaCents)} />
+            <Separator />
+            <SummaryRow label="Pagamento PIX" value={formatCents(resultado.pixCents)} />
+            <SummaryRow
+              label="Pagamento cartão"
+              value={opcaoSelecionada ? formatCents(opcaoSelecionada.totalCents) : formatCents(resultado.cartaoCents)}
+            />
+            <Separator />
+            <SummaryRow label="Total do cliente" value={formatCents(resultado.totalClienteCents)} strong />
+          </div>
+
+          {opcaoSelecionada && (
+            <p className="flex items-center gap-1.5 text-sm text-green-700">
+              <Check className="h-4 w-4" />
+              {opcaoSelecionada.parcelas === 1
+                ? 'À vista no cartão, sem juros'
+                : `${opcaoSelecionada.parcelas}x de ${formatCents(opcaoSelecionada.valorParcelaCents)} no cartão, sem juros`}
+              {opcaoSelecionada.ultimaParcelaCents !== opcaoSelecionada.valorParcelaCents &&
+                ` (última de ${formatCents(opcaoSelecionada.ultimaParcelaCents)})`}
+            </p>
+          )}
+          {pixCobreTudo && (
+            <p className="flex items-center gap-1.5 text-sm text-green-700">
+              <Check className="h-4 w-4" />
+              Pagamento integral via PIX
+            </p>
+          )}
+
+          <Button className="w-full h-11" size="lg" disabled={!podeContinuar} onClick={continuar}>
+            {copied ? 'Resumo copiado' : 'Continuar'}
+            {copied ? <Check className="ml-2 h-4 w-4" /> : <ArrowRight className="ml-2 h-4 w-4" />}
+          </Button>
+        </section>
+      )}
+    </Card>
   );
 }
