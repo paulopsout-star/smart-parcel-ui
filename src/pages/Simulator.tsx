@@ -13,7 +13,8 @@ import { formatCents, toCents } from '@/lib/currency-utils';
 import { calculateSplitSummary } from '@/lib/checkout-utils';
 import { InstallmentCondition } from '@/hooks/usePaymentSimulation';
 import { ArrowLeft, Copy, Check, QrCode, CreditCard, Calculator } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { montarPrefill } from '@/lib/sem-juros';
 import { useToast } from '@/hooks/use-toast';
 
 type Mode = 'sem_juros' | 'total' | 'split';
@@ -64,6 +65,7 @@ function CurrencyInput({
 export default function Simulator() {
   const { toast } = useToast();
   const { isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('total');
   // Aba "Sem juros" restrita a administradores por enquanto (a página é pública)
   const activeMode: Mode = mode === 'sem_juros' && !isAdmin ? 'total' : mode;
@@ -199,7 +201,9 @@ export default function Simulator() {
           </Tabs>
 
           {activeMode === 'sem_juros' ? (
-            <SemJurosSimulator />
+            <SemJurosSimulator
+              onSelect={(resultado, opcao) => navigate('/new-charge', { state: { semJuros: montarPrefill(resultado, opcao) } })}
+            />
           ) : (
             <>
           {/* ── Entradas ── */}

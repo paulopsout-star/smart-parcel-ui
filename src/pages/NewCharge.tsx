@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Receipt, Banknote, Calculator, CreditCard, QrCode, AlertCircle, Building2 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { boletoValueCents } from "@/lib/boleto";
+import { type SemJurosPrefill } from "@/lib/sem-juros";
+import { BoletoValidity } from "@/components/BoletoValidity";
+import { formatCurrency as formatBRL } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -182,7 +186,10 @@ export default function NewCharge() {
     description?: string;
     status: 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'ERRO';
   } | null>(null);
-  const { profile, loading: authLoading, isAdmin } = useAuth();
+  const { profile, loading: authLoading, isAdmin, isDemo } = useAuth();
+  const location = useLocation();
+  // Dados vindos do simulador sem juros (modal ou /simulador)
+  const [semJuros, setSemJuros] = useState<SemJurosPrefill | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -268,6 +275,47 @@ export default function NewCharge() {
   const watchPaymentMethod = watch("payment_method");
   const watchPixAmount = watch("pix_amount");
   const watchCardAmount = watch("card_amount");
+
+  // Aplica a simulação sem juros no formulário
+  const aplicarSemJuros = (dados: SemJurosPrefill) => {
+    setSemJuros(dados);
+    const metodo = dados.pixCents > 0 && dados.cartaoCents > 0 ? 'cartao_pix' : dados.cartaoCents > 0 ? 'cartao' : 'pix';
+    setValue('payment_method', metodo, { shouldValidate: false });
+    setValue('amount', formatCurrencyInput(String(dados.totalClienteCents)));
+    setValue('pix_amount', metodo === 'cartao_pix' ? formatCurrencyInput(String(dados.pixCents)) : '');
+    setValue('card_amount', metodo === 'cartao_pix' ? formatCurrencyInput(String(dados.cartaoCents)) : '');
+    setValue('installments', String(dados.parcelasSelecionadas ?? 1));
+  };
+
+  useEffect(() => {
+    const dados = (location.state as { semJuros?: SemJurosPrefill } | null)?.semJuros;
+    if (dados) {
+      aplicarSemJuros(dados);
+      // limpa o state para não reaplicar em refresh/voltar
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Consistência: o valor da linha digitável precisa ser igual ao valor à vista do boleto
+  const boletoCheck = useMemo(() => {
+    if (!semJuros) return { status: 'na' as const, cents: null as number | null };
+    const digits = (watchBoletoLinhaDigitavel ?? '').replace(/\D/g, '');
+    if (digits.length !== 47) return { status: 'empty' as const, cents: null as number | null };
+    const cents = boletoValueCents(digits);
+    if (cents === null) return { status: 'sem_valor' as const, cents };
+    return cents === semJuros.aVistaCents ? { status: 'ok' as const, cents } : { status: 'diverge' as const, cents };
+  }, [semJuros, watchBoletoLinhaDigitavel]);
+
+  const boletoAlert = semJuros && (boletoCheck.status === 'diverge' || boletoCheck.status === 'sem_valor') ? (
+    <Alert variant="destructive">
+      <AlertDescription>
+        {boletoCheck.status === 'sem_valor'
+          ? `A linha digitável não informa valor. O boleto precisa ter o valor à vista da simulação (${formatBRL(semJuros.aVistaCents)}).`
+          : `O valor da linha digitável (${formatBRL(boletoCheck.cents as number)}) é diferente do valor à vista do boleto na simulação (${formatBRL(semJuros.aVistaCents)}). Corrija a linha ou refaça a simulação.`}
+      </AlertDescription>
+    </Alert>
+  ) : null;
 
   // Buscar empresas para admin
   useEffect(() => {
@@ -391,6 +439,24 @@ export default function NewCharge() {
 
   // 2º argumento: react-hook-form passa o evento; o override explícito só vem de continueCreating
   const onSubmit = async (data: FormData, overrideArg?: unknown) => {
+    if (isDemo) {
+      toast({
+        title: 'Ambiente de demonstração',
+        description: 'A criação de cobranças está desabilitada neste acesso.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (semJuros && boletoCheck.status !== 'ok' && (data.boleto_linha_digitavel || data.payment_method !== 'pix')) {
+      toast({
+        title: 'Valor do boleto diferente da simulação',
+        description: boletoCheck.status === 'empty'
+          ? 'Informe a linha digitável do boleto com o valor à vista usado na simulação.'
+          : `A linha digitável precisa ter o valor à vista de ${formatBRL(semJuros.aVistaCents)}.`,
+        variant: 'destructive',
+      });
+      return;
+    }
     const overrideDoc = typeof overrideArg === 'string' ? overrideArg : duplicateOverrideDoc;
     console.log('✅ Iniciando criação de cobrança:', {
       valor: data.amount,
@@ -529,7 +595,21 @@ export default function NewCharge() {
             // Auditoria: operador optou por criar mesmo havendo cobrança em aberto para o CPF
             ...(docDigits === overrideDoc && openCharge ? { duplicate_override_of: openCharge.id } : {}),
             user_agent: navigator.userAgent,
-            original_amount: data.payment_method === 'pix' ? formatAmount(data.amount) : undefined
+            original_amount: data.payment_method === 'pix' ? formatAmount(data.amount) : undefined,
+            ...(semJuros ? {
+              sem_juros: {
+                divida_cents: semJuros.dividaCents,
+                a_vista_cents: semJuros.aVistaCents,
+                desconto_cents: semJuros.descontoCents,
+                pix_cents: semJuros.pixCents,
+                cartao_cents: semJuros.cartaoCents,
+                total_cliente_cents: semJuros.totalClienteCents,
+                abatimento_cents: semJuros.abatimentoCents,
+                parcelas_maximas: semJuros.parcelasMaximas,
+                parcelas_selecionadas: semJuros.parcelasSelecionadas,
+                boleto_valor_cents: boletoCheck.cents,
+              },
+            } : {})
           }
         })
         .select()
@@ -839,6 +919,25 @@ export default function NewCharge() {
                 </CardContent>
               </Card>
 
+              {semJuros && (
+                <Card className="border-green-300 bg-green-50/60">
+                  <CardContent className="pt-4 pb-4 flex flex-wrap items-start justify-between gap-3 text-sm">
+                    <div className="space-y-1">
+                      <p className="font-semibold text-green-800">Simulação sem juros aplicada</p>
+                      <p className="text-green-900">
+                        Dívida {formatBRL(semJuros.dividaCents)} · Boleto à vista {formatBRL(semJuros.aVistaCents)} · Até {semJuros.parcelasMaximas}x sem juros
+                        {semJuros.pixCents > 0 ? ` · PIX ${formatBRL(semJuros.pixCents)}` : ''}
+                        {semJuros.abatimentoCents > 0 ? ` · Repasse ao cliente ${formatBRL(semJuros.abatimentoCents)}` : ''}
+                      </p>
+                      <p className="text-xs text-green-800">A linha digitável do boleto deve ter exatamente {formatBRL(semJuros.aVistaCents)}.</p>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setSemJuros(null)}>
+                      Remover
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Dados da Cobrança */}
               <Card>
                 <CardHeader>
@@ -1005,6 +1104,8 @@ export default function NewCharge() {
                       {errors.boleto_linha_digitavel && (
                         <p className="text-sm text-destructive">{errors.boleto_linha_digitavel.message}</p>
                       )}
+                      {semJuros && <BoletoValidity linha={watchBoletoLinhaDigitavel} expectedCents={semJuros.aVistaCents} />}
+                      {boletoAlert}
                       <p className="text-xs text-ds-text-muted">
                         A linha digitável será vinculada automaticamente após a autorização do cartão
                       </p>
@@ -1030,6 +1131,8 @@ export default function NewCharge() {
                         {...register("boleto_linha_digitavel")}
                         placeholder="00000.00000 00000.000000 00000.000000 0 00000000000000"
                       />
+                      {semJuros && <BoletoValidity linha={watchBoletoLinhaDigitavel} expectedCents={semJuros.aVistaCents} />}
+                      {boletoAlert}
                     </div>
                   </CardContent>
                 </Card>
@@ -1111,6 +1214,7 @@ export default function NewCharge() {
         <SimulatorModal
           open={showSimulatorModal}
           onOpenChange={setShowSimulatorModal}
+          onSemJurosContinue={aplicarSemJuros}
         />
 
         {showCheckoutModal && checkoutData && (

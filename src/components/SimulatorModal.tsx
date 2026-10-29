@@ -13,6 +13,8 @@ import { PaymentSimulator } from '@/components/PaymentSimulator';
 import { SemJurosSimulator } from '@/components/SemJurosSimulator';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { montarPrefill, type SemJurosPrefill } from '@/lib/sem-juros';
 import { formatCents, toCents } from '@/lib/currency-utils';
 import { InstallmentCondition } from '@/hooks/usePaymentSimulation';
 import { Calculator, QrCode, CreditCard } from 'lucide-react';
@@ -66,9 +68,12 @@ interface SimulatorModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialAmount?: number; // em centavos
+  /** Chamado ao "Continuar" no sem juros. Sem ele, navega para /new-charge com os dados. */
+  onSemJurosContinue?: (dados: SemJurosPrefill) => void;
 }
 
-export function SimulatorModal({ open, onOpenChange, initialAmount }: SimulatorModalProps) {
+export function SimulatorModal({ open, onOpenChange, initialAmount, onSemJurosContinue }: SimulatorModalProps) {
+  const navigate = useNavigate();
   const [pixInput, setPixInput] = useState('1.000,00');
   const [cardInput, setCardInput] = useState(
     initialAmount
@@ -80,6 +85,16 @@ export function SimulatorModal({ open, onOpenChange, initialAmount }: SimulatorM
   const [tab, setTab] = useState<'sem_juros' | 'com_juros'>('com_juros');
   // Aba "Sem juros" restrita a administradores por enquanto
   const activeTab = isAdmin ? tab : 'com_juros';
+
+  const handleSemJurosContinue = useCallback<NonNullable<Parameters<typeof SemJurosSimulator>[0]['onSelect']>>(
+    (resultado, opcao) => {
+      const dados = montarPrefill(resultado, opcao);
+      onOpenChange(false);
+      if (onSemJurosContinue) onSemJurosContinue(dados);
+      else navigate('/new-charge', { state: { semJuros: dados } });
+    },
+    [navigate, onOpenChange, onSemJurosContinue],
+  );
 
   const pixCents = toCents(pixInput);
   const cardCents = toCents(cardInput);
@@ -129,7 +144,7 @@ export function SimulatorModal({ open, onOpenChange, initialAmount }: SimulatorM
           </Tabs>
         )}
 
-        {activeTab === 'sem_juros' && <SemJurosSimulator compact />}
+        {activeTab === 'sem_juros' && <SemJurosSimulator compact onSelect={handleSemJurosContinue} />}
 
         {activeTab === 'com_juros' && (
         <div className="space-y-5 mt-2">

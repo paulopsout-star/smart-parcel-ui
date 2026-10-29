@@ -179,3 +179,31 @@ export function calcularSemJuros(entrada: EntradaSemJuros): ResultadoSemJuros {
 export function formatarPct(fracao: number, casas = 1): string {
   return `${(fracao * 100).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas })}%`;
 }
+
+/** Dados levados do simulador para a tela de nova cobrança. */
+export interface SemJurosPrefill {
+  dividaCents: number;
+  aVistaCents: number;
+  descontoCents: number;
+  pixCents: number;
+  cartaoCents: number;
+  totalClienteCents: number;
+  abatimentoCents: number;
+  parcelasMaximas: number;
+  /** Parcela escolhida no simulador (1 = à vista); null quando o PIX cobre tudo. */
+  parcelasSelecionadas: number | null;
+}
+
+export function montarPrefill(resultado: ResultadoSemJuros, opcao: OpcaoParcela | null): SemJurosPrefill {
+  return {
+    dividaCents: resultado.dividaCents,
+    aVistaCents: resultado.aVistaCents,
+    descontoCents: resultado.descontoCents,
+    pixCents: resultado.pixCents,
+    cartaoCents: resultado.cartaoCents,
+    totalClienteCents: resultado.totalClienteCents,
+    abatimentoCents: resultado.abatimentoCents,
+    parcelasMaximas: resultado.parcelasMaximas,
+    parcelasSelecionadas: opcao?.parcelas ?? null,
+  };
+}
