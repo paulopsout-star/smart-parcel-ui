@@ -13,6 +13,7 @@ import {
   Settings,
   HelpCircle,
   LogOut,
+  FlaskConical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -30,6 +31,8 @@ const adminNavItems = [
   { name: 'Recorrentes', href: '/admin/recurrences', icon: Repeat },
   { name: 'Relatórios', href: '/admin/reports', icon: BarChart3 },
   { name: 'Configurações', href: '/admin/settings', icon: Settings },
+  // Bancada de teste da integração Quita+ sem juros (temporário)
+  { name: 'Teste sem juros', href: '/admin/teste-sem-juros', icon: FlaskConical },
 ];
 
 interface DashboardSidebarProps {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Layout } from '@/components/Layout';
+import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -114,8 +114,8 @@ export default function SemJurosTest() {
   const payerOk = payer.name.trim() && [11, 14].includes(onlyDigits(payer.document).length);
 
   return (
-    <Layout>
-      <div className="container mx-auto max-w-3xl py-8 px-4 space-y-6">
+    <DashboardShell>
+      <div className="max-w-3xl space-y-6">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-lg"><FlaskConical className="h-6 w-6 text-primary" /></div>
           <div>
@@ -256,6 +256,6 @@ export default function SemJurosTest() {
           </CardContent>
         </Card>
       </div>
-    </Layout>
+    </DashboardShell>
   );
 }
