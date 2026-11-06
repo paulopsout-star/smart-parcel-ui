@@ -109,6 +109,20 @@ function ctxFor(credential: Credential, override: any): Ctx | { error: string } 
 
 const mask = (text: string) => text.replace(/[A-Za-z0-9_\-\.]{40,}/g, "<redigido>").slice(0, 400);
 
+/** Decodifica só o payload do JWT (declarações públicas: cliente, lojista, escopos). Nunca devolve o token. */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=");
+    const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))));
+    delete payload.jti;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 // Cache em memória por credencial+host (só durante a vida do isolate)
 const tokenCache = new Map<string, { value: string; expiresAt: number }>();
 
@@ -150,6 +164,7 @@ async function getToken(ctx: Ctx, forceNew = false) {
       info: {
         ok: true, credential: ctx.label, host: ctx.baseUrl, httpStatus: res.status, ms, fromCache: false, expiresIn,
         tokenType: String(data?.token_type ?? data?.tokenType ?? "Bearer"), tokenLength: String(token).length,
+        claims: decodeJwtPayload(String(token)),
       },
     };
   } catch (e) {
