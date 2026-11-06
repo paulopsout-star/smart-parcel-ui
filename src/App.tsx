@@ -40,6 +40,7 @@ import Reports from "./pages/admin/Reports";
 import CompanySettings from "./pages/admin/CompanySettings";
 import CompanyManagement from "./pages/admin/CompanyManagement";
 import ConnectivityTest from "./pages/admin/ConnectivityTest";
+import SemJurosTest from "./pages/admin/SemJurosTest";
 import { useState } from "react";
 
 const App = () => {
@@ -86,6 +87,7 @@ const App = () => {
                 <Route path="/admin/reports" element={<ProtectedRoute requiredRole="admin"><Reports /></ProtectedRoute>} />
                 <Route path="/admin/settings" element={<ProtectedRoute requiredRole="admin"><CompanySettings /></ProtectedRoute>} />
                 <Route path="/admin/connectivity-test" element={<ProtectedRoute requiredRole="admin"><ConnectivityTest /></ProtectedRoute>} />
+                <Route path="/admin/teste-sem-juros" element={<ProtectedRoute requiredRole="admin"><SemJurosTest /></ProtectedRoute>} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>

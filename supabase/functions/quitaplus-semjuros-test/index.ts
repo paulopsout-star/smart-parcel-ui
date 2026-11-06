@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+import { cancelarCobranca, emitirCobranca, enderecoPadrao, interConfig, recuperarCobranca, vencimentoPadrao } from "../_shared/inter.ts";
 
 /**
  * quitaplus-semjuros-test — bancada de TESTES DE INTEGRAÇÃO da credencial "sem juros" do Quita+.
@@ -24,6 +25,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
  *   { "action": "simulate", "credential": "...", "amounts": [100000] }   — simulação por valor (centavos)
  *   { "action": "compare", "amounts": [100000] }                         — padrao x (informada | sem_juros)
  *   { "action": "prepayment_status", "credential": "...", "prePaymentKey": "uuid" }
+ *
+ * Fase 2 — pagamento real de teste (valor limitado a PAY_MAX_CENTS, sem tocar em charges/payment_splits):
+ *   { "action": "pay_authorize", "credential", "override": { "merchantId" }, "amountInCents", "installments",
+ *     "payer": { name, document, email, phoneNumber }, "card": { holderName, number, expirationDate, cvv } }
+ *       — SOMENTE admin logado (o cartão é digitado pelo admin na página de teste); tentativa única, sem retry.
+ *   { "action": "pay_issue_boleto", "amountInCents", "payer": { name, document, email?, phoneNumber? } } — boleto Inter
+ *   { "action": "pay_boleto_status", "codigoSolicitacao" } · { "action": "pay_cancel_boleto", "codigoSolicitacao" }
+ *   { "action": "pay_attach", "credential", "prePaymentKey", "linhaDigitavel" } — vincula o boleto à pré-autorização
  */
 
 const corsHeaders = {
@@ -37,6 +46,11 @@ const TEST_KEY_SHA256 = "b0b2c8f4e79760fdce656e5fdb9cf0654fe40830b6241dd0e541415
 const UPSTREAM_TIMEOUT_MS = 20_000;
 const USER_AGENT = "AutonegocieHub/quitaplus-semjuros-test";
 const ALLOWED_BASES = ["https://pay-gt.autonegocie.com", "https://api-sandbox.cappta.com.br"];
+
+// Fase 2: teto do pagamento de teste e lojistas aceitos
+const PAY_MAX_CENTS = 5000;
+const SEM_JUROS_MERCHANT = "54329414000502";
+const digits = (v: unknown) => String(v ?? "").replace(/\D/g, "");
 
 type Credential = "padrao" | "sem_juros" | "informada";
 
@@ -246,6 +260,195 @@ async function prepaymentStatus(ctx: Ctx, prePaymentKey: string) {
   }
 }
 
+/** Remove/mascara qualquer dado de cartão ou valor longo antes de devolver uma resposta da API. */
+function sanitize(value: unknown, depth = 0): unknown {
+  if (depth > 6 || value == null) return value;
+  if (Array.isArray(value)) return value.slice(0, 30).map((v) => sanitize(v, depth + 1));
+  if (typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = /card|cvv|pan|number|secret|token/i.test(k) && typeof v !== "boolean" ? "<omitido>" : sanitize(v, depth + 1);
+    }
+    return out;
+  }
+  if (typeof value === "string") return value.length > 200 ? value.slice(0, 200) + "…" : value;
+  return value;
+}
+
+function payAmount(body: any): number | null {
+  const amount = Math.round(Number(body?.amountInCents));
+  return Number.isFinite(amount) && amount >= 100 && amount <= PAY_MAX_CENTS ? amount : null;
+}
+
+/** Pré-autorização real no cartão. Tentativa única: em timeout o estado é desconhecido e NÃO se repete. */
+async function payAuthorize(ctx: Ctx, body: any) {
+  const amount = payAmount(body);
+  if (amount === null) return { ok: false, error: `Valor fora do limite do teste (R$ 1,00 a R$ ${(PAY_MAX_CENTS / 100).toFixed(2)})` };
+  const installments = Math.round(Number(body?.installments || 1));
+  if (!(installments >= 1 && installments <= 12)) return { ok: false, error: "Parcelas devem estar entre 1 e 12" };
+  const allowedMerchants = [Deno.env.get("QUITA_MAIS_MERCHANT_ID") || "", SEM_JUROS_MERCHANT].filter(Boolean);
+  if (!allowedMerchants.includes(ctx.merchantId)) return { ok: false, error: "Lojista não permitido neste teste" };
+
+  const payer = body?.payer || {};
+  const card = body?.card || {};
+  const doc = digits(payer.document);
+  const phone = digits(payer.phoneNumber);
+  const cardNumber = digits(card.number);
+  const cvv = digits(card.cvv);
+  const exp = digits(card.expirationDate);
+  const problems = [
+    !String(payer.name || "").trim() && "nome do pagador",
+    ![11, 14].includes(doc.length) && "CPF/CNPJ do pagador",
+    !/\S+@\S+\.\S+/.test(String(payer.email || "")) && "e-mail do pagador",
+    !(phone.length >= 10 && phone.length <= 11) && "telefone do pagador",
+    !String(card.holderName || "").trim() && "nome impresso no cartão",
+    !(cardNumber.length >= 13 && cardNumber.length <= 19) && "número do cartão",
+    !(cvv.length >= 3 && cvv.length <= 4) && "CVV",
+    exp.length !== 4 && "validade (MM/AA)",
+  ].filter(Boolean);
+  if (problems.length) return { ok: false, error: `Dados inválidos: ${problems.join(", ")}` };
+
+  const { token, info } = await getToken(ctx);
+  if (!token) return { ok: false, stage: "token", token: info };
+
+  const payload = {
+    MerchantId: ctx.merchantId,
+    CreditorName: Deno.env.get("QUITA_MAIS_CREDITOR_NAME") || "",
+    CreditorDocument: Deno.env.get("QUITA_MAIS_CREDITOR_DOCUMENT") || "",
+    AmountInCents: amount,
+    Installments: installments,
+    PayerDocument: doc,
+    PayerEmail: String(payer.email).trim(),
+    PayerPhoneNumber: phone,
+    PayerName: String(payer.name).trim(),
+    CardHolderName: String(card.holderName).trim(),
+    CardNumber: cardNumber,
+    CardExpirationDate: `20${exp.slice(2)}/${exp.slice(0, 2)}`,
+    CardCvv: cvv,
+  };
+
+  const started = Date.now();
+  try {
+    const res = await fetch(`${ctx.baseUrl}/prepayment/authorize`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(45_000),
+    });
+    const text = await res.text();
+    let data: any = null;
+    try { data = JSON.parse(text); } catch { /* resposta não-JSON */ }
+    return {
+      ok: res.ok,
+      httpStatus: res.status,
+      ms: Date.now() - started,
+      merchantId: ctx.merchantId,
+      credential: ctx.label,
+      amountInCents: amount,
+      installments,
+      prePaymentKey: data?.prePaymentKey ?? data?.pre_payment_key ?? data?.PrePaymentKey ?? null,
+      isApproved: data?.isApproved ?? data?.IsApproved ?? null,
+      message: data?.message ?? data?.Message ?? data?.returnMessage ?? data?.ReturnMessage ?? null,
+      campos: data ? Object.keys(data) : [],
+      corpo: data ? sanitize(data) : mask(text),
+    };
+  } catch (e) {
+    return {
+      ok: false, ms: Date.now() - started, merchantId: ctx.merchantId, credential: ctx.label,
+      error: String(e?.message ?? e),
+      aviso: "Estado desconhecido: NÃO repita a pré-autorização antes de conferir a fatura do cartão.",
+    };
+  }
+}
+
+/** Emite no Inter um boleto de teste no valor informado. Não espera além de ~20 s: devolve o código para consulta. */
+async function payIssueBoleto(body: any) {
+  const amount = payAmount(body);
+  if (amount === null) return { ok: false, error: `Valor fora do limite do teste (R$ 1,00 a R$ ${(PAY_MAX_CENTS / 100).toFixed(2)})` };
+  if (amount < 250) return { ok: false, error: "O Inter exige valor mínimo de R$ 2,50" };
+  const payer = body?.payer || {};
+  const doc = digits(payer.document);
+  if (![11, 14].includes(doc.length) || !String(payer.name || "").trim()) return { ok: false, error: "Informe nome e CPF/CNPJ do pagador" };
+  const endereco = enderecoPadrao();
+  if (!endereco) return { ok: false, error: "Secret INTER_PAGADOR_ENDERECO ausente" };
+  const phone = digits(payer.phoneNumber);
+  const cfg = interConfig();
+  const dataVencimento = vencimentoPadrao();
+  const codigoSolicitacao = await emitirCobranca(cfg, {
+    seuNumero: "TESTESEMJUROS",
+    valorNominal: amount / 100,
+    dataVencimento,
+    numDiasAgenda: 0,
+    pagador: {
+      cpfCnpj: doc,
+      tipoPessoa: doc.length === 14 ? "JURIDICA" : "FISICA",
+      nome: String(payer.name).trim().slice(0, 100),
+      ...endereco,
+      ...(payer.email ? { email: String(payer.email).trim().slice(0, 50) } : {}),
+      ...(phone.length >= 10 ? { ddd: phone.slice(0, 2), telefone: phone.slice(2, 11) } : {}),
+    },
+    mensagem: { linha1: "Teste de integracao Quita+ sem juros", linha2: "Pagamento de teste" },
+  });
+
+  // Emissão é assíncrona no Inter (já levou minutos): consulta por até ~20 s e devolve o que houver
+  let last: any = null;
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    last = await recuperarCobranca(cfg, codigoSolicitacao);
+    if (last?.boleto?.linhaDigitavel && last?.cobranca?.situacao !== "EM_PROCESSAMENTO") break;
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+  return {
+    ok: true,
+    codigoSolicitacao,
+    valorCents: amount,
+    dataVencimento,
+    situacao: last?.cobranca?.situacao ?? "EM_PROCESSAMENTO",
+    linhaDigitavel: digits(last?.boleto?.linhaDigitavel) || null,
+    pronto: !!last?.boleto?.linhaDigitavel,
+    env: cfg.env,
+  };
+}
+
+async function payBoletoStatus(codigoSolicitacao: string) {
+  if (!/^[0-9a-fA-F-]{20,64}$/.test(codigoSolicitacao)) return { ok: false, error: "codigoSolicitacao inválido" };
+  const c: any = await recuperarCobranca(interConfig(), codigoSolicitacao);
+  return {
+    ok: true,
+    codigoSolicitacao,
+    situacao: c?.cobranca?.situacao ?? null,
+    valorNominal: c?.cobranca?.valorNominal ?? null,
+    valorTotalRecebido: c?.cobranca?.valorTotalRecebido ?? null,
+    dataSituacao: c?.cobranca?.dataSituacao ?? null,
+    linhaDigitavel: digits(c?.boleto?.linhaDigitavel) || null,
+    pronto: !!c?.boleto?.linhaDigitavel,
+  };
+}
+
+/** Vincula a linha digitável à pré-autorização (mesmo endpoint do fluxo atual). */
+async function payAttach(ctx: Ctx, prePaymentKey: string, linhaDigitavel: string) {
+  if (!/^[0-9a-fA-F-]{20,64}$/.test(prePaymentKey)) return { ok: false, error: "prePaymentKey inválido" };
+  const barcode = digits(linhaDigitavel);
+  if (![47, 48].includes(barcode.length)) return { ok: false, error: "Linha digitável deve ter 47 ou 48 dígitos" };
+  const { token, info } = await getToken(ctx);
+  if (!token) return { ok: false, stage: "token", token: info };
+  const started = Date.now();
+  try {
+    const res = await fetch(`${ctx.baseUrl}/prepayment/AttachBankslip/${encodeURIComponent(prePaymentKey)}`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT },
+      body: JSON.stringify({ Barcode: barcode }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    const text = await res.text();
+    let data: unknown = mask(text);
+    try { data = sanitize(JSON.parse(text)); } catch { /* texto */ }
+    return { ok: res.ok, httpStatus: res.status, ms: Date.now() - started, credential: ctx.label, corpo: data };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - started, error: String(e?.message ?? e) };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
@@ -262,7 +465,7 @@ Deno.serve(async (req) => {
     .filter((n: number) => Number.isFinite(n) && n > 0)
     .slice(0, 12);
 
-  // Nunca logar `override` (contém credenciais)
+  // Nunca logar `override` (credenciais) nem `card`/`payer` (dados de cartão e pessoais)
   console.log("[quitaplus-semjuros-test]", { action, credential, amounts: amounts.length, actor: actor === "test-key" ? actor : "admin" });
 
   try {
@@ -311,6 +514,25 @@ Deno.serve(async (req) => {
 
     if (action === "prepayment_status") {
       return json(await prepaymentStatus(ctx, String(body?.prePaymentKey || "")));
+    }
+
+    // ---------------- Fase 2: pagamento real de teste ----------------
+    if (action === "pay_authorize") {
+      // O cartão só pode ser enviado por um admin logado (página de teste), nunca pela chave de teste.
+      if (actor === "test-key") return json({ error: "pay_authorize exige um administrador logado" }, 403);
+      if (credential === "informada") return json({ error: "Use a credencial atual (padrao) ou a dos secrets (sem_juros)" }, 400);
+      return json(await payAuthorize(ctx, body));
+    }
+    if (action === "pay_issue_boleto") return json(await payIssueBoleto(body));
+    if (action === "pay_boleto_status") return json(await payBoletoStatus(String(body?.codigoSolicitacao || "")));
+    if (action === "pay_cancel_boleto") {
+      const codigo = String(body?.codigoSolicitacao || "");
+      if (!/^[0-9a-fA-F-]{20,64}$/.test(codigo)) return json({ ok: false, error: "codigoSolicitacao inválido" }, 400);
+      await cancelarCobranca(interConfig(), codigo, "Teste de integracao encerrado");
+      return json({ ok: true, codigoSolicitacao: codigo, cancelado: true });
+    }
+    if (action === "pay_attach") {
+      return json(await payAttach(ctx, String(body?.prePaymentKey || ""), String(body?.linhaDigitavel || "")));
     }
 
     return json({ error: `Ação desconhecida: ${action}` }, 400);
