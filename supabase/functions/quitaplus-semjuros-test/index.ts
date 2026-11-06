@@ -7,21 +7,22 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
  * Função isolada: não é chamada por nenhum fluxo de produção e não altera dados (só lê a API).
  * Existe para validar a nova credencial ANTES de mexer no processo de pagamento.
  *
- * Secrets usados:
- *   QUITAPLUS_BASE_URL                 — mesma URL do fluxo atual
- *   QUITAPLUS_CLIENT_ID / _SECRET      — credencial atual ("padrao", com juros)
- *   QUITAPLUS_SEMJUROS_CLIENT_ID / _SECRET — credencial nova ("sem_juros")
- *   QUITAPLUS_SEMJUROS_MERCHANT_ID     — opcional; padrão = QUITA_MAIS_MERCHANT_ID
+ * Credenciais ("credential"):
+ *   "padrao"    — QUITAPLUS_CLIENT_ID / _SECRET (fluxo atual, com juros)
+ *   "sem_juros" — QUITAPLUS_SEMJUROS_CLIENT_ID / _SECRET (+ QUITAPLUS_SEMJUROS_MERCHANT_ID opcional)
+ *   "informada" — enviada na própria chamada em `override` (homologação). Não é gravada nem logada.
+ *
+ * `override`: { clientId, clientSecret, merchantId?, baseUrl? } — baseUrl só aceita os hosts de ALLOWED_BASES.
  *
  * Autorização: admin (JWT do usuário) OU header `x-test-key` cujo SHA-256 confere com TEST_KEY_SHA256.
  * O token OAuth NUNCA é devolvido nem logado.
  *
  * Ações (POST JSON):
- *   { "action": "status" }                                   — quais secrets existem
- *   { "action": "token", "credential": "sem_juros" }          — obtém token (ok, tempo, validade)
- *   { "action": "simulate", "credential": "...", "amounts": [100000] } — simulação por valor (centavos)
- *   { "action": "compare", "amounts": [100000] }              — simulação lado a lado: padrao x sem_juros
- *   { "action": "prepayment_status", "credential": "...", "prePaymentKey": "uuid" } — consulta de status
+ *   { "action": "status" }                                              — quais secrets existem
+ *   { "action": "token", "credential": "..." }                           — obtém token (ok, tempo, validade)
+ *   { "action": "simulate", "credential": "...", "amounts": [100000] }   — simulação por valor (centavos)
+ *   { "action": "compare", "amounts": [100000] }                         — padrao x (informada | sem_juros)
+ *   { "action": "prepayment_status", "credential": "...", "prePaymentKey": "uuid" }
  */
 
 const corsHeaders = {
@@ -33,8 +34,18 @@ const corsHeaders = {
 const TEST_KEY_SHA256 = "b0b2c8f4e79760fdce656e5fdb9cf0654fe40830b6241dd0e541415ff5584c0e";
 
 const UPSTREAM_TIMEOUT_MS = 20_000;
+const USER_AGENT = "AutonegocieHub/quitaplus-semjuros-test";
+const ALLOWED_BASES = ["https://pay-gt.autonegocie.com", "https://api-sandbox.cappta.com.br"];
 
-type Credential = "padrao" | "sem_juros";
+type Credential = "padrao" | "sem_juros" | "informada";
+
+interface Ctx {
+  label: Credential;
+  clientId: string;
+  clientSecret: string;
+  merchantId: string;
+  baseUrl: string;
+}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -60,117 +71,113 @@ async function authorize(req: Request): Promise<string | null> {
   return role?.role === "admin" ? user.id : null;
 }
 
-function baseUrl(): string {
+function defaultBaseUrl(): string {
   return (Deno.env.get("QUITAPLUS_BASE_URL") || "https://pay-gt.autonegocie.com").replace(/\/$/, "");
 }
 
-function credentialsFor(credential: Credential) {
+function ctxFor(credential: Credential, override: any): Ctx | { error: string } {
+  const defaultMerchant = Deno.env.get("QUITA_MAIS_MERCHANT_ID") || "";
+  if (credential === "informada") {
+    const base = String(override?.baseUrl || defaultBaseUrl()).replace(/\/$/, "");
+    if (!ALLOWED_BASES.includes(base)) return { error: `baseUrl não permitida (use: ${ALLOWED_BASES.join(", ")})` };
+    if (!override?.clientId || !override?.clientSecret) return { error: "override.clientId e override.clientSecret são obrigatórios" };
+    return {
+      label: "informada",
+      clientId: String(override.clientId),
+      clientSecret: String(override.clientSecret),
+      merchantId: String(override.merchantId || defaultMerchant),
+      baseUrl: base,
+    };
+  }
   if (credential === "sem_juros") {
     return {
+      label: "sem_juros",
       clientId: Deno.env.get("QUITAPLUS_SEMJUROS_CLIENT_ID") || "",
       clientSecret: Deno.env.get("QUITAPLUS_SEMJUROS_CLIENT_SECRET") || "",
-      merchantId: Deno.env.get("QUITAPLUS_SEMJUROS_MERCHANT_ID") || Deno.env.get("QUITA_MAIS_MERCHANT_ID") || "",
+      merchantId: Deno.env.get("QUITAPLUS_SEMJUROS_MERCHANT_ID") || defaultMerchant,
+      baseUrl: defaultBaseUrl(),
     };
   }
   return {
+    label: "padrao",
     clientId: Deno.env.get("QUITAPLUS_CLIENT_ID") || "",
     clientSecret: Deno.env.get("QUITAPLUS_CLIENT_SECRET") || "",
-    merchantId: Deno.env.get("QUITA_MAIS_MERCHANT_ID") || "",
+    merchantId: defaultMerchant,
+    baseUrl: defaultBaseUrl(),
   };
 }
 
 const mask = (text: string) => text.replace(/[A-Za-z0-9_\-\.]{40,}/g, "<redigido>").slice(0, 400);
 
-// Cache em memória por credencial (só durante a vida do isolate)
-const tokenCache: Partial<Record<Credential, { value: string; expiresAt: number }>> = {};
+// Cache em memória por credencial+host (só durante a vida do isolate)
+const tokenCache = new Map<string, { value: string; expiresAt: number }>();
 
-interface TokenResult {
-  ok: boolean;
-  credential: Credential;
-  httpStatus?: number;
-  ms: number;
-  fromCache?: boolean;
-  expiresIn?: number;
-  tokenType?: string;
-  tokenLength?: number;
-  error?: string;
-}
-
-async function getToken(credential: Credential, forceNew = false): Promise<{ token: string | null; info: TokenResult }> {
+async function getToken(ctx: Ctx, forceNew = false) {
   const started = Date.now();
-  const cached = tokenCache[credential];
+  const cacheKey = `${ctx.baseUrl}|${ctx.clientId}`;
+  const cached = tokenCache.get(cacheKey);
   if (!forceNew && cached && cached.expiresAt > Date.now() + 60_000) {
     return {
       token: cached.value,
-      info: { ok: true, credential, ms: 0, fromCache: true, expiresIn: Math.floor((cached.expiresAt - Date.now()) / 1000) },
+      info: { ok: true, credential: ctx.label, host: ctx.baseUrl, ms: 0, fromCache: true, expiresIn: Math.floor((cached.expiresAt - Date.now()) / 1000) },
     };
   }
-
-  const { clientId, clientSecret } = credentialsFor(credential);
-  if (!clientId || !clientSecret) {
-    return { token: null, info: { ok: false, credential, ms: 0, error: "Credenciais ausentes nos secrets" } };
+  if (!ctx.clientId || !ctx.clientSecret) {
+    return { token: null, info: { ok: false, credential: ctx.label, host: ctx.baseUrl, ms: 0, error: "Credenciais ausentes" } };
   }
 
-  const url = baseUrl().includes("/connect/token") ? baseUrl() : `${baseUrl()}/connect/token`;
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`${ctx.baseUrl}/connect/token`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "User-Agent": "AutonegocieHub/quitaplus-semjuros-test",
-      },
-      body: JSON.stringify({ clientId, clientSecret, grant_type: "client_credentials" }),
+      headers: { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": USER_AGENT },
+      body: JSON.stringify({ clientId: ctx.clientId, clientSecret: ctx.clientSecret, grant_type: "client_credentials" }),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     const text = await res.text();
     const ms = Date.now() - started;
     if (!res.ok) {
-      return { token: null, info: { ok: false, credential, httpStatus: res.status, ms, error: mask(text) } };
+      return { token: null, info: { ok: false, credential: ctx.label, host: ctx.baseUrl, httpStatus: res.status, ms, error: mask(text) } };
     }
     const data = JSON.parse(text);
     const token = data?.access_token ?? data?.accessToken ?? data?.token ?? null;
     const expiresIn = Number(data?.expires_in ?? data?.expiresIn ?? 3600);
     if (!token) {
-      return { token: null, info: { ok: false, credential, httpStatus: res.status, ms, error: "Resposta sem access_token" } };
+      return { token: null, info: { ok: false, credential: ctx.label, host: ctx.baseUrl, httpStatus: res.status, ms, error: "Resposta sem access_token", campos: Object.keys(data ?? {}) } };
     }
-    tokenCache[credential] = { value: token, expiresAt: Date.now() + expiresIn * 1000 };
+    tokenCache.set(cacheKey, { value: token, expiresAt: Date.now() + expiresIn * 1000 });
     return {
       token,
       info: {
-        ok: true, credential, httpStatus: res.status, ms, fromCache: false, expiresIn,
+        ok: true, credential: ctx.label, host: ctx.baseUrl, httpStatus: res.status, ms, fromCache: false, expiresIn,
         tokenType: String(data?.token_type ?? data?.tokenType ?? "Bearer"), tokenLength: String(token).length,
       },
     };
   } catch (e) {
-    return { token: null, info: { ok: false, credential, ms: Date.now() - started, error: String(e?.message ?? e) } };
+    return { token: null, info: { ok: false, credential: ctx.label, host: ctx.baseUrl, ms: Date.now() - started, error: String(e?.message ?? e) } };
   }
 }
 
-async function simulate(credential: Credential, amountInCents: number) {
-  const { token, info } = await getToken(credential);
-  if (!token) return { credential, amountInCents, ok: false, stage: "token", token: info };
+async function simulate(ctx: Ctx, amountInCents: number) {
+  const { token, info } = await getToken(ctx);
+  if (!token) return { credential: ctx.label, amountInCents, ok: false, stage: "token", token: info };
 
-  const { merchantId } = credentialsFor(credential);
   const started = Date.now();
   try {
-    const res = await fetch(`${baseUrl()}/payment/simulation`, {
+    const res = await fetch(`${ctx.baseUrl}/payment/simulation`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "AutonegocieHub/quitaplus-semjuros-test",
-        "Origin": "https://autonegocie.com.br",
-        "Referer": "https://autonegocie.com.br/",
+        "User-Agent": USER_AGENT,
       },
-      body: JSON.stringify({ amountInCents, merchantId }),
+      body: JSON.stringify({ amountInCents, merchantId: ctx.merchantId }),
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     const text = await res.text();
     const ms = Date.now() - started;
     if (!res.ok) {
-      return { credential, amountInCents, ok: false, stage: "simulation", httpStatus: res.status, ms, error: mask(text) };
+      return { credential: ctx.label, amountInCents, ok: false, stage: "simulation", httpStatus: res.status, ms, error: mask(text) };
     }
     const raw = JSON.parse(text);
     const conditions = raw?.conditions ?? raw?.simulation?.conditions ?? [];
@@ -189,7 +196,7 @@ async function simulate(credential: Credential, amountInCents: number) {
       };
     });
     return {
-      credential, amountInCents, ok: true, httpStatus: res.status, ms,
+      credential: ctx.label, amountInCents, ok: true, httpStatus: res.status, ms,
       maxParcelas: resumo.reduce((m: number, r: any) => Math.max(m, r.parcelas), 0),
       semJurosEmTodas: resumo.length > 0 && resumo.every((r: any) => r.acrescimoCents === 0),
       resumo,
@@ -199,31 +206,27 @@ async function simulate(credential: Credential, amountInCents: number) {
       ultimaCondicaoBruta: conditions?.length ? conditions[conditions.length - 1] : null,
     };
   } catch (e) {
-    return { credential, amountInCents, ok: false, stage: "simulation", ms: Date.now() - started, error: String(e?.message ?? e) };
+    return { credential: ctx.label, amountInCents, ok: false, stage: "simulation", ms: Date.now() - started, error: String(e?.message ?? e) };
   }
 }
 
-async function prepaymentStatus(credential: Credential, prePaymentKey: string) {
+async function prepaymentStatus(ctx: Ctx, prePaymentKey: string) {
   if (!/^[0-9a-fA-F-]{20,64}$/.test(prePaymentKey)) return { ok: false, error: "prePaymentKey inválido" };
-  const { token, info } = await getToken(credential);
-  if (!token) return { credential, ok: false, stage: "token", token: info };
+  const { token, info } = await getToken(ctx);
+  if (!token) return { credential: ctx.label, ok: false, stage: "token", token: info };
   const started = Date.now();
   try {
-    const res = await fetch(`${baseUrl()}/prepayment/status/${encodeURIComponent(prePaymentKey)}`, {
+    const res = await fetch(`${ctx.baseUrl}/prepayment/status/${encodeURIComponent(prePaymentKey)}`, {
       method: "GET",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/json",
-        "User-Agent": "AutonegocieHub/quitaplus-semjuros-test",
-      },
+      headers: { "Authorization": `Bearer ${token}`, "Accept": "application/json", "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
     const text = await res.text();
     let body: unknown = mask(text);
     try { body = JSON.parse(text); } catch { /* mantém texto mascarado */ }
-    return { credential, ok: res.ok, httpStatus: res.status, ms: Date.now() - started, body };
+    return { credential: ctx.label, ok: res.ok, httpStatus: res.status, ms: Date.now() - started, body };
   } catch (e) {
-    return { credential, ok: false, ms: Date.now() - started, error: String(e?.message ?? e) };
+    return { credential: ctx.label, ok: false, ms: Date.now() - started, error: String(e?.message ?? e) };
   }
 }
 
@@ -237,20 +240,22 @@ Deno.serve(async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch { /* corpo vazio */ }
   const action = String(body?.action || "status");
-  const credential: Credential = body?.credential === "padrao" ? "padrao" : "sem_juros";
+  const credential: Credential = ["padrao", "sem_juros", "informada"].includes(body?.credential) ? body.credential : "sem_juros";
   const amounts: number[] = (Array.isArray(body?.amounts) ? body.amounts : [100000])
     .map((n: unknown) => Math.round(Number(n)))
     .filter((n: number) => Number.isFinite(n) && n > 0)
     .slice(0, 12);
 
+  // Nunca logar `override` (contém credenciais)
   console.log("[quitaplus-semjuros-test]", { action, credential, amounts: amounts.length, actor: actor === "test-key" ? actor : "admin" });
 
   try {
     if (action === "status") {
-      const sj = credentialsFor("sem_juros");
-      const pd = credentialsFor("padrao");
+      const sj = ctxFor("sem_juros", null) as Ctx;
+      const pd = ctxFor("padrao", null) as Ctx;
       return json({
-        baseUrl: baseUrl(),
+        baseUrl: defaultBaseUrl(),
+        hostsPermitidosEmOverride: ALLOWED_BASES,
         padrao: { clientId: !!pd.clientId, clientSecret: !!pd.clientSecret, merchantId: !!pd.merchantId },
         sem_juros: {
           clientId: !!sj.clientId,
@@ -262,33 +267,39 @@ Deno.serve(async (req) => {
       });
     }
 
+    const ctx = ctxFor(credential, body?.override);
+    if ("error" in ctx) return json({ error: ctx.error }, 400);
+
     if (action === "token") {
-      const { info } = await getToken(credential, body?.forceNew === true);
+      const { info } = await getToken(ctx, body?.forceNew === true);
       return json(info);
     }
 
     if (action === "simulate") {
       const results = [];
-      for (const amount of amounts) results.push(await simulate(credential, amount));
-      return json({ credential, results });
+      for (const amount of amounts) results.push(await simulate(ctx, amount));
+      return json({ credential, host: ctx.baseUrl, results });
     }
 
     if (action === "compare") {
+      // compara a credencial atual com a escolhida (informada ou sem_juros)
+      const other = credential === "padrao" ? (ctxFor("sem_juros", null) as Ctx) : ctx;
+      const padrao = ctxFor("padrao", null) as Ctx;
       const results = [];
       for (const amount of amounts) {
-        const [padrao, semJuros] = await Promise.all([simulate("padrao", amount), simulate("sem_juros", amount)]);
-        results.push({ amountInCents: amount, padrao, sem_juros: semJuros });
+        const [a, b] = await Promise.all([simulate(padrao, amount), simulate(other, amount)]);
+        results.push({ amountInCents: amount, padrao: a, outra: b });
       }
-      return json({ results });
+      return json({ outraCredencial: other.label, hostOutra: other.baseUrl, results });
     }
 
     if (action === "prepayment_status") {
-      return json(await prepaymentStatus(credential, String(body?.prePaymentKey || "")));
+      return json(await prepaymentStatus(ctx, String(body?.prePaymentKey || "")));
     }
 
     return json({ error: `Ação desconhecida: ${action}` }, 400);
   } catch (e) {
-    console.error("[quitaplus-semjuros-test] erro", e);
+    console.error("[quitaplus-semjuros-test] erro", String(e?.message ?? e));
     return json({ error: "erro_interno", message: String(e?.message ?? e) }, 500);
   }
 });
