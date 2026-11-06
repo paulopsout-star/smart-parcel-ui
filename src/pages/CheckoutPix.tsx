@@ -126,6 +126,7 @@ function CheckoutPixContent() {
           .select('*')
           .eq('charge_id', chargeData.id)
           .eq('method', 'pix')
+          .neq('status', 'refunded') // PIX estornado fica como histórico; um novo pagamento usa outro split
           .order('created_at', { ascending: false });
 
         // Priority: 1) concluded split, 2) split with active QR do provedor ativo, 3) most recent

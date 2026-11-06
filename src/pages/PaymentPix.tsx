@@ -119,7 +119,8 @@ export default function PaymentPix() {
 
         // Find PIX split from the returned data
         const splits = data.payment_splits || [];
-        const pixSplit = splits.find((s: any) => s.method === 'pix');
+        // PIX estornado fica como histórico; não é reaproveitado
+        const pixSplit = splits.find((s: any) => s.method === 'pix' && s.status !== 'refunded');
 
         if (!pixSplit) {
           console.error('PaymentPix: PIX split not found in returned data');

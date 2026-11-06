@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
-import { cancelPendingSiblings, tryCompleteCharge } from "./charge-completion.ts";
+import { cancelPendingSiblings, reflectRefundOnCharge, tryCompleteCharge } from "./charge-completion.ts";
 
 /**
  * Helpers compartilhados da integração AbacatePay (API v2 — Checkout Transparente PIX).
@@ -35,14 +35,18 @@ export function isAbacatePayId(id: string | null | undefined): boolean {
   return typeof id === "string" && id.startsWith("pix_char_");
 }
 
+export type AbacateInternalStatus = "pending" | "concluded" | "failed" | "refunded";
+
 /** Mapeia status da AbacatePay para o status interno do split. */
-export function mapAbacateStatus(status: string): "pending" | "concluded" | "failed" {
+export function mapAbacateStatus(status: string): AbacateInternalStatus {
   switch (status) {
     case "PAID":
       return "concluded";
+    case "REFUNDED":
+      // Estorno é um estado próprio: o PIX foi pago e devolvido (não é "falha")
+      return "refunded";
     case "EXPIRED":
     case "CANCELLED":
-    case "REFUNDED":
     case "FAILED":
       return "failed";
     default:
@@ -129,9 +133,14 @@ export async function applyPixStatus(
   supabase: SupabaseClient,
   split: SplitRef,
   abacateStatus: string,
-): Promise<{ internalStatus: "pending" | "concluded" | "failed"; isPaid: boolean }> {
+): Promise<{ internalStatus: AbacateInternalStatus; isPaid: boolean }> {
   const internalStatus = mapAbacateStatus(abacateStatus);
   const isPaid = internalStatus === "concluded";
+
+  if (internalStatus === "refunded") {
+    await markSplitRefunded(supabase, split);
+    return { internalStatus, isPaid: false };
+  }
 
   const update: Record<string, unknown> = { mp_status: abacateStatus, status: internalStatus };
   if (isPaid) {
@@ -151,4 +160,35 @@ export async function applyPixStatus(
   }
 
   return { internalStatus, isPaid };
+}
+
+/**
+ * Marca o split como estornado e reflete na cobrança. Idempotente: se o split já está
+ * `refunded`, nada muda (retorna false) e `refunded_at` é preservado.
+ *
+ * `pix_paid_at` é limpo de propósito: o front e as funções tratam esse campo como "está pago".
+ * O horário original do pagamento continua em `processed_at`.
+ */
+export async function markSplitRefunded(
+  supabase: SupabaseClient,
+  split: SplitRef,
+  refundedAt: string = new Date().toISOString(),
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("payment_splits")
+    .update({ status: "refunded", mp_status: "REFUNDED", refunded_at: refundedAt, pix_paid_at: null })
+    .eq("id", split.id)
+    .neq("status", "refunded")
+    .select("id");
+
+  if (error) {
+    console.error(`[abacatepay] Falha ao marcar split ${split.id} como estornado:`, error);
+    return false;
+  }
+
+  const changed = (data?.length ?? 0) > 0;
+  if (changed && split.charge_id) {
+    await reflectRefundOnCharge(supabase, split.charge_id);
+  }
+  return changed;
 }

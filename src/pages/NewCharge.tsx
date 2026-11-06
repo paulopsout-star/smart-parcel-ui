@@ -186,7 +186,7 @@ export default function NewCharge() {
     description?: string;
     status: 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'ERRO';
   } | null>(null);
-  const { profile, loading: authLoading, isAdmin, isDemo } = useAuth();
+  const { profile, loading: authLoading, isAdmin } = useAuth();
   const location = useLocation();
   // Dados vindos do simulador sem juros (modal ou /simulador)
   const [semJuros, setSemJuros] = useState<SemJurosPrefill | null>(null);
@@ -439,14 +439,6 @@ export default function NewCharge() {
 
   // 2º argumento: react-hook-form passa o evento; o override explícito só vem de continueCreating
   const onSubmit = async (data: FormData, overrideArg?: unknown) => {
-    if (isDemo) {
-      toast({
-        title: 'Ambiente de demonstração',
-        description: 'A criação de cobranças está desabilitada neste acesso.',
-        variant: 'destructive',
-      });
-      return;
-    }
     if (semJuros && boletoCheck.status !== 'ok' && (data.boleto_linha_digitavel || data.payment_method !== 'pix')) {
       toast({
         title: 'Valor do boleto diferente da simulação',

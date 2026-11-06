@@ -100,3 +100,51 @@ export async function tryCompleteCharge(
   console.log(`[charge-completion] Charge ${chargeId} marcada como completed`);
   return true;
 }
+
+/**
+ * Reflete um estorno na cobrança.
+ *
+ * Se nenhum split da cobrança continua pago (`concluded`), a cobrança vira `refunded`.
+ * Se outro método ainda está pago, o status é mantido para revisão manual — a UI já mostra
+ * o split estornado. Status travado pelo admin e estados finais (refunded/cancelled) são respeitados.
+ */
+export async function reflectRefundOnCharge(
+  supabase: SupabaseClient,
+  chargeId: string,
+): Promise<"refunded" | "kept"> {
+  const { data: charge, error: chargeErr } = await supabase
+    .from("charges")
+    .select("id, status, status_locked_at")
+    .eq("id", chargeId)
+    .single();
+
+  if (chargeErr || !charge) return "kept";
+  if (charge.status_locked_at || ["refunded", "cancelled"].includes(charge.status)) return "kept";
+
+  const { data: splits, error: splitsErr } = await supabase
+    .from("payment_splits")
+    .select("status")
+    .eq("charge_id", chargeId);
+  if (splitsErr) return "kept";
+
+  if ((splits || []).some((s) => s.status === "concluded")) {
+    console.warn(
+      `[charge-completion] Charge ${chargeId} teve um split estornado mas ainda tem outro pago; status "${charge.status}" mantido para revisão`,
+    );
+    return "kept";
+  }
+
+  const { error: updErr } = await supabase
+    .from("charges")
+    .update({ status: "refunded" })
+    .eq("id", chargeId)
+    .eq("status", charge.status);
+
+  if (updErr) {
+    console.error(`[charge-completion] Falha ao marcar charge ${chargeId} como refunded:`, updErr);
+    return "kept";
+  }
+
+  console.log(`[charge-completion] Charge ${chargeId} marcada como refunded (nenhum split pago restante)`);
+  return "refunded";
+}

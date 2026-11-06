@@ -6,6 +6,7 @@ import {
   checkPixStatus,
   isAbacatePayId,
   loadAbacatePayConfig,
+  mapAbacateStatus,
 } from "../_shared/abacatepay.ts";
 
 /**
@@ -82,13 +83,21 @@ Deno.serve(async (req) => {
       }
 
       const split = splits[0];
-      if (split.status === "concluded") {
-        console.log("[abacatepay-webhook] Split já concluded, ignorando:", split.id);
+      if (split.status === "refunded") {
+        console.log("[abacatepay-webhook] Split já estornado, ignorando:", split.id);
         continue;
       }
 
       // Fonte da verdade: a API, nunca o payload
       const check = await checkPixStatus(config.apiKey, pixId);
+
+      // Um split já pago só muda por ESTORNO (transparent.refunded). Eventos tardios de
+      // pagamento/expiração não podem rebaixá-lo para pending/failed.
+      if (split.status === "concluded" && mapAbacateStatus(check.status) !== "refunded") {
+        console.log(`[abacatepay-webhook] Split já concluded e API diz ${check.status}; nada a fazer:`, split.id);
+        continue;
+      }
+
       const { internalStatus } = await applyPixStatus(supabase, split, check.status);
       console.log(`[abacatepay-webhook] Split ${split.id}: ${check.status} → ${internalStatus}`);
     }

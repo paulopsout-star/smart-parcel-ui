@@ -48,6 +48,7 @@ interface PaymentSplitInfo {
   order_index: number;
   installments?: number;
   mp_status?: string | null;
+  refunded_at?: string | null;
   created_at?: string;
 }
 
@@ -364,6 +365,10 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
 
   // ✅ Badge usa o displayStatus computado (igual ao topo) quando terminal
   const getUnifiedStatusBadge = (splitMethod: 'pix' | 'card') => {
+    // PIX pago e devolvido: estorno tem precedência sobre o status da cobrança
+    if ((splitMethod === 'pix' ? pixSplit : cardSplit)?.status === 'refunded') {
+      return <Badge variant="destructive" className="text-xs">↩ Estornado</Badge>;
+    }
     // Se status terminal, mostrar o mesmo badge do topo
     if (isTerminalStatus) {
       if (displayStatus === 'cancelled') return <Badge variant="secondary" className="text-xs">✗ Cancelado</Badge>;
@@ -467,7 +472,9 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                   </div>
                   <span className="font-medium text-green-700">PIX adicional</span>
                 </div>
-                {paid
+                {s.status === 'refunded'
+                  ? <Badge variant="destructive" className="text-xs">↩ Estornado</Badge>
+                  : paid
                   ? <Badge variant="success" className="text-xs">✓ Pago</Badge>
                   : expired
                     ? <Badge variant="secondary" className="text-xs">⏱ QR expirado</Badge>
@@ -2244,6 +2251,8 @@ export default function ChargeHistory() {
                             {selectedCharge.splits.map((split) => {
                               // ✅ Badge unificado: usa o displayStatus (getComputedStatus) como o topo
                               const getSplitBadgeConfig = () => {
+                                // PIX pago e devolvido: estorno tem precedência sobre o status da cobrança
+                                if (split.status === 'refunded') return { variant: 'destructive' as const, label: '↩ Estornado' };
                                 // Se status terminal, TODOS os cards mostram o mesmo status do topo
                                 if (isTerminalStatus) {
                                   if (displayStatus === 'cancelled') return { variant: 'secondary' as const, label: '✗ Cancelado' };
@@ -2313,6 +2322,15 @@ export default function ChargeHistory() {
                                 {!isTerminalStatus && split.pix_paid_at && (
                                   <div className="col-span-2">
                                     <span className="font-medium">Pago em:</span> {format(new Date(split.pix_paid_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                                  </div>
+                                )}
+                                {split.status === 'refunded' && (
+                                  <div className="col-span-2 text-destructive">
+                                    {split.processed_at && (
+                                      <><span className="font-medium">Pago em:</span> {format(new Date(split.processed_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })} · </>
+                                    )}
+                                    <span className="font-medium">Estornado</span>
+                                    {split.refunded_at ? ` em ${format(new Date(split.refunded_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}` : ' (data não registrada)'}
                                   </div>
                                 )}
                                 </div>
