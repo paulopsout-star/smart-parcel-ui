@@ -13,6 +13,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
  *   "informada" — enviada na própria chamada em `override` (homologação). Não é gravada nem logada.
  *
  * `override`: { clientId, clientSecret, merchantId?, baseUrl? } — baseUrl só aceita os hosts de ALLOWED_BASES.
+ * Com "padrao" e "sem_juros", `override.merchantId` troca apenas o lojista enviado na chamada.
  *
  * Autorização: admin (JWT do usuário) OU header `x-test-key` cujo SHA-256 confere com TEST_KEY_SHA256.
  * O token OAuth NUNCA é devolvido nem logado.
@@ -94,7 +95,7 @@ function ctxFor(credential: Credential, override: any): Ctx | { error: string } 
       label: "sem_juros",
       clientId: Deno.env.get("QUITAPLUS_SEMJUROS_CLIENT_ID") || "",
       clientSecret: Deno.env.get("QUITAPLUS_SEMJUROS_CLIENT_SECRET") || "",
-      merchantId: Deno.env.get("QUITAPLUS_SEMJUROS_MERCHANT_ID") || defaultMerchant,
+      merchantId: String(override?.merchantId || Deno.env.get("QUITAPLUS_SEMJUROS_MERCHANT_ID") || defaultMerchant),
       baseUrl: defaultBaseUrl(),
     };
   }
@@ -102,7 +103,7 @@ function ctxFor(credential: Credential, override: any): Ctx | { error: string } 
     label: "padrao",
     clientId: Deno.env.get("QUITAPLUS_CLIENT_ID") || "",
     clientSecret: Deno.env.get("QUITAPLUS_CLIENT_SECRET") || "",
-    merchantId: defaultMerchant,
+    merchantId: String(override?.merchantId || defaultMerchant), // permite testar outro lojista com a credencial atual
     baseUrl: defaultBaseUrl(),
   };
 }
