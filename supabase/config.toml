@@ -43,6 +43,10 @@ verify_jwt = true
 [functions.create-user-admin]
 verify_jwt = true
 
+# Bancada de testes de integração da credencial "sem juros" (autenticação própria: admin ou x-test-key)
+[functions.quitaplus-semjuros-test]
+verify_jwt = false
+
 [db]
 port = 54322
 shadow_port = 54320
