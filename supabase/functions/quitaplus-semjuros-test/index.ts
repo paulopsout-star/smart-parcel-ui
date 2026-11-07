@@ -11,6 +11,9 @@ import { cancelarCobranca, emitirCobranca, enderecoPadrao, interConfig, recupera
  * ISOLAMENTO (07/11/2026): esta função usa SOMENTE a credencial nova, dos secrets
  *   QUITAPLUS_SEMJUROS_CLIENT_ID / QUITAPLUS_SEMJUROS_CLIENT_SECRET,
  *   e SOMENTE o lojista sem juros (QUITAPLUS_SEMJUROS_MERCHANT_ID ou SEM_JUROS_MERCHANT).
+ *   Na autorização, CreditorDocument = esse mesmo CNPJ (pedido do usuário em 07/11/2026, para testar se a
+ *   tabela da autorização segue o credor); CreditorName vem de QUITAPLUS_SEMJUROS_CREDITOR_NAME, se existir,
+ *   senão de QUITA_MAIS_CREDITOR_NAME.
  * Campos `credential` e `override` enviados pelo cliente são ignorados. A credencial atual
  * (QUITAPLUS_CLIENT_ID) nunca é usada aqui; se os secrets da nova forem iguais aos da atual,
  * toda chamada ao Quita+ é recusada (evita cobrar com juros por engano).
@@ -302,10 +305,13 @@ async function payAuthorize(ctx: Ctx, body: any) {
   const { token, info } = await getToken(ctx);
   if (!token) return { ok: false, stage: "token", token: info };
 
+  // Credor = o próprio lojista sem juros (teste: a tabela da autorização pode seguir o credor, não o lojista)
+  const creditorDocument = ctx.merchantId;
+  const creditorName = Deno.env.get("QUITAPLUS_SEMJUROS_CREDITOR_NAME") || Deno.env.get("QUITA_MAIS_CREDITOR_NAME") || "";
   const payload = {
     MerchantId: ctx.merchantId,
-    CreditorName: Deno.env.get("QUITA_MAIS_CREDITOR_NAME") || "",
-    CreditorDocument: Deno.env.get("QUITA_MAIS_CREDITOR_DOCUMENT") || "",
+    CreditorName: creditorName,
+    CreditorDocument: creditorDocument,
     AmountInCents: amount,
     Installments: installments,
     PayerDocument: doc,
@@ -334,6 +340,8 @@ async function payAuthorize(ctx: Ctx, body: any) {
       httpStatus: res.status,
       ms: Date.now() - started,
       merchantId: ctx.merchantId,
+      creditorDocument,
+      creditorNameOrigem: Deno.env.get("QUITAPLUS_SEMJUROS_CREDITOR_NAME") ? "QUITAPLUS_SEMJUROS_CREDITOR_NAME" : "QUITA_MAIS_CREDITOR_NAME",
       credential: ctx.label,
       amountInCents: amount,
       installments,
@@ -345,7 +353,7 @@ async function payAuthorize(ctx: Ctx, body: any) {
     };
   } catch (e) {
     return {
-      ok: false, ms: Date.now() - started, merchantId: ctx.merchantId, credential: ctx.label,
+      ok: false, ms: Date.now() - started, merchantId: ctx.merchantId, creditorDocument, credential: ctx.label,
       error: String(e?.message ?? e),
       aviso: "Estado desconhecido: NÃO repita a pré-autorização antes de conferir a fatura do cartão.",
     };
@@ -470,6 +478,7 @@ Deno.serve(async (req) => {
         isolado: true,
         credencial: "sem_juros",
         lojista: ctx.merchantId,
+        creditorDocumentNaAutorizacao: ctx.merchantId,
         sem_juros: {
           clientId: !!ctx.clientId,
           clientSecret: !!ctx.clientSecret,
