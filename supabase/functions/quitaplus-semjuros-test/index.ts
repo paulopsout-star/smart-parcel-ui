@@ -5,34 +5,32 @@ import { cancelarCobranca, emitirCobranca, enderecoPadrao, interConfig, recupera
 /**
  * quitaplus-semjuros-test — bancada de TESTES DE INTEGRAÇÃO da credencial "sem juros" do Quita+.
  *
- * Função isolada: não é chamada por nenhum fluxo de produção e não altera dados (só lê a API).
+ * Função isolada: não é chamada por nenhum fluxo de produção e não altera dados da plataforma.
  * Existe para validar a nova credencial ANTES de mexer no processo de pagamento.
  *
- * Credenciais ("credential"):
- *   "padrao"    — QUITAPLUS_CLIENT_ID / _SECRET (fluxo atual, com juros)
- *   "sem_juros" — QUITAPLUS_SEMJUROS_CLIENT_ID / _SECRET (+ QUITAPLUS_SEMJUROS_MERCHANT_ID opcional)
- *   "informada" — enviada na própria chamada em `override` (homologação). Não é gravada nem logada.
- *
- * `override`: { clientId, clientSecret, merchantId?, baseUrl? } — baseUrl só aceita os hosts de ALLOWED_BASES.
- * Com "padrao" e "sem_juros", `override.merchantId` troca apenas o lojista enviado na chamada.
+ * ISOLAMENTO (07/11/2026): esta função usa SOMENTE a credencial nova, dos secrets
+ *   QUITAPLUS_SEMJUROS_CLIENT_ID / QUITAPLUS_SEMJUROS_CLIENT_SECRET,
+ *   e SOMENTE o lojista sem juros (QUITAPLUS_SEMJUROS_MERCHANT_ID ou SEM_JUROS_MERCHANT).
+ * Campos `credential` e `override` enviados pelo cliente são ignorados. A credencial atual
+ * (QUITAPLUS_CLIENT_ID) nunca é usada aqui; se os secrets da nova forem iguais aos da atual,
+ * toda chamada ao Quita+ é recusada (evita cobrar com juros por engano).
  *
  * Autorização: admin (JWT do usuário) OU header `x-test-key` cujo SHA-256 confere com TEST_KEY_SHA256.
  * O token OAuth NUNCA é devolvido nem logado.
  *
  * Ações (POST JSON):
- *   { "action": "status" }                                              — quais secrets existem
- *   { "action": "token", "credential": "..." }                           — obtém token (ok, tempo, validade)
- *   { "action": "simulate", "credential": "...", "amounts": [100000] }   — simulação por valor (centavos)
- *   { "action": "compare", "amounts": [100000] }                         — padrao x (informada | sem_juros)
- *   { "action": "prepayment_status", "credential": "...", "prePaymentKey": "uuid" }
+ *   { "action": "status" }                               — secrets presentes, lojista, isolamento
+ *   { "action": "token" }                                — obtém token (ok, tempo, validade, declarações públicas)
+ *   { "action": "simulate", "amounts": [100000] }        — simulação por valor (centavos)
+ *   { "action": "prepayment_status", "prePaymentKey" }
  *
  * Fase 2 — pagamento real de teste (valor limitado a PAY_MAX_CENTS, sem tocar em charges/payment_splits):
- *   { "action": "pay_authorize", "credential", "override": { "merchantId" }, "amountInCents", "installments",
+ *   { "action": "pay_authorize", "amountInCents", "installments",
  *     "payer": { name, document, email, phoneNumber }, "card": { holderName, number, expirationDate, cvv } }
  *       — SOMENTE admin logado (o cartão é digitado pelo admin na página de teste); tentativa única, sem retry.
  *   { "action": "pay_issue_boleto", "amountInCents", "payer": { name, document, email?, phoneNumber? } } — boleto Inter
  *   { "action": "pay_boleto_status", "codigoSolicitacao" } · { "action": "pay_cancel_boleto", "codigoSolicitacao" }
- *   { "action": "pay_attach", "credential", "prePaymentKey", "linhaDigitavel" } — vincula o boleto à pré-autorização
+ *   { "action": "pay_attach", "prePaymentKey", "linhaDigitavel" } — vincula o boleto à pré-autorização
  */
 
 const corsHeaders = {
@@ -45,14 +43,13 @@ const TEST_KEY_SHA256 = "b0b2c8f4e79760fdce656e5fdb9cf0654fe40830b6241dd0e541415
 
 const UPSTREAM_TIMEOUT_MS = 20_000;
 const USER_AGENT = "AutonegocieHub/quitaplus-semjuros-test";
-const ALLOWED_BASES = ["https://pay-gt.autonegocie.com", "https://api-sandbox.cappta.com.br"];
 
-// Fase 2: teto do pagamento de teste e lojistas aceitos
+// Fase 2: teto do pagamento de teste e lojista sem juros
 const PAY_MAX_CENTS = 5000;
 const SEM_JUROS_MERCHANT = "54329414000502";
 const digits = (v: unknown) => String(v ?? "").replace(/\D/g, "");
 
-type Credential = "padrao" | "sem_juros" | "informada";
+type Credential = "sem_juros";
 
 interface Ctx {
   label: Credential;
@@ -90,36 +87,29 @@ function defaultBaseUrl(): string {
   return (Deno.env.get("QUITAPLUS_BASE_URL") || "https://pay-gt.autonegocie.com").replace(/\/$/, "");
 }
 
-function ctxFor(credential: Credential, override: any): Ctx | { error: string } {
-  const defaultMerchant = Deno.env.get("QUITA_MAIS_MERCHANT_ID") || "";
-  if (credential === "informada") {
-    const base = String(override?.baseUrl || defaultBaseUrl()).replace(/\/$/, "");
-    if (!ALLOWED_BASES.includes(base)) return { error: `baseUrl não permitida (use: ${ALLOWED_BASES.join(", ")})` };
-    if (!override?.clientId || !override?.clientSecret) return { error: "override.clientId e override.clientSecret são obrigatórios" };
-    return {
-      label: "informada",
-      clientId: String(override.clientId),
-      clientSecret: String(override.clientSecret),
-      merchantId: String(override.merchantId || defaultMerchant),
-      baseUrl: base,
-    };
-  }
-  if (credential === "sem_juros") {
-    return {
-      label: "sem_juros",
-      clientId: Deno.env.get("QUITAPLUS_SEMJUROS_CLIENT_ID") || "",
-      clientSecret: Deno.env.get("QUITAPLUS_SEMJUROS_CLIENT_SECRET") || "",
-      merchantId: String(override?.merchantId || Deno.env.get("QUITAPLUS_SEMJUROS_MERCHANT_ID") || defaultMerchant),
-      baseUrl: defaultBaseUrl(),
-    };
-  }
+/** Único contexto possível: credencial nova + lojista sem juros. Nada vem do cliente. */
+function semJurosCtx(): Ctx {
   return {
-    label: "padrao",
-    clientId: Deno.env.get("QUITAPLUS_CLIENT_ID") || "",
-    clientSecret: Deno.env.get("QUITAPLUS_CLIENT_SECRET") || "",
-    merchantId: String(override?.merchantId || defaultMerchant), // permite testar outro lojista com a credencial atual
+    label: "sem_juros",
+    clientId: Deno.env.get("QUITAPLUS_SEMJUROS_CLIENT_ID") || "",
+    clientSecret: Deno.env.get("QUITAPLUS_SEMJUROS_CLIENT_SECRET") || "",
+    merchantId: digits(Deno.env.get("QUITAPLUS_SEMJUROS_MERCHANT_ID")) || SEM_JUROS_MERCHANT,
     baseUrl: defaultBaseUrl(),
   };
+}
+
+/** Motivo pelo qual a bancada não pode chamar o Quita+ (null = pode). */
+function isolationProblem(ctx: Ctx): string | null {
+  if (!ctx.clientId || !ctx.clientSecret) return "Secrets QUITAPLUS_SEMJUROS_CLIENT_ID/_SECRET ausentes";
+  const atualId = Deno.env.get("QUITAPLUS_CLIENT_ID") || "";
+  const atualSecret = Deno.env.get("QUITAPLUS_CLIENT_SECRET") || "";
+  if (ctx.clientId === atualId || ctx.clientSecret === atualSecret) {
+    return "Os secrets da credencial nova são iguais aos da credencial atual: corrija-os antes de testar";
+  }
+  if (ctx.merchantId === digits(Deno.env.get("QUITA_MAIS_MERCHANT_ID"))) {
+    return "O lojista configurado é o mesmo do fluxo atual: a bancada só usa o lojista sem juros";
+  }
+  return null;
 }
 
 const mask = (text: string) => text.replace(/[A-Za-z0-9_\-\.]{40,}/g, "<redigido>").slice(0, 400);
@@ -286,8 +276,9 @@ async function payAuthorize(ctx: Ctx, body: any) {
   if (amount === null) return { ok: false, error: `Valor fora do limite do teste (R$ 1,00 a R$ ${(PAY_MAX_CENTS / 100).toFixed(2)})` };
   const installments = Math.round(Number(body?.installments || 1));
   if (!(installments >= 1 && installments <= 12)) return { ok: false, error: "Parcelas devem estar entre 1 e 12" };
-  const allowedMerchants = [Deno.env.get("QUITA_MAIS_MERCHANT_ID") || "", SEM_JUROS_MERCHANT].filter(Boolean);
-  if (!allowedMerchants.includes(ctx.merchantId)) return { ok: false, error: "Lojista não permitido neste teste" };
+  if (ctx.merchantId !== SEM_JUROS_MERCHANT && ctx.merchantId !== digits(Deno.env.get("QUITAPLUS_SEMJUROS_MERCHANT_ID"))) {
+    return { ok: false, error: "Lojista não permitido neste teste" };
+  }
 
   const payer = body?.payer || {};
   const card = body?.card || {};
@@ -459,35 +450,48 @@ Deno.serve(async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch { /* corpo vazio */ }
   const action = String(body?.action || "status");
-  const credential: Credential = ["padrao", "sem_juros", "informada"].includes(body?.credential) ? body.credential : "sem_juros";
   const amounts: number[] = (Array.isArray(body?.amounts) ? body.amounts : [100000])
     .map((n: unknown) => Math.round(Number(n)))
     .filter((n: number) => Number.isFinite(n) && n > 0)
     .slice(0, 12);
+  // `credential` e `override` do cliente são ignorados: a bancada é isolada na credencial nova
+  const ignorados = ["credential", "override"].filter((k) => body?.[k] !== undefined);
 
-  // Nunca logar `override` (credenciais) nem `card`/`payer` (dados de cartão e pessoais)
-  console.log("[quitaplus-semjuros-test]", { action, credential, amounts: amounts.length, actor: actor === "test-key" ? actor : "admin" });
+  // Nunca logar `card`/`payer` (dados de cartão e pessoais)
+  console.log("[quitaplus-semjuros-test]", { action, credential: "sem_juros", amounts: amounts.length, actor: actor === "test-key" ? actor : "admin", ignorados });
 
   try {
+    const ctx = semJurosCtx();
+    const problema = isolationProblem(ctx);
+
     if (action === "status") {
-      const sj = ctxFor("sem_juros", null) as Ctx;
-      const pd = ctxFor("padrao", null) as Ctx;
       return json({
-        baseUrl: defaultBaseUrl(),
-        hostsPermitidosEmOverride: ALLOWED_BASES,
-        padrao: { clientId: !!pd.clientId, clientSecret: !!pd.clientSecret, merchantId: !!pd.merchantId },
+        baseUrl: ctx.baseUrl,
+        isolado: true,
+        credencial: "sem_juros",
+        lojista: ctx.merchantId,
         sem_juros: {
-          clientId: !!sj.clientId,
-          clientSecret: !!sj.clientSecret,
+          clientId: !!ctx.clientId,
+          clientSecret: !!ctx.clientSecret,
           merchantIdProprio: !!Deno.env.get("QUITAPLUS_SEMJUROS_MERCHANT_ID"),
-          merchantIdEfetivo: !!sj.merchantId,
-          mesmaCredencialQueAPadrao: !!sj.clientId && sj.clientId === pd.clientId,
+          mesmaCredencialQueAPadrao: !!ctx.clientId && ctx.clientId === (Deno.env.get("QUITAPLUS_CLIENT_ID") || ""),
         },
+        pronto: problema === null,
+        problema,
       });
     }
 
-    const ctx = ctxFor(credential, body?.override);
-    if ("error" in ctx) return json({ error: ctx.error }, 400);
+    // Ações do Inter não dependem do Quita+
+    if (action === "pay_issue_boleto") return json(await payIssueBoleto(body));
+    if (action === "pay_boleto_status") return json(await payBoletoStatus(String(body?.codigoSolicitacao || "")));
+    if (action === "pay_cancel_boleto") {
+      const codigo = String(body?.codigoSolicitacao || "");
+      if (!/^[0-9a-fA-F-]{20,64}$/.test(codigo)) return json({ ok: false, error: "codigoSolicitacao inválido" }, 400);
+      await cancelarCobranca(interConfig(), codigo, "Teste de integracao encerrado");
+      return json({ ok: true, codigoSolicitacao: codigo, cancelado: true });
+    }
+
+    if (problema) return json({ ok: false, error: problema }, 409);
 
     if (action === "token") {
       const { info } = await getToken(ctx, body?.forceNew === true);
@@ -497,19 +501,7 @@ Deno.serve(async (req) => {
     if (action === "simulate") {
       const results = [];
       for (const amount of amounts) results.push(await simulate(ctx, amount));
-      return json({ credential, host: ctx.baseUrl, results });
-    }
-
-    if (action === "compare") {
-      // compara a credencial atual com a escolhida (informada ou sem_juros)
-      const other = credential === "padrao" ? (ctxFor("sem_juros", null) as Ctx) : ctx;
-      const padrao = ctxFor("padrao", null) as Ctx;
-      const results = [];
-      for (const amount of amounts) {
-        const [a, b] = await Promise.all([simulate(padrao, amount), simulate(other, amount)]);
-        results.push({ amountInCents: amount, padrao: a, outra: b });
-      }
-      return json({ outraCredencial: other.label, hostOutra: other.baseUrl, results });
+      return json({ credential: ctx.label, lojista: ctx.merchantId, host: ctx.baseUrl, results });
     }
 
     if (action === "prepayment_status") {
@@ -520,16 +512,7 @@ Deno.serve(async (req) => {
     if (action === "pay_authorize") {
       // O cartão só pode ser enviado por um admin logado (página de teste), nunca pela chave de teste.
       if (actor === "test-key") return json({ error: "pay_authorize exige um administrador logado" }, 403);
-      if (credential === "informada") return json({ error: "Use a credencial atual (padrao) ou a dos secrets (sem_juros)" }, 400);
       return json(await payAuthorize(ctx, body));
-    }
-    if (action === "pay_issue_boleto") return json(await payIssueBoleto(body));
-    if (action === "pay_boleto_status") return json(await payBoletoStatus(String(body?.codigoSolicitacao || "")));
-    if (action === "pay_cancel_boleto") {
-      const codigo = String(body?.codigoSolicitacao || "");
-      if (!/^[0-9a-fA-F-]{20,64}$/.test(codigo)) return json({ ok: false, error: "codigoSolicitacao inválido" }, 400);
-      await cancelarCobranca(interConfig(), codigo, "Teste de integracao encerrado");
-      return json({ ok: true, codigoSolicitacao: codigo, cancelado: true });
     }
     if (action === "pay_attach") {
       return json(await payAttach(ctx, String(body?.prePaymentKey || ""), String(body?.linhaDigitavel || "")));

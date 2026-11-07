@@ -15,7 +15,8 @@ import { AlertTriangle, FlaskConical, Loader2 } from 'lucide-react';
  * Bancada de teste da integração Quita+ "sem juros" (somente admin).
  *
  * Faz um pagamento REAL de valor baixo, passo a passo, pela função isolada
- * `quitaplus-semjuros-test`. Não cria cobrança, link nem split: nada do fluxo
+ * `quitaplus-semjuros-test`, que usa SOMENTE a credencial nova e o lojista sem juros
+ * (a página não escolhe credencial nem lojista). Não cria cobrança, link nem split: nada do fluxo
  * de produção é tocado. O cartão é digitado aqui e vai direto para a função;
  * não é salvo no navegador nem aparece no registro da página.
  */
@@ -23,8 +24,9 @@ import { AlertTriangle, FlaskConical, Loader2 } from 'lucide-react';
 const FN = 'quitaplus-semjuros-test';
 const MAX_CENTS = 5000;
 
-type Credential = 'padrao' | 'sem_juros';
 interface LogEntry { at: string; action: string; result: unknown }
+/** Resposta de { action: 'status' } da função isolada. */
+interface BenchStatus { lojista?: string; pronto?: boolean; problema?: string | null }
 
 const onlyDigits = (v: string) => v.replace(/\D/g, '');
 
@@ -42,8 +44,6 @@ function Field({ id, label, value, onChange, placeholder, type = 'text', inputMo
 }
 
 export default function SemJurosTest() {
-  const [merchantId, setMerchantId] = useState('54329414000502');
-  const [credential, setCredential] = useState<Credential>('padrao');
   const [amountInput, setAmountInput] = useState('20,00');
   const [installments, setInstallments] = useState('1');
 
@@ -56,17 +56,16 @@ export default function SemJurosTest() {
   const [linhaDigitavel, setLinhaDigitavel] = useState('');
 
   const [busy, setBusy] = useState<string | null>(null);
-  const [semJurosSecrets, setSemJurosSecrets] = useState<boolean | null>(null);
+  const [bench, setBench] = useState<BenchStatus | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
 
-  // Verifica, ao abrir, se a credencial nova existe nos secrets (sem ela, só a atual serve)
+  // A função é isolada na credencial nova: aqui só se confere se ela está pronta para uso
   useEffect(() => {
-    supabase.functions.invoke(FN, { body: { action: 'status' } }).then(({ data }) => {
-      const ok = !!data?.sem_juros?.clientId && !!data?.sem_juros?.clientSecret;
-      setSemJurosSecrets(ok);
-      if (!ok) setCredential('padrao');
-    }).catch(() => setSemJurosSecrets(false));
+    supabase.functions.invoke(FN, { body: { action: 'status' } })
+      .then(({ data, error }) => setBench(error ? { pronto: false, problema: error.message } : (data as BenchStatus)))
+      .catch((e) => setBench({ pronto: false, problema: String(e?.message ?? e) }));
   }, []);
+  const benchReady = bench?.pronto === true;
 
   const amountCents = toCents(amountInput);
   const amountOk = amountCents >= 100 && amountCents <= MAX_CENTS;
@@ -75,7 +74,7 @@ export default function SemJurosTest() {
     setBusy(action);
     try {
       const { data, error } = await supabase.functions.invoke(FN, {
-        body: { action, credential, override: { merchantId: onlyDigits(merchantId) }, ...extra },
+        body: { action, ...extra },
       });
       const result = error ? { ok: false, error: error.message } : data;
       setLog((prev) => [{ at: new Date().toLocaleTimeString('pt-BR'), action, result }, ...prev]);
@@ -147,27 +146,28 @@ export default function SemJurosTest() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">1. Configuração</CardTitle>
-            <CardDescription>Lojista e credencial usados em todas as chamadas abaixo.</CardDescription>
+            <CardDescription>Credencial e lojista são fixos na função de teste; esta página não os altera.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="rounded-lg border p-3 text-sm space-y-1">
+              <p><span className="text-muted-foreground">Credencial:</span> <Badge variant="secondary">nova (sem juros)</Badge></p>
+              <p><span className="text-muted-foreground">Lojista:</span> <span className="font-mono">{bench?.lojista ?? '…'}</span></p>
+              <p className="text-xs text-muted-foreground">
+                A credencial atual (com juros) não é usada nesta página em nenhuma chamada.
+              </p>
+            </div>
+            {bench && !benchReady && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{bench.problema || 'A função de teste não está pronta.'}</AlertDescription>
+              </Alert>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field id="t-merchant" label="Lojista (CNPJ)" value={merchantId} onChange={setMerchantId} inputMode="numeric" />
-              <div className="space-y-1.5">
-                <Label>Credencial</Label>
-                <div className="flex gap-2">
-                  <Button type="button" size="sm" variant={credential === 'padrao' ? 'default' : 'outline'} onClick={() => setCredential('padrao')}>Atual (recomendada)</Button>
-                  <Button type="button" size="sm" variant={credential === 'sem_juros' ? 'default' : 'outline'} disabled={!semJurosSecrets} onClick={() => setCredential('sem_juros')}>Nova (secrets)</Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  A tabela sem juros é definida pelo lojista, não pela credencial.
-                  {semJurosSecrets === false && ' A credencial nova não está cadastrada nos secrets, por isso fica desabilitada.'}
-                </p>
-              </div>
               <Field id="t-amount" label={`Valor (máx. ${formatCents(MAX_CENTS)})`} value={amountInput} onChange={setAmountInput} inputMode="numeric" />
               <Field id="t-inst" label="Parcelas (1 a 12)" value={installments} onChange={(v) => setInstallments(onlyDigits(v).slice(0, 2))} inputMode="numeric" />
             </div>
             {!amountOk && <p className="text-sm text-destructive">Informe um valor entre R$ 1,00 e {formatCents(MAX_CENTS)}.</p>}
-            <Button type="button" variant="outline" disabled={!amountOk || !!busy} onClick={simulate}>
+            <Button type="button" variant="outline" disabled={!amountOk || !!busy || !benchReady} onClick={simulate}>
               <Busy action="simulate" />Simular {formatCents(amountCents)}
             </Button>
           </CardContent>
@@ -196,10 +196,10 @@ export default function SemJurosTest() {
               <Checkbox id="t-confirm" checked={confirmCharge} onCheckedChange={(v) => setConfirmCharge(v === true)} />
               <Label htmlFor="t-confirm" className="text-sm font-normal leading-snug cursor-pointer">
                 Entendo que isto cobra {formatCents(amountCents)} de verdade neste cartão, em {installments || 1}x,
-                no lojista {onlyDigits(merchantId)}.
+                no lojista {bench?.lojista ?? 'sem juros'}, com a credencial nova.
               </Label>
             </div>
-            <Button type="button" disabled={!amountOk || !confirmCharge || !!busy || !!prePaymentKey} onClick={authorize}>
+            <Button type="button" disabled={!amountOk || !confirmCharge || !!busy || !!prePaymentKey || !benchReady} onClick={authorize}>
               <Busy action="pay_authorize" />Pré-autorizar {formatCents(amountCents)}
             </Button>
             {prePaymentKey && (
@@ -244,10 +244,10 @@ export default function SemJurosTest() {
             <CardDescription>Vincula o boleto à pré-autorização e consulta o status no Quita+.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <Button type="button" disabled={!prePaymentKey || ![47, 48].includes(onlyDigits(linhaDigitavel).length) || !!busy} onClick={attach}>
+            <Button type="button" disabled={!prePaymentKey || ![47, 48].includes(onlyDigits(linhaDigitavel).length) || !!busy || !benchReady} onClick={attach}>
               <Busy action="pay_attach" />Vincular boleto
             </Button>
-            <Button type="button" variant="outline" disabled={!prePaymentKey || !!busy} onClick={status}>
+            <Button type="button" variant="outline" disabled={!prePaymentKey || !!busy || !benchReady} onClick={status}>
               <Busy action="prepayment_status" />Consultar status
             </Button>
           </CardContent>
