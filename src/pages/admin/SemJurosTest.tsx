@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DashboardShell } from '@/components/dashboard/DashboardShell';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -56,7 +56,17 @@ export default function SemJurosTest() {
   const [linhaDigitavel, setLinhaDigitavel] = useState('');
 
   const [busy, setBusy] = useState<string | null>(null);
+  const [semJurosSecrets, setSemJurosSecrets] = useState<boolean | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
+
+  // Verifica, ao abrir, se a credencial nova existe nos secrets (sem ela, só a atual serve)
+  useEffect(() => {
+    supabase.functions.invoke(FN, { body: { action: 'status' } }).then(({ data }) => {
+      const ok = !!data?.sem_juros?.clientId && !!data?.sem_juros?.clientSecret;
+      setSemJurosSecrets(ok);
+      if (!ok) setCredential('padrao');
+    }).catch(() => setSemJurosSecrets(false));
+  }, []);
 
   const amountCents = toCents(amountInput);
   const amountOk = amountCents >= 100 && amountCents <= MAX_CENTS;
@@ -145,9 +155,13 @@ export default function SemJurosTest() {
               <div className="space-y-1.5">
                 <Label>Credencial</Label>
                 <div className="flex gap-2">
-                  <Button type="button" size="sm" variant={credential === 'padrao' ? 'default' : 'outline'} onClick={() => setCredential('padrao')}>Atual</Button>
-                  <Button type="button" size="sm" variant={credential === 'sem_juros' ? 'default' : 'outline'} onClick={() => setCredential('sem_juros')}>Sem juros (secrets)</Button>
+                  <Button type="button" size="sm" variant={credential === 'padrao' ? 'default' : 'outline'} onClick={() => setCredential('padrao')}>Atual (recomendada)</Button>
+                  <Button type="button" size="sm" variant={credential === 'sem_juros' ? 'default' : 'outline'} disabled={!semJurosSecrets} onClick={() => setCredential('sem_juros')}>Nova (secrets)</Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  A tabela sem juros é definida pelo lojista, não pela credencial.
+                  {semJurosSecrets === false && ' A credencial nova não está cadastrada nos secrets, por isso fica desabilitada.'}
+                </p>
               </div>
               <Field id="t-amount" label={`Valor (máx. ${formatCents(MAX_CENTS)})`} value={amountInput} onChange={setAmountInput} inputMode="numeric" />
               <Field id="t-inst" label="Parcelas (1 a 12)" value={installments} onChange={(v) => setInstallments(onlyDigits(v).slice(0, 2))} inputMode="numeric" />
