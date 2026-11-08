@@ -27,9 +27,10 @@ As funções atuais (`quitaplus-token`, `quitaplus-prepayment`, `quitaplus-link-
 4. Checkout: `public-charge-modalidade` diz a modalidade; sem juros usa `quitaplus-sj-simulation` (parcelas da faixa,
    acréscimo zero obrigatório) e `quitaplus-sj-prepayment` (credencial/lojista/credor fixos, trava de acréscimo zero,
    tentativa única). PIX sem taxa.
-5. Boleto do Quita+: **sempre o do Inter com o valor do cartão** (`quitaplus-sj-boleto-inter`, automático com
-   `INTER_AUTO_ISSUE=true` ou pelo botão do histórico). O boleto do credor (valor à vista) nunca é vinculado:
-   o cartão vale mais que ele (inclui o desconto retido).
+5. Boleto do Quita+: **sempre o do Inter com o valor do cartão**, emitido **automaticamente** logo após a
+   autorização (`quitaplus-sj-boleto-inter`; o botão do histórico serve para reemitir se falhar). O boleto do
+   credor (valor à vista) nunca é vinculado: o cartão vale mais que ele (inclui o desconto retido). A linha
+   digitável informada pelo operador aparece só para o admin, como referência.
 6. Histórico: selo "Sem juros"; admin vê dívida, boleto do credor, desconto retido (R$ e %), repasse ao cliente.
 
 ## Secrets
