@@ -194,3 +194,6 @@ verify_jwt = false
 
 [functions.public-charge-modalidade]
 verify_jwt = false
+
+[functions.delete-user-admin]
+verify_jwt = false

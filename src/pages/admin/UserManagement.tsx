@@ -285,14 +285,32 @@ export default function UserManagement() {
     }
   };
 
+  // Remoção passa pela função delete-user-admin (service role): nunca apaga papel sem apagar o perfil,
+  // e usuário com cobranças/assinaturas não é apagado — é desativado.
   const deleteUser = async (userId: string, userName: string) => {
     try {
-      await supabase.from('user_roles').delete().eq('user_id', userId);
-      await supabase.from('profiles').delete().eq('id', userId);
-      toast({ title: "Usuário removido", description: `${userName} foi removido` });
-      fetchProfiles();
+      const { data, error } = await supabase.functions.invoke('delete-user-admin', { body: { userId } });
+      if (error) throw new Error(error.message || 'Erro de conexão');
+      if (data?.success) {
+        toast({ title: "Usuário removido", description: `${userName} foi removido` });
+        fetchProfiles();
+        return;
+      }
+      if (data?.error === 'tem_historico') {
+        const { data: updated, error: updError } = await supabase
+          .from('profiles').update({ is_active: false }).eq('id', userId).select('id');
+        if (updError) throw updError;
+        if (!updated?.length) throw new Error('Não foi possível desativar: sem permissão para alterar o perfil.');
+        toast({
+          title: "Usuário desativado",
+          description: `${userName} tem histórico (${data.cobrancas} cobrança(s)) e não pode ser apagado. Ele foi desativado e não consegue mais entrar.`,
+        });
+        fetchProfiles();
+        return;
+      }
+      throw new Error(data?.message || data?.error || 'Erro ao remover usuário');
     } catch (error: any) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      toast({ title: "Erro ao remover", description: error.message, variant: "destructive" });
     }
   };
 
