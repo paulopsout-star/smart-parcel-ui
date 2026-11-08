@@ -2421,7 +2421,9 @@ export default function ChargeHistory() {
                           <BoletoValidity linha={linhaCadastro} className="mt-2" />
                           <p className="text-xs text-amber-600 dark:text-amber-300 mt-1 flex items-center gap-1">
                             <Info className="h-3 w-3" />
-                            {adminJaVinculou
+                            {selectedCharge.modalidade === 'sem_juros'
+                              ? 'Boleto do credor (valor à vista) informado pelo operador. Na modalidade sem juros ele NÃO é vinculado ao Quita+: o boleto vinculado é o do Inter, com o valor do cartão, emitido automaticamente.'
+                              : adminJaVinculou
                               ? 'Esta é a linha digitável cadastrada pelo usuário no momento da cobrança — NÃO é a linha vinculada agora pelo admin.'
                               : selectedCharge.payment_method === 'cartao_pix'
                               ? 'Linha cadastrada pelo usuário no momento da cobrança'

@@ -20,7 +20,7 @@ import {
  *   - antes de autorizar, simula e exige acréscimo zero na condição escolhida (trava: nunca cobrar juros);
  *   - UMA tentativa na autorização (sem retry em 5xx): em timeout o estado é desconhecido e não se repete;
  *   - grava em metadata.quitaplus_sj o que foi usado;
- *   - não vincula o boleto do credor: o boleto do Quita+ é o do Inter, com o valor do cartão (quitaplus-sj-boleto-inter).
+ *   - não vincula o boleto do credor: o boleto do Quita+ é SEMPRE o do Inter, com o valor do cartão, emitido automaticamente (quitaplus-sj-boleto-inter).
  */
 
 const onlyDigits = digits;
@@ -190,21 +190,20 @@ Deno.serve(async (req) => {
     });
 
     // ---- boleto: na modalidade sem juros o boleto do credor (valor à vista) NUNCA é vinculado ao Quita+,
-    // porque o cartão vale mais que ele (inclui o desconto retido). O boleto vinculado é o do Inter, com o
-    // valor do cartão, emitido por quitaplus-sj-boleto-inter — automático com INTER_AUTO_ISSUE=true, senão
-    // pelo botão do histórico. Roda depois da resposta para não atrasar o checkout; falha não afeta o fluxo.
+    // porque o cartão vale mais que ele (inclui o desconto retido). O boleto vinculado é SEMPRE o do Inter,
+    // com o valor do cartão, emitido AUTOMATICAMENTE por quitaplus-sj-boleto-inter (decisão do negócio,
+    // 08/11/2026; não depende de INTER_AUTO_ISSUE). Roda depois da resposta para não atrasar o checkout;
+    // se falhar, o admin reemite pelo botão do histórico.
     const boletoLinked = false;
     const linkBoletoError: string | null = null;
-    if (Deno.env.get("INTER_AUTO_ISSUE") === "true") {
-      const issue = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/quitaplus-sj-boleto-inter`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
-        body: JSON.stringify({ chargeId: charge.id, source: "sj-prepayment" }),
-      }).then(async (r) => console.log("[quitaplus-sj-prepayment] sj-boleto-inter:", r.status, (await r.text()).slice(0, 200)))
-        .catch((e) => console.error("[quitaplus-sj-prepayment] sj-boleto-inter falhou:", e));
-      const rt = (globalThis as any).EdgeRuntime;
-      if (rt?.waitUntil) rt.waitUntil(issue); else await issue;
-    }
+    const issue = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/quitaplus-sj-boleto-inter`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+      body: JSON.stringify({ chargeId: charge.id, source: "sj-prepayment" }),
+    }).then(async (r) => console.log("[quitaplus-sj-prepayment] sj-boleto-inter:", r.status, (await r.text()).slice(0, 200)))
+      .catch((e) => console.error("[quitaplus-sj-prepayment] sj-boleto-inter falhou:", e));
+    const rt = (globalThis as any).EdgeRuntime;
+    if (rt?.waitUntil) rt.waitUntil(issue); else await issue;
 
     return json({ success: true, modalidade: "sem_juros", prePaymentKey, boletoLinked, linkBoletoError, apiRawResponse: responseText, apiMetadata });
   } catch (e) {
