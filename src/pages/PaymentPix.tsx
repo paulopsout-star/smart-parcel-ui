@@ -71,6 +71,8 @@ export default function PaymentPix() {
   const [checking, setChecking] = useState(false);
   const [resolvedSplitId, setResolvedSplitId] = useState<string | null>(null);
   const [paymentLinkId, setPaymentLinkId] = useState<string | null>(null);
+  // Taxa do PIX: 1,5% no fluxo atual; zero na modalidade sem juros (decidido pelo servidor)
+  const [pixFeePercent, setPixFeePercent] = useState<number | null>(null);
 
   // Fetch split and charge data using public edge function (bypasses RLS)
   useEffect(() => {
@@ -129,6 +131,14 @@ export default function PaymentPix() {
           return;
         }
 
+        // Modalidade da cobrança (só leitura do banco; em falha mantém a taxa atual)
+        let feePct = PIX_FEE_PERCENT;
+        try {
+          const { data: mod } = await supabase.functions.invoke('public-charge-modalidade', { body: { id: pixSplit.charge_id || id } });
+          if (mod?.modalidade === 'sem_juros') feePct = 0;
+        } catch { /* mantém 1,5% */ }
+        setPixFeePercent(feePct);
+
         // Store all splits for later use in redirect logic
         setAllSplits(splits as PaymentSplit[]);
         setPaymentLinkId(data.payment_link?.id || null);
@@ -173,7 +183,7 @@ export default function PaymentPix() {
           // For combined payments, validate against split's own amount_cents
           // For pure PIX, validate against charge amount + 1.5%
           const baseForValidation = pixSplit.amount_cents;
-          const expectedTotal = baseForValidation + Math.round(baseForValidation * PIX_FEE_PERCENT);
+          const expectedTotal = baseForValidation + Math.round(baseForValidation * feePct);
           const isAmountCorrect = Math.abs(splitDisplayAmount - expectedTotal) <= 1;
 
           if (isAmountCorrect) {
@@ -221,13 +231,13 @@ export default function PaymentPix() {
 
   // Create PIX payment if needed
   const createPixPayment = useCallback(async () => {
-    if (!split || !charge || pixData) return;
+    if (!split || !charge || pixData || pixFeePercent === null) return;
 
     setCreating(true);
     try {
-      // Calcular valor correto com 1.5% de taxa
+      // Taxa de 1,5% no fluxo atual; zero na modalidade sem juros
       const baseCents = split.amount_cents;
-      const expectedTotal = baseCents + Math.round(baseCents * PIX_FEE_PERCENT);
+      const expectedTotal = baseCents + Math.round(baseCents * pixFeePercent);
       const amountCents = expectedTotal;
 
       const { data, error: createError } = await supabase.functions.invoke(PIX_CREATE_FUNCTION, {
@@ -270,7 +280,7 @@ export default function PaymentPix() {
     } finally {
       setCreating(false);
     }
-  }, [split, charge, pixData]);
+  }, [split, charge, pixData, pixFeePercent]);
 
   // Create PIX after charge data is loaded
   useEffect(() => {

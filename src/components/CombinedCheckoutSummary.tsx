@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QrCode, CreditCard, CheckCircle2, Shield, Loader2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
+import { useModalidadeSimulation } from '@/features/sem-juros/useModalidade';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const PIX_FEE_PERCENT = 0.015;
@@ -19,7 +19,8 @@ interface CombinedCheckoutSummaryProps {
   paymentLinkId: string;
   // cardOriginalCents = valor ORIGINAL (para salvar no DB e enviar à API)
   // cardTotalWithInterestCents = valor COM JUROS (apenas para exibição ao cliente)
-  onConfirm: (pixTotalCents: number, cardOriginalCents: number, cardTotalWithInterestCents: number, cardInstallments: number, installmentValueCents: number) => void;
+  // pixBaseCents = valor do PIX sem taxa (na modalidade sem juros a taxa é zero e base = total)
+  onConfirm: (pixTotalCents: number, cardOriginalCents: number, cardTotalWithInterestCents: number, cardInstallments: number, installmentValueCents: number, pixBaseCents: number) => void;
 }
 
 export function CombinedCheckoutSummary({
@@ -34,9 +35,12 @@ export function CombinedCheckoutSummary({
   const cardCents = initialCardCents;
   const [cardInstallments, setCardInstallments] = useState(1);
 
-  const { data: simulationData, isLoading: isSimulating } = usePaymentSimulation(
-    cardCents > 0 ? cardCents : null
+  // Modalidade decidida pelo servidor: sem_juros usa quitaplus-sj-simulation (parcelas da faixa, acréscimo zero) e PIX sem taxa
+  const { modalidade, data: simulationData, isLoading: isSimulating, error: simulationError } = useModalidadeSimulation(
+    paymentLinkId || chargeId,
+    cardCents > 0 ? cardCents : null,
   );
+  const semJuros = modalidade === 'sem_juros';
 
   const installmentConditions = useMemo(() => {
     if (!simulationData?.simulation?.conditions) return [];
@@ -54,7 +58,7 @@ export function CombinedCheckoutSummary({
     return cardCents;
   }, [selectedCondition, cardCents]);
 
-  const pixFeeCents = useMemo(() => Math.round(pixBaseCents * PIX_FEE_PERCENT), [pixBaseCents]);
+  const pixFeeCents = useMemo(() => (semJuros ? 0 : Math.round(pixBaseCents * PIX_FEE_PERCENT)), [pixBaseCents, semJuros]);
   const pixTotalCents = useMemo(() => pixBaseCents + pixFeeCents, [pixBaseCents, pixFeeCents]);
 
   const totalWithFeeCents = useMemo(() => pixTotalCents + cardTotalWithInterest, [pixTotalCents, cardTotalWithInterest]);
@@ -63,10 +67,10 @@ export function CombinedCheckoutSummary({
     if (installmentConditions.length > 0) {
       return Math.max(...installmentConditions.map(c => c.installments));
     }
-    if (cardCents <= 0) return 1;
+    if (cardCents <= 0 || semJuros) return 1; // sem juros: só as condições da faixa valem
     const max = Math.floor(cardCents / MIN_INSTALLMENT_CENTS);
     return Math.min(Math.max(max, 1), 12);
-  }, [cardCents, installmentConditions]);
+  }, [cardCents, installmentConditions, semJuros]);
 
   useEffect(() => {
     if (cardInstallments > maxInstallments) {
@@ -201,9 +205,10 @@ export function CombinedCheckoutSummary({
             cardCents,              // Valor ORIGINAL (para salvar no DB e enviar à API)
             cardTotalWithInterest,  // Valor COM JUROS (para exibição)
             cardInstallments,
-            selectedCondition?.installmentAmount || Math.ceil(cardTotalWithInterest / cardInstallments)
+            selectedCondition?.installmentAmount || Math.ceil(cardTotalWithInterest / cardInstallments),
+            pixBaseCents
           )}
-          disabled={(pixBaseCents === 0 && cardCents === 0) || isSimulating}
+          disabled={(pixBaseCents === 0 && cardCents === 0) || isSimulating || (semJuros && cardCents > 0 && (!!simulationError || installmentConditions.length === 0))}
           className="w-full h-11 rounded-full text-sm font-semibold"
           size="lg"
         >

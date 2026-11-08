@@ -224,7 +224,8 @@ export default function Checkout() {
     cardOriginalCents: number,
     cardTotalWithInterestCents: number,
     cardInstallments: number,
-    installmentValueCents: number
+    installmentValueCents: number,
+    pixBaseCents?: number
   ) => {
     if (!charge) return;
 
@@ -239,12 +240,13 @@ export default function Checkout() {
       if (pixTotalCents > 0) {
         // pixTotalCents já inclui taxa de 1.5%
         // amount_cents = valor base (sem taxa), display_amount_cents = valor com taxa
-        const pixBaseCents = Math.round(pixTotalCents / 1.015);
+        // (na modalidade sem juros o resumo informa a base = total, sem taxa)
+        const pixBase = pixBaseCents ?? Math.round(pixTotalCents / 1.015);
         splits.push({
           charge_id: chargeId,
           payment_link_id: paymentLinkId,
           method: 'pix',
-          amount_cents: pixBaseCents,
+          amount_cents: pixBase,
           display_amount_cents: pixTotalCents,
           order_index: 1,
           status: 'pending',
