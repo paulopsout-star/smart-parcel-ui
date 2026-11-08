@@ -201,7 +201,18 @@ export default function UserManagement() {
         body: newUserData
       });
 
-      if (error) throw new Error(error.message || 'Erro de conexão');
+      if (error) {
+        // Em resposta não-2xx o supabase-js esconde o corpo em error.context: ler a mensagem real da função
+        let message = error.message || 'Erro de conexão';
+        try {
+          const body = await (error as { context?: Response }).context?.clone().json();
+          if (body?.error) message = String(body.error);
+        } catch { /* corpo não é JSON */ }
+        if (/already been registered|email_exists/i.test(message)) {
+          message = 'Já existe um usuário com este e-mail. Localize-o na lista e altere o que precisar.';
+        }
+        throw new Error(message);
+      }
       if (!data.success) throw new Error(data.error || 'Erro ao criar usuário');
 
       toast({
