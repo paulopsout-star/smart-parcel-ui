@@ -249,7 +249,11 @@ export default function UserManagement() {
       }
 
       if (Object.keys(updates).length > 0) {
-        await supabase.from('profiles').update(updates).eq('id', id);
+        const { data: updated, error } = await supabase.from('profiles').update(updates).eq('id', id).select('id');
+        if (error) throw error;
+        if (!updated || updated.length === 0) {
+          throw new Error('Nenhuma alteração gravada: o perfil não foi encontrado ou você não tem permissão para alterá-lo.');
+        }
       }
 
       toast({ title: "Usuário atualizado" });
