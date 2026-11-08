@@ -16,7 +16,8 @@ import {
   type ResultadoSemJuros,
 } from '@/lib/sem-juros';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, ArrowRight, Check, Info } from 'lucide-react';
+import { AlertCircle, ArrowRight, Check, Info, Tag } from 'lucide-react';
+import { formatarPct } from '@/lib/sem-juros';
 
 function parseCurrencyInput(value: string): string {
   const raw = value.replace(/\D/g, '');
@@ -44,11 +45,60 @@ function CurrencyField({
   );
 }
 
-function SummaryRow({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+function SummaryRow({ label, value, strong = false, highlight = false }: { label: string; value: string; strong?: boolean; highlight?: boolean }) {
+  if (highlight) {
+    return (
+      <div className="flex items-center justify-between gap-4 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+        <span className="text-sm font-semibold flex items-center gap-1.5"><Tag className="h-3.5 w-3.5" />{label}</span>
+        <span className="text-sm font-bold whitespace-nowrap">{value}</span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center justify-between gap-4">
       <span className={strong ? 'font-semibold' : 'text-sm text-muted-foreground'}>{label}</span>
-      <span className={strong ? 'text-xl font-bold' : 'text-sm font-medium'}>{value}</span>
+      <span className={strong ? 'text-2xl font-bold whitespace-nowrap' : 'text-sm font-medium whitespace-nowrap'}>{value}</span>
+    </div>
+  );
+}
+
+/** Economia efetiva do cliente = dívida − total do cliente. Zero quando paga a dívida integral; negativa = acréscimo. */
+function EconomiaCard({ dividaCents, totalClienteCents }: { dividaCents: number; totalClienteCents: number }) {
+  const economia = dividaCents - totalClienteCents;
+  const pct = dividaCents > 0 ? Math.abs(economia) / dividaCents : 0;
+  const acrescimo = economia < 0;
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 rounded-lg bg-emerald-600 p-1.5 text-white"><Tag className="h-4 w-4" /></div>
+          <div>
+            <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              {acrescimo ? 'Acréscimo sobre a dívida' : economia > 0 ? 'Desconto para o cliente' : 'Sem economia efetiva'}
+            </p>
+            <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300 leading-tight">
+              {formatCents(Math.abs(economia))}
+              <span className="ml-2 align-middle text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                {formatarPct(pct, 0)} {acrescimo ? 'de acréscimo' : 'de desconto'}
+              </span>
+            </p>
+            {economia === 0 && (
+              <p className="text-xs text-emerald-700/80 dark:text-emerald-300/80">O cliente paga a dívida integral, parcelada sem juros.</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 text-sm sm:justify-end">
+          <div className="text-right">
+            <p className="text-[11px] text-muted-foreground">Valor original da dívida</p>
+            <p className="font-medium whitespace-nowrap">{formatCents(dividaCents)}</p>
+          </div>
+          <ArrowRight className="h-4 w-4 shrink-0 text-emerald-600" />
+          <div className="text-right">
+            <p className="text-[11px] text-muted-foreground">Valor do cliente</p>
+            <p className="font-bold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">{formatCents(totalClienteCents)}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -145,8 +195,11 @@ export function SemJurosSimulator({ compact = false, onSelect, onSelectComJuros 
         {resultado.valido && (
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Info className="h-3.5 w-3.5" />
-            Diferença entre dívida e boleto: {formatCents(resultado.descontoCents)}
+            Desconto negociado: <span className="font-medium text-foreground">{formatCents(resultado.descontoCents)} ({formatarPct(resultado.descontoPct, 0)})</span>
           </p>
+        )}
+        {resultado.valido && resultado.elegivel && (
+          <EconomiaCard dividaCents={resultado.dividaCents} totalClienteCents={resultado.totalClienteCents} />
         )}
         {erroVisivel && (
           <Alert variant="destructive">
@@ -270,11 +323,17 @@ export function SemJurosSimulator({ compact = false, onSelect, onSelectComJuros 
           <div className="space-y-2.5">
             <SummaryRow label="Valor original da dívida" value={formatCents(resultado.dividaCents)} />
             <SummaryRow label="Valor à vista (boleto)" value={formatCents(resultado.aVistaCents)} />
+            <SummaryRow label="Desconto negociado" value={`${formatCents(resultado.descontoCents)} (${formatarPct(resultado.descontoPct, 0)})`} />
             <Separator />
             <SummaryRow label="Pagamento PIX" value={formatCents(resultado.pixCents)} />
             <SummaryRow
               label="Pagamento cartão"
               value={opcaoSelecionada ? formatCents(opcaoSelecionada.totalCents) : formatCents(resultado.cartaoCents)}
+            />
+            <SummaryRow
+              highlight
+              label={resultado.abatimentoCents < 0 ? 'Acréscimo sobre a dívida' : 'Economia efetiva'}
+              value={`${formatCents(Math.abs(resultado.abatimentoCents))} (${formatarPct(resultado.dividaCents > 0 ? Math.abs(resultado.abatimentoCents) / resultado.dividaCents : 0, 0)})`}
             />
             <Separator />
             <SummaryRow label="Total do cliente" value={formatCents(resultado.totalClienteCents)} strong />
@@ -297,7 +356,7 @@ export function SemJurosSimulator({ compact = false, onSelect, onSelectComJuros 
             </p>
           )}
 
-          <Button className="w-full h-11" size="lg" disabled={!podeContinuar} onClick={continuar}>
+          <Button className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" size="lg" disabled={!podeContinuar} onClick={continuar}>
             {copied ? 'Resumo copiado' : 'Continuar'}
             {copied ? <Check className="ml-2 h-4 w-4" /> : <ArrowRight className="ml-2 h-4 w-4" />}
           </Button>
