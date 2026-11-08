@@ -85,7 +85,7 @@ export default function UserManagement() {
     try {
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, full_name, is_active, created_at, updated_at, company_id')
+        .select('id, full_name, is_active, sem_juros_habilitado, created_at, updated_at, company_id')
         .order('created_at', { ascending: false });
 
       if (profilesError) throw profilesError;
