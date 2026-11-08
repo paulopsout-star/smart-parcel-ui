@@ -7,7 +7,8 @@ import { PaymentForm } from '@/components/PaymentForm';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { CreditCard, CheckCircle2 } from 'lucide-react';
-import { usePaymentSimulation, InstallmentCondition } from '@/hooks/usePaymentSimulation';
+import { InstallmentCondition } from '@/hooks/usePaymentSimulation';
+import { useModalidadeSimulation } from '@/features/sem-juros/useModalidade';
 import {
   Select,
   SelectContent,
@@ -32,7 +33,8 @@ export default function PaymentCard() {
   const [isCombinedPayment, setIsCombinedPayment] = useState(false);
   
   // Buscar simulação para calcular valor com juros (para exibição)
-  const { data: simulation, isLoading: simulationLoading } = usePaymentSimulation(cardAmount > 0 ? cardAmount : null);
+  // Modalidade decidida pelo servidor: sem_juros usa quitaplus-sj-simulation (parcelas da faixa, sem acréscimo)
+  const { modalidade, data: simulation, isLoading: simulationLoading } = useModalidadeSimulation(id, cardAmount > 0 ? cardAmount : null);
   
   // Extrair opções de parcelas da simulação
   const installmentOptions: InstallmentCondition[] = simulation?.simulation?.conditions || [];
@@ -382,6 +384,7 @@ export default function PaymentCard() {
           productName={charge?.description || 'Pagamento'}
           onSuccess={handlePaymentSuccess}
           chargeId={charge?.charge_id || charge?.id || ''}
+          modalidade={modalidade ?? 'com_juros'}
           paymentLinkId={id || ''}
           hasBoleto={charge?.has_boleto || false}
           boletoLinhaDigitavel={charge?.boleto_linha_digitavel || ''}

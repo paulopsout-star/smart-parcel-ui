@@ -8,6 +8,9 @@ export interface Profile {
   role: 'admin' | 'operador';
   is_active: boolean;
   company_id: string;
+  is_demo: boolean;
+  /** Interruptor geral ligado E parâmetro do usuário ligado (rpc sem_juros_habilitado). */
+  sem_juros_habilitado: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -22,6 +25,10 @@ interface AuthContextType {
   signOut: () => Promise<{ error: any }>;
   isAdmin: boolean;
   isOperador: boolean;
+  /** Usuário da empresa de demonstração: dados fictícios, somente leitura. */
+  isDemo: boolean;
+  /** Pode criar cobranças na modalidade sem juros (interruptor geral + parâmetro do usuário). */
+  semJurosHabilitado: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -35,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = async (userId: string) => {
     try {
       // Buscar profile e role em paralelo (Promise.all reduz latência de ~800ms para ~400ms)
-      const [profileResult, roleResult] = await Promise.all([
+      const [profileResult, roleResult, demoResult, semJurosResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, is_active, company_id, created_at, updated_at')
@@ -46,6 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select('role')
           .eq('user_id', userId)
           .maybeSingle(),
+        supabase.rpc('is_demo_user'),
+        supabase.rpc('sem_juros_habilitado'),
       ]);
 
       if (profileResult.error) {
@@ -67,6 +76,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const profile: Profile = {
         ...profileResult.data,
         role,
+        is_demo: demoResult.data === true,
+        sem_juros_habilitado: semJurosResult.data === true,
       };
 
       return profile;
@@ -176,6 +187,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAdmin = profile?.role === 'admin' && profile?.is_active;
   const isOperador = (profile?.role === 'operador' || profile?.role === 'admin') && profile?.is_active;
+  const isDemo = profile?.is_demo === true;
+  const semJurosHabilitado = profile?.sem_juros_habilitado === true && !isDemo;
 
 
   const value = useMemo(() => ({
@@ -188,7 +201,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
     isAdmin,
     isOperador,
-  }), [user, session, profile, loading, isAdmin, isOperador]);
+    isDemo,
+    semJurosHabilitado,
+  }), [user, session, profile, loading, isAdmin, isOperador, isDemo, semJurosHabilitado]);
 
   return (
     <AuthContext.Provider value={value}>

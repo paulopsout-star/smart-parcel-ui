@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { mapSimulationToPaymentOptions, findClosestInstallment } from '@/lib/checkout-utils';
 import { PaymentOption } from '@/types/payment-options';
 import { AlertCircle, CreditCard } from 'lucide-react';
-import { usePaymentSimulation } from '@/hooks/usePaymentSimulation';
+import { useModalidadeSimulation } from '@/features/sem-juros/useModalidade';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function PaymentDirect() {
@@ -40,11 +40,14 @@ export default function PaymentDirect() {
     installmentValueCents: number;
   } | null>(null);
 
-  const { 
-    data: simulation, 
-    isLoading: isSimulating, 
-    error: simulationError 
-  } = usePaymentSimulation(charge?.amount_cents || null);
+  // Modalidade decidida pelo servidor: com_juros usa a simulação atual; sem_juros usa quitaplus-sj-simulation
+  const {
+    modalidade,
+    data: simulation,
+    isLoading: isSimulating,
+    error: simulationError,
+  } = useModalidadeSimulation(id, charge?.amount_cents || null);
+  const semJurosIndisponivel = modalidade === 'sem_juros' && (simulationError as { code?: string } | null)?.code === 'sem_juros_indisponivel';
 
   useEffect(() => {
     const fetchCharge = async () => {
@@ -363,7 +366,17 @@ export default function PaymentDirect() {
           <Alert variant="destructive" className="mb-6 rounded-xl">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Não foi possível simular as opções de parcelamento. Por favor, tente novamente.
+              {semJurosIndisponivel
+                ? 'O parcelamento sem juros desta cobrança está indisponível no momento. Entre em contato com quem enviou o link.'
+                : 'Não foi possível simular as opções de parcelamento. Por favor, tente novamente.'}
+            </AlertDescription>
+          </Alert>
+        )}
+        {modalidade === 'sem_juros' && !simulationError && (
+          <Alert className="mb-6 rounded-xl border-emerald-500/40 bg-emerald-500/5">
+            <AlertCircle className="h-4 w-4 text-emerald-600" />
+            <AlertDescription>
+              Parcelamento <strong>sem juros</strong>: o valor total é o mesmo em qualquer quantidade de parcelas.
             </AlertDescription>
           </Alert>
         )}
@@ -409,6 +422,7 @@ export default function PaymentDirect() {
                 phone: charge.payer_phone || '',
               }}
               chargeId={charge.charge_id || charge.id || ''}
+              modalidade={modalidade ?? 'com_juros'}
               paymentLinkId={id || ''}
               hasBoleto={charge.has_boleto_link || false}
               boletoLinhaDigitavel={charge.boleto_linha_digitavel || ''}

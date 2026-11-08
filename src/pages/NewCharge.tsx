@@ -14,6 +14,7 @@ import { User, Receipt, Banknote, Calculator, CreditCard, QrCode, AlertCircle, B
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { boletoValueCents } from "@/lib/boleto";
 import { type SemJurosPrefill } from "@/lib/sem-juros";
+import { mensagemErroSemJuros, type ComJurosPrefill } from "@/features/sem-juros";
 import { BoletoValidity } from "@/components/BoletoValidity";
 import { formatCurrency as formatBRL } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -186,10 +187,12 @@ export default function NewCharge() {
     description?: string;
     status: 'PENDENTE' | 'PROCESSANDO' | 'CONCLUIDO' | 'ERRO';
   } | null>(null);
-  const { profile, loading: authLoading, isAdmin } = useAuth();
+  const { profile, loading: authLoading, isAdmin, isDemo, semJurosHabilitado } = useAuth();
   const location = useLocation();
   // Dados vindos do simulador sem juros (modal ou /simulador)
   const [semJuros, setSemJuros] = useState<SemJurosPrefill | null>(null);
+  // Simulação que caiu no fluxo COM juros (desconto < 20%): carimbo exigido para usuário habilitado
+  const [simulacao, setSimulacao] = useState<ComJurosPrefill | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -279,6 +282,7 @@ export default function NewCharge() {
   // Aplica a simulação sem juros no formulário
   const aplicarSemJuros = (dados: SemJurosPrefill) => {
     setSemJuros(dados);
+    setSimulacao(null);
     const metodo = dados.pixCents > 0 && dados.cartaoCents > 0 ? 'cartao_pix' : dados.cartaoCents > 0 ? 'cartao' : 'pix';
     setValue('payment_method', metodo, { shouldValidate: false });
     setValue('amount', formatCurrencyInput(String(dados.totalClienteCents)));
@@ -287,15 +291,41 @@ export default function NewCharge() {
     setValue('installments', String(dados.parcelasSelecionadas ?? 1));
   };
 
+  // Aplica a simulação que caiu no fluxo com juros: o cliente paga a dívida; os juros do Quita+ entram no checkout
+  const aplicarComJuros = (dados: ComJurosPrefill) => {
+    setSimulacao(dados);
+    setSemJuros(null);
+    const metodo = dados.pixCents > 0 && dados.cartaoCents > 0 ? 'cartao_pix' : dados.cartaoCents > 0 ? 'cartao' : 'pix';
+    setValue('payment_method', metodo, { shouldValidate: false });
+    setValue('amount', formatCurrencyInput(String(dados.dividaCents)));
+    setValue('pix_amount', metodo === 'cartao_pix' ? formatCurrencyInput(String(dados.pixCents)) : '');
+    setValue('card_amount', metodo === 'cartao_pix' ? formatCurrencyInput(String(dados.cartaoCents)) : '');
+    setValue('installments', String(dados.parcelasSelecionadas ?? 1));
+  };
+
   useEffect(() => {
-    const dados = (location.state as { semJuros?: SemJurosPrefill } | null)?.semJuros;
-    if (dados) {
-      aplicarSemJuros(dados);
+    const state = location.state as { semJuros?: SemJurosPrefill; comJuros?: ComJurosPrefill } | null;
+    if (state?.semJuros) aplicarSemJuros(state.semJuros);
+    else if (state?.comJuros) aplicarComJuros(state.comJuros);
+    if (state?.semJuros || state?.comJuros) {
       // limpa o state para não reaplicar em refresh/voltar
       navigate(location.pathname, { replace: true, state: null });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Usuário habilitado ao sem juros: cobrança com cartão só a partir da simulação
+  const exigeSimulacao = semJurosHabilitado && !semJuros && !simulacao
+    && (watchPaymentMethod === 'cartao' || watchPaymentMethod === 'cartao_pix');
+
+  useEffect(() => {
+    // Ao abrir a tela sem dados de simulação, já mostra o simulador para o usuário habilitado
+    const state = location.state as { semJuros?: unknown; comJuros?: unknown } | null;
+    if (!authLoading && semJurosHabilitado && !state?.semJuros && !state?.comJuros && !semJuros && !simulacao) {
+      setShowSimulatorModal(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, semJurosHabilitado]);
 
   // Consistência: o valor da linha digitável precisa ser igual ao valor à vista do boleto
   const boletoCheck = useMemo(() => {
@@ -439,6 +469,23 @@ export default function NewCharge() {
 
   // 2º argumento: react-hook-form passa o evento; o override explícito só vem de continueCreating
   const onSubmit = async (data: FormData, overrideArg?: unknown) => {
+    if (isDemo) {
+      toast({
+        title: 'Ambiente de demonstração',
+        description: 'A criação de cobranças está desabilitada neste acesso.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (exigeSimulacao) {
+      toast({
+        title: 'Comece pela simulação',
+        description: 'Para o seu usuário, a cobrança com cartão precisa ser preenchida a partir da simulação.',
+        variant: 'destructive',
+      });
+      setShowSimulatorModal(true);
+      return;
+    }
     if (semJuros && boletoCheck.status !== 'ok' && (data.boleto_linha_digitavel || data.payment_method !== 'pix')) {
       toast({
         title: 'Valor do boleto diferente da simulação',
@@ -588,6 +635,17 @@ export default function NewCharge() {
             ...(docDigits === overrideDoc && openCharge ? { duplicate_override_of: openCharge.id } : {}),
             user_agent: navigator.userAgent,
             original_amount: data.payment_method === 'pix' ? formatAmount(data.amount) : undefined,
+            ...(simulacao ? {
+              simulacao: {
+                divida_cents: simulacao.dividaCents,
+                a_vista_cents: simulacao.aVistaCents,
+                desconto_pct: Number(simulacao.descontoPct.toFixed(6)),
+                pix_cents: simulacao.pixCents,
+                cartao_cents: simulacao.cartaoCents,
+                modalidade: 'com_juros',
+                motivo: 'desconto_abaixo_de_20',
+              },
+            } : {}),
             ...(semJuros ? {
               sem_juros: {
                 divida_cents: semJuros.dividaCents,
@@ -718,8 +776,9 @@ export default function NewCharge() {
       
     } catch (error: any) {
       console.error('[NewCharge] Erro ao criar cobrança:', error);
-      const msg = error?.message || 'Erro desconhecido';
-      const details = error?.details || error?.hint || '';
+      const amigavel = mensagemErroSemJuros(error);
+      const msg = amigavel || error?.message || 'Erro desconhecido';
+      const details = amigavel ? '' : (error?.details || error?.hint || '');
       const fullMsg = `${msg}${details ? ` (${details})` : ''}`;
       setError(fullMsg);
       toast({
@@ -910,6 +969,36 @@ export default function NewCharge() {
                   </div>
                 </CardContent>
               </Card>
+
+              {exigeSimulacao && (
+                <Alert>
+                  <Calculator className="h-4 w-4" />
+                  <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                    <span>Para o seu usuário, a cobrança com cartão começa pela simulação (sem juros ou com juros).</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setShowSimulatorModal(true)}>
+                      Abrir simulação
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {simulacao && (
+                <Card className="border-blue-300 bg-blue-50/60">
+                  <CardContent className="pt-4 pb-4 flex flex-wrap items-start justify-between gap-3 text-sm">
+                    <div className="space-y-1">
+                      <p className="font-semibold text-blue-800">Simulação aplicada: fluxo com juros (Quita+)</p>
+                      <p className="text-blue-900">
+                        Dívida {formatBRL(simulacao.dividaCents)} · Boleto à vista {formatBRL(simulacao.aVistaCents)} · Desconto {(simulacao.descontoPct * 100).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% (abaixo de 20%)
+                        {simulacao.pixCents > 0 ? ` · PIX ${formatBRL(simulacao.pixCents)}` : ''}
+                      </p>
+                      <p className="text-xs text-blue-800">O cliente paga a dívida; os juros do Quita+ são aplicados no checkout.</p>
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setSimulacao(null)}>
+                      Remover
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
               {semJuros && (
                 <Card className="border-green-300 bg-green-50/60">
@@ -1207,6 +1296,8 @@ export default function NewCharge() {
           open={showSimulatorModal}
           onOpenChange={setShowSimulatorModal}
           onSemJurosContinue={aplicarSemJuros}
+          onComJurosContinue={aplicarComJuros}
+          obrigatorio={exigeSimulacao}
         />
 
         {showCheckoutModal && checkoutData && (

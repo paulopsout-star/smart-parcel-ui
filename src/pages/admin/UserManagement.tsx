@@ -22,6 +22,8 @@ interface Profile {
   full_name: string;
   role: 'admin' | 'operador';
   is_active: boolean;
+  /** Pode criar cobranças na modalidade sem juros (obriga a simulação). Só admin altera. */
+  sem_juros_habilitado?: boolean;
   created_at: string;
   updated_at: string;
   company_id: string;
@@ -503,6 +505,14 @@ export default function UserManagement() {
                           id={`active-${profile.id}`}
                           checked={profile.is_active}
                           onCheckedChange={(checked) => updateProfile(profile.id, { is_active: checked })}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2" title="Modalidade sem juros: a cobrança com cartão passa a começar pela simulação">
+                        <Label htmlFor={`sj-${profile.id}`} className="text-sm">Sem juros</Label>
+                        <Switch
+                          id={`sj-${profile.id}`}
+                          checked={!!profile.sem_juros_habilitado}
+                          onCheckedChange={(checked) => updateProfile(profile.id, { sem_juros_habilitado: checked })}
                         />
                       </div>
                       <Select

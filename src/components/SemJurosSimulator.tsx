@@ -58,15 +58,21 @@ interface SemJurosSimulatorProps {
   compact?: boolean;
   /** Chamado ao clicar em "Continuar" com uma opção escolhida. Sem ele, o resumo é copiado. */
   onSelect?: (resultado: ResultadoSemJuros, opcao: OpcaoParcela | null) => void;
+  /**
+   * Desconto abaixo de 20%: a cobrança segue COM juros (Quita+). Quando informado, aparece
+   * "Continuar com juros" levando dívida, à vista, PIX e a parcela escolhida na simulação do Quita+.
+   */
+  onSelectComJuros?: (resultado: ResultadoSemJuros, parcelasSelecionadas: number | null) => void;
 }
 
-export function SemJurosSimulator({ compact = false, onSelect }: SemJurosSimulatorProps) {
+export function SemJurosSimulator({ compact = false, onSelect, onSelectComJuros }: SemJurosSimulatorProps) {
   const { toast } = useToast();
   const [dividaInput, setDividaInput] = useState('');
   const [aVistaInput, setAVistaInput] = useState('');
   const [combinarPix, setCombinarPix] = useState(false);
   const [pixInput, setPixInput] = useState('');
   const [parcelasSelecionadas, setParcelasSelecionadas] = useState<number | null>(null);
+  const [parcelasComJuros, setParcelasComJuros] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
   const resultado = useMemo(
@@ -84,10 +90,10 @@ export function SemJurosSimulator({ compact = false, onSelect }: SemJurosSimulat
   const pixCobreTudo = resultado.valido && resultado.elegivel && resultado.cartaoCents === 0;
   const podeContinuar = resultado.valido && resultado.elegivel && (!!opcaoSelecionada || pixCobreTudo);
 
-  const onDivida = useCallback((v: string) => { setDividaInput(v); setParcelasSelecionadas(null); }, []);
-  const onAVista = useCallback((v: string) => { setAVistaInput(v); setParcelasSelecionadas(null); }, []);
-  const onPix = useCallback((v: string) => { setPixInput(v); setParcelasSelecionadas(null); }, []);
-  const onCombinar = useCallback((v: boolean) => { setCombinarPix(v); setParcelasSelecionadas(null); }, []);
+  const onDivida = useCallback((v: string) => { setDividaInput(v); setParcelasSelecionadas(null); setParcelasComJuros(null); }, []);
+  const onAVista = useCallback((v: string) => { setAVistaInput(v); setParcelasSelecionadas(null); setParcelasComJuros(null); }, []);
+  const onPix = useCallback((v: string) => { setPixInput(v); setParcelasSelecionadas(null); setParcelasComJuros(null); }, []);
+  const onCombinar = useCallback((v: boolean) => { setCombinarPix(v); setParcelasSelecionadas(null); setParcelasComJuros(null); }, []);
 
   const textoResumo = useCallback(() => {
     const cartao = opcaoSelecionada
@@ -191,7 +197,21 @@ export function SemJurosSimulator({ compact = false, onSelect }: SemJurosSimulat
               amountCents={cartaoComJurosCents}
               title="Parcelamento com juros (Quita+)"
               subtitle={`Parcele os ${formatCents(cartaoComJurosCents)} do cartão`}
+              onSelectInstallment={onSelectComJuros ? (n) => setParcelasComJuros(n) : undefined}
+              selectedInstallments={parcelasComJuros ?? undefined}
             />
+          )}
+          {onSelectComJuros && (
+            <Button
+              className="w-full h-11"
+              size="lg"
+              variant="secondary"
+              disabled={cartaoComJurosCents > 0 && !parcelasComJuros}
+              onClick={() => onSelectComJuros(resultado, cartaoComJurosCents > 0 ? parcelasComJuros : null)}
+            >
+              Continuar com juros
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
           )}
         </section>
       )}

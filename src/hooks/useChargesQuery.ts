@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { maskChargePayer } from '@/lib/demo-mask';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { startOfMonth, endOfDay } from 'date-fns';
@@ -34,6 +35,7 @@ const CHARGES_SELECT = `
   creditor_name,
   company_id,
   metadata,
+  modalidade,
   status_locked_at,
   company:companies(id, name),
   executions:charge_executions(
@@ -227,7 +229,7 @@ async function fetchChargesPage(
 }
 
 export function useChargesQuery(filters: ChargeFilters, page: number) {
-  const { isAdmin, profile } = useAuth();
+  const { isAdmin, profile, isDemo } = useAuth();
 
   return useQuery({
     queryKey: ['charges', {
@@ -240,8 +242,13 @@ export function useChargesQuery(filters: ChargeFilters, page: number) {
       companyId: filters.company_id,
       page,
       companyIdProfile: profile?.company_id,
+      demo: isDemo,
     }],
-    queryFn: () => fetchChargesPage(filters, page, isAdmin),
+    queryFn: async () => {
+      const result = await fetchChargesPage(filters, page, isAdmin);
+      // Acesso demo: dados reais da empresa, mas com PII do pagador mascarada
+      return isDemo ? { ...result, charges: result.charges.map(maskChargePayer) } : result;
+    },
     enabled: !!profile?.company_id,
     staleTime: 60_000,
     placeholderData: (prev) => prev,

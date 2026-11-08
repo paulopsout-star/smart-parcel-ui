@@ -188,3 +188,9 @@ verify_jwt = false
 
 [functions.quitaplus-sj-status]
 verify_jwt = false
+
+[functions.quitaplus-sj-boleto-inter]
+verify_jwt = false
+
+[functions.public-charge-modalidade]
+verify_jwt = false

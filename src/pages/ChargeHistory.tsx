@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { maskCardHolder } from '@/lib/demo-mask';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -104,12 +105,15 @@ interface Charge {
   company_id?: string;
   company?: Company;
   status_locked_at?: string;
+  /** 'com_juros' (fluxo atual) | 'sem_juros' (funções quitaplus-sj-*) */
+  modalidade?: string;
   metadata?: {
     link_boleto_error?: {
       message: string;
       attemptedAt: string;
       httpStatus?: number;
     };
+    sem_juros?: SemJurosMetadata;
   };
   executions: Array<{
     id: string;
@@ -124,6 +128,8 @@ interface Charge {
 
 // ChargeFilters is now imported from the hook
 import { useChargesQuery, DEFAULT_FILTERS, PAGE_SIZE, deduplicateSplits, CHARGES_SELECT, CHARGE_SITUATIONS, CHARGE_STATUSES, PARTIAL_STATUS_FILTER } from '@/hooks/useChargesQuery';
+import { fnPorModalidade, lerSemJuros, type SemJurosMetadata } from '@/features/sem-juros';
+import { SemJurosBadge, SemJurosResumoAdmin } from '@/features/sem-juros/SemJurosResumoAdmin';
 import type { ChargeFilters } from '@/hooks/useChargesQuery';
 
 // Helper functions
@@ -281,6 +287,7 @@ const getPaymentMethodBadge = (method: string) => {
 // Componente para exibir os métodos de pagamento (splits) com breakdown de taxas
 const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: boolean }) => {
   const splits = charge.splits || [];
+  const semJuros = charge.modalidade === 'sem_juros' ? lerSemJuros(charge.metadata) : null;
 
   const pixSplit = splits.find(s => s.method === 'pix');
   const cardSplit = splits.find(s => s.method === 'credit_card');
@@ -441,10 +448,16 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                 <span>Valor original:</span>
                 <span>{formatCurrency(pixBase)}</span>
               </div>
-              {isAdmin && (
+              {isAdmin && !semJuros && (
                 <div className="flex justify-between text-green-600">
                   <span>Taxa PIX ({pixFeePercent}%):</span>
                   <span>{pixFee > 0 ? `+ ${formatCurrency(pixFee)}` : 'R$ 0,00'}</span>
+                </div>
+              )}
+              {isAdmin && semJuros && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Taxa PIX:</span>
+                  <span>isenta (sem juros)</span>
                 </div>
               )}
               <div className="border-t border-green-500/10 pt-1.5 mt-1.5">
@@ -521,10 +534,16 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
                 <span>Valor original:</span>
                 <span>{formatCurrency(cardBase)}</span>
               </div>
-              {isAdmin && (
+              {isAdmin && !semJuros && (
                 <div className="flex justify-between text-blue-600">
                   <span>Juros {cardSplit?.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''} ({cardFeePercent}%):</span>
                   <span>{cardFee > 0 ? `+ ${formatCurrency(cardFee)}` : 'R$ 0,00'}</span>
+                </div>
+              )}
+              {isAdmin && semJuros && (
+                <div className="flex justify-between text-emerald-700">
+                  <span>Juros {cardSplit?.installments && cardSplit.installments > 1 ? `(${cardSplit.installments}x)` : ''}:</span>
+                  <span>R$ 0,00 (sem juros)</span>
                 </div>
               )}
               <div className="border-t border-blue-500/10 pt-1.5 mt-1.5">
@@ -537,6 +556,11 @@ const PaymentMethodsSummary = ({ charge, isAdmin }: { charge: Charge; isAdmin: b
           </div>
         )}
       </div>
+
+      {/* Sem juros: a "taxa" da modalidade é o desconto retido do credor (só admin) */}
+      {isAdmin && semJuros && (
+        <SemJurosResumoAdmin dados={semJuros} parcelas={cardSplit?.installments ?? charge.installments ?? null} />
+      )}
 
       {/* Total Geral - só somar o que foi efetivamente pago */}
       {hasPix && hasCard && !isTerminalStatus && (() => {
@@ -689,7 +713,10 @@ const ChargeListRow = ({ charge, onViewDetails, isAdmin }: ChargeListRowProps) =
       
       {/* Tipo de Pagamento */}
       <TableCell className="hidden sm:table-cell">
-        {charge.payment_method && getPaymentMethodBadge(charge.payment_method)}
+        <div className="flex flex-wrap items-center gap-1">
+          {charge.payment_method && getPaymentMethodBadge(charge.payment_method)}
+          {charge.modalidade === 'sem_juros' && <SemJurosBadge className="text-[10px]" />}
+        </div>
       </TableCell>
       
       {/* Status */}
@@ -803,7 +830,7 @@ const ExecutionsDialogContent = ({
 };
 
 export default function ChargeHistory() {
-  const { isOperador, isAdmin, profile } = useAuth();
+  const { isOperador, isAdmin, profile, isDemo } = useAuth();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [selectedCharge, setSelectedCharge] = useState<Charge | null>(null);
@@ -860,11 +887,11 @@ export default function ChargeHistory() {
           console.error('[ChargeHistory] Erro ao buscar portador do cartão:', error);
           return;
         }
-        setHolderDetails(data);
+        setHolderDetails(data && isDemo ? maskCardHolder(data) : data);
       });
 
     return () => { cancelled = true; };
-  }, [selectedCharge?.id]);
+  }, [selectedCharge?.id, isDemo]);
   const [executionsDialog, setExecutionsDialog] = useState<{ open: boolean; chargeId: string; chargeName: string }>({
     open: false,
     chargeId: '',
@@ -1082,6 +1109,14 @@ export default function ChargeHistory() {
   };
 
   const handleRetryLinkBoleto = async (charge: Charge) => {
+    if (charge.modalidade === 'sem_juros') {
+      toast({
+        title: "Cobrança sem juros",
+        description: "Nesta modalidade o boleto do credor não é vinculado ao Quita+. Use \"Emitir no Inter e vincular\" (valor do cartão).",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!charge.pre_payment_key || !charge.boleto_linha_digitavel) {
       toast({
         title: "Erro",
@@ -1189,7 +1224,7 @@ export default function ChargeHistory() {
   const handleInterIssue = async (charge: Charge) => {
     setInterIssuing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('inter-boleto-issue', {
+      const { data, error } = await supabase.functions.invoke(fnPorModalidade('inter-boleto-issue', charge.modalidade as 'com_juros' | 'sem_juros' | undefined), {
         body: { chargeId: charge.id, source: 'admin' },
       });
       if (error) {
@@ -1256,14 +1291,24 @@ export default function ChargeHistory() {
         setTimeout(() => reject(new Error('TIMEOUT')), 20000)
       );
 
-      const invokePromise = supabase.functions.invoke('admin-link-boleto', {
-        body: {
-          chargeId: charge.id,
-          linhaDigitavel: sanitized,
-          allowValueMismatch: adminAllowMismatch,
-          allowExpired: adminAllowExpired,
-        },
-      });
+      const invokePromise = charge.modalidade === 'sem_juros'
+        ? supabase.functions.invoke('quitaplus-sj-link-boleto', {
+            body: { prePaymentKey: charge.pre_payment_key, paymentLinkId: charge.id, boleto: { number: sanitized } },
+          }).then(async (r) => {
+            // mesmo registro que admin-link-boleto faz no fluxo atual
+            if (!r.error && r.data?.success) {
+              await supabase.from('charges').update({ boleto_admin_linha_digitavel: sanitized }).eq('id', charge.id);
+            }
+            return r;
+          })
+        : supabase.functions.invoke('admin-link-boleto', {
+            body: {
+              chargeId: charge.id,
+              linhaDigitavel: sanitized,
+              allowValueMismatch: adminAllowMismatch,
+              allowExpired: adminAllowExpired,
+            },
+          });
 
       const { data, error } = await Promise.race([invokePromise, timeoutPromise]);
 
@@ -1414,6 +1459,7 @@ export default function ChargeHistory() {
 
   // Polling automático: sincronizar a cada 5 minutos se houver cobranças pendentes
   useEffect(() => {
+    if (isDemo) return; // demo não dispara sincronizações com provedores
     // Sincronização inicial ao carregar a página (se houver cobranças pendentes)
     const initialSyncTimeout = setTimeout(() => {
       if (hasPendingCharges() && !syncing) {
@@ -1436,7 +1482,7 @@ export default function ChargeHistory() {
         clearInterval(autoSyncRef.current);
       }
     };
-  }, [hasPendingCharges, syncing, syncPaymentStatuses]);
+  }, [hasPendingCharges, syncing, syncPaymentStatuses, isDemo]);
   // Reset page when filters change
   useEffect(() => {
     setPage(0);
@@ -2046,6 +2092,7 @@ export default function ChargeHistory() {
                       {getModernStatusBadge(getComputedStatus(selectedCharge))}
                       <Badge variant="outline">{selectedCharge.recurrence_type}</Badge>
                       {selectedCharge.payment_method && getPaymentMethodBadge(selectedCharge.payment_method)}
+                      {selectedCharge.modalidade === 'sem_juros' && <SemJurosBadge />}
                       {selectedCharge.status_locked_at && (
                         <Badge variant="warning" className="text-[10px]">🔒 Status manual</Badge>
                       )}

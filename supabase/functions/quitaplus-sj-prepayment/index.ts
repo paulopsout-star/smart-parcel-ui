@@ -2,7 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
 import {
   corsHeaders, digits, extractUserFriendlyMessage, filtrarCondicoes, json, loadSjCharge, quitaHeaders,
-  registrarUsoSj, sjAttachBankslip, sjCardAmount, sjCtx, sjMaxInstallments, SJ_PARCELA_MINIMA_CENTS, sjSimulate, sjToken,
+  registrarUsoSj, sjCardAmount, sjCtx, sjMaxInstallments, SJ_PARCELA_MINIMA_CENTS, sjSimulate, sjToken,
 } from "../_shared/quitaplus-sj.ts";
 
 /**
@@ -19,7 +19,8 @@ import {
  *   - valida parcelas contra a faixa da cobrança e a parcela mínima, e o valor contra o cartão da simulação;
  *   - antes de autorizar, simula e exige acréscimo zero na condição escolhida (trava: nunca cobrar juros);
  *   - UMA tentativa na autorização (sem retry em 5xx): em timeout o estado é desconhecido e não se repete;
- *   - grava em metadata.quitaplus_sj o que foi usado.
+ *   - grava em metadata.quitaplus_sj o que foi usado;
+ *   - não vincula o boleto do credor: o boleto do Quita+ é o do Inter, com o valor do cartão (quitaplus-sj-boleto-inter).
  */
 
 const onlyDigits = digits;
@@ -188,39 +189,19 @@ Deno.serve(async (req) => {
       total_condicao_cents: escolhida.totalAmount, em: new Date().toISOString(),
     });
 
-    // ---- boleto: só-cartão vincula agora com a credencial sem juros; combinado segue o fluxo atual (manual/Inter) ----
-    let boletoLinked = false;
-    let linkBoletoError: string | null = null;
-    if (charge.payment_method === "cartao" && charge.boleto_linha_digitavel) {
-      try {
-        const r = await sjAttachBankslip(ctx, token, prePaymentKey, charge.boleto_linha_digitavel);
-        if (r.ok) {
-          boletoLinked = true;
-          await supabase.from("charges").update({ status: "boleto_linked", boleto_linked_at: new Date().toISOString() }).eq("id", charge.id);
-          if (paymentLinkId) {
-            await supabase.from("payment_splits").update({ link_id: r.data?.linkId ?? r.data?.link_id ?? null, status: "linked" })
-              .eq("payment_link_id", paymentLinkId).eq("pre_payment_key", prePaymentKey);
-          }
-        } else {
-          linkBoletoError = `HTTP ${r.status}: ${r.text.slice(0, 200)}`;
-        }
-      } catch (e) {
-        linkBoletoError = e instanceof Error ? e.message : "Erro ao vincular boleto";
-      }
-      if (linkBoletoError) {
-        console.error("[quitaplus-sj-prepayment] vínculo do boleto falhou:", linkBoletoError);
-        const { data: cur } = await supabase.from("charges").select("metadata").eq("id", charge.id).maybeSingle();
-        await supabase.from("charges").update({
-          metadata: { ...((cur?.metadata as Record<string, unknown>) || {}), link_boleto_error: { message: linkBoletoError, attemptedAt: new Date().toISOString() } },
-        }).eq("id", charge.id);
-      }
-    } else if (charge.payment_method === "cartao_pix" && Deno.env.get("INTER_AUTO_ISSUE") === "true") {
-      const issue = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/inter-boleto-issue`, {
+    // ---- boleto: na modalidade sem juros o boleto do credor (valor à vista) NUNCA é vinculado ao Quita+,
+    // porque o cartão vale mais que ele (inclui o desconto retido). O boleto vinculado é o do Inter, com o
+    // valor do cartão, emitido por quitaplus-sj-boleto-inter — automático com INTER_AUTO_ISSUE=true, senão
+    // pelo botão do histórico. Roda depois da resposta para não atrasar o checkout; falha não afeta o fluxo.
+    const boletoLinked = false;
+    const linkBoletoError: string | null = null;
+    if (Deno.env.get("INTER_AUTO_ISSUE") === "true") {
+      const issue = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/quitaplus-sj-boleto-inter`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
         body: JSON.stringify({ chargeId: charge.id, source: "sj-prepayment" }),
-      }).then(async (r) => console.log("[quitaplus-sj-prepayment] inter-boleto-issue:", r.status, (await r.text()).slice(0, 200)))
-        .catch((e) => console.error("[quitaplus-sj-prepayment] inter-boleto-issue falhou:", e));
+      }).then(async (r) => console.log("[quitaplus-sj-prepayment] sj-boleto-inter:", r.status, (await r.text()).slice(0, 200)))
+        .catch((e) => console.error("[quitaplus-sj-prepayment] sj-boleto-inter falhou:", e));
       const rt = (globalThis as any).EdgeRuntime;
       if (rt?.waitUntil) rt.waitUntil(issue); else await issue;
     }

@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          description: string | null
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       card_holder_details: {
         Row: {
           charge_id: string | null
@@ -249,6 +273,7 @@ export type Database = {
           message_template_id: string | null
           message_template_snapshot: Json | null
           metadata: Json | null
+          modalidade: string
           next_charge_date: string | null
           payer_document: string
           payer_email: string
@@ -294,6 +319,7 @@ export type Database = {
           message_template_id?: string | null
           message_template_snapshot?: Json | null
           metadata?: Json | null
+          modalidade?: string
           next_charge_date?: string | null
           payer_document: string
           payer_email: string
@@ -339,6 +365,7 @@ export type Database = {
           message_template_id?: string | null
           message_template_snapshot?: Json | null
           metadata?: Json | null
+          modalidade?: string
           next_charge_date?: string | null
           payer_document?: string
           payer_email?: string
@@ -814,6 +841,8 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
+          is_demo: boolean
+          sem_juros_habilitado: boolean
           updated_at: string
         }
         Insert: {
@@ -823,6 +852,8 @@ export type Database = {
           full_name: string
           id: string
           is_active?: boolean
+          is_demo?: boolean
+          sem_juros_habilitado?: boolean
           updated_at?: string
         }
         Update: {
@@ -832,6 +863,8 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
+          is_demo?: boolean
+          sem_juros_habilitado?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -1144,6 +1177,21 @@ export type Database = {
       }
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
       partially_paid_charge_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
+      is_demo_user: { Args: Record<PropertyKey, never>; Returns: boolean }
+      sem_juros_ativo: { Args: Record<PropertyKey, never>; Returns: boolean }
+      sem_juros_habilitado: { Args: Record<PropertyKey, never>; Returns: boolean }
+      sem_juros_regras: {
+        Args: { p_divida_cents: number; p_a_vista_cents: number }
+        Returns: {
+          elegivel: boolean
+          parcelas_maximas: number
+          desconto_cents: number
+          desconto_pct: number
+          desconto_retido_cents: number
+          total_cliente_cents: number
+          abatimento_cents: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

@@ -57,6 +57,8 @@ function CheckoutPixContent() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(false);
+  // Taxa do PIX: 1,5% no fluxo atual; zero na modalidade sem juros (decidido pelo servidor)
+  const [pixFeePercent, setPixFeePercent] = useState<number | null>(null);
 
   // Fetch charge data via public edge function (no RLS issues)
   useEffect(() => {
@@ -94,6 +96,14 @@ function CheckoutPixContent() {
           setLoading(false);
           return;
         }
+
+        // Modalidade da cobrança (só leitura do banco; em falha mantém a taxa atual)
+        let feePct = PIX_FEE_PERCENT;
+        try {
+          const { data: mod } = await supabase.functions.invoke('public-charge-modalidade', { body: { id: checkoutData.charge_id || checkoutData.id } });
+          if (mod?.modalidade === 'sem_juros') feePct = 0;
+        } catch { /* mantém 1,5% */ }
+        setPixFeePercent(feePct);
 
         const chargeData: ChargeData = {
           id: checkoutData.charge_id || checkoutData.id,
@@ -143,7 +153,7 @@ function CheckoutPixContent() {
           }
 
           // Validar se o display_amount_cents do split confere com 1.5%
-          const expectedTotal = chargeData.amount + Math.round(chargeData.amount * PIX_FEE_PERCENT);
+          const expectedTotal = chargeData.amount + Math.round(chargeData.amount * feePct);
           const splitDisplayAmount = existingSplit.display_amount_cents || existingSplit.amount_cents;
           const isAmountCorrect = Math.abs(splitDisplayAmount - expectedTotal) <= 1;
 
@@ -196,14 +206,14 @@ function CheckoutPixContent() {
 
   // Create PIX payment
   const createPixPayment = useCallback(async () => {
-    if (!charge || pixData) return;
+    if (!charge || pixData || pixFeePercent === null) return;
 
     setCreating(true);
     try {
       // charge.amount sempre armazena o valor BASE da dívida (sem taxa)
       // A taxa de 1.5% é calculada aqui no checkout
       const baseCents = charge.amount;
-      const feeCents = Math.round(baseCents * PIX_FEE_PERCENT);
+      const feeCents = Math.round(baseCents * pixFeePercent);
       const totalCents = baseCents + feeCents;
 
       // Reuse existing split or create new one — prevents duplicates
@@ -299,7 +309,7 @@ function CheckoutPixContent() {
     } finally {
       setCreating(false);
     }
-  }, [charge, pixData, splitId]);
+  }, [charge, pixData, splitId, pixFeePercent]);
 
   // Create PIX after charge is loaded
   useEffect(() => {

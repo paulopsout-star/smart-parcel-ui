@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { CARD_HOLDER_RELATIONSHIPS } from "@/types/payment";
 import type { CardHolderRelationship, PaymentFormData, PaymentState } from "@/types/payment";
+import { fnPorModalidade, type Modalidade } from "@/features/sem-juros";
 
 /** Pagador do CADASTRO da cobrança — somente leitura; é o que o backend envia ao Quita+. */
 export interface RegisteredPayer {
@@ -35,6 +36,8 @@ interface PaymentFormProps {
   skipSplitCheck?: boolean;
   disableSubmit?: boolean;
   registeredPayer?: RegisteredPayer;
+  /** Modalidade da cobrança: sem_juros usa as funções isoladas quitaplus-sj-*. Padrão com_juros (fluxo atual). */
+  modalidade?: Modalidade;
 }
 
 type FormErrors = Partial<Record<keyof PaymentFormData, string>>;
@@ -107,6 +110,7 @@ export function PaymentForm({
   skipSplitCheck = false,
   disableSubmit = false,
   registeredPayer,
+  modalidade = 'com_juros',
 }: PaymentFormProps) {
   // Valor para enviar à API = amount (original)
   // Valor para exibir ao cliente = amountDisplay || amount
@@ -262,7 +266,7 @@ export function PaymentForm({
       // O pagador enviado ao Quita+ é resolvido no backend a partir do cadastro da
       // cobrança. Daqui vão apenas o cartão e os dados do PORTADOR (guardados no painel).
       const { data: prePaymentData, error: prePaymentError } = await supabase.functions.invoke(
-        'quitaplus-prepayment',
+        fnPorModalidade('quitaplus-prepayment', modalidade),
         {
           body: {
             chargeId,
@@ -323,7 +327,9 @@ export function PaymentForm({
 
       console.log('[PaymentForm] Cartão autorizado! PrePaymentKey:', prePaymentKey);
 
-      if (hasBoleto && boletoLinhaDigitavel && creditorDocument && creditorName) {
+      // Sem juros: o boleto do credor (valor à vista) nunca é vinculado — o Quita+ paga o boleto do Inter
+      // com o valor do cartão, emitido pelo backend (quitaplus-sj-boleto-inter) ou pelo painel.
+      if (modalidade !== 'sem_juros' && hasBoleto && boletoLinhaDigitavel && creditorDocument && creditorName) {
         console.log('[PaymentForm] ✅ Vinculando boleto ao pré-pagamento...');
 
         try {
@@ -378,7 +384,9 @@ export function PaymentForm({
 
       toast({
         title: "Pagamento autorizado!",
-        description: hasBoleto
+        description: modalidade === 'sem_juros'
+          ? `Transação processada em ${installments}x sem juros.`
+          : hasBoleto
           ? `Cartão autorizado e boleto vinculado com sucesso!`
           : `Transação processada com sucesso em ${installments}x.`,
       });

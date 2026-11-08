@@ -15,6 +15,9 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { montarPrefill, type SemJurosPrefill } from '@/lib/sem-juros';
+import type { ComJurosPrefill } from '@/features/sem-juros';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Info } from 'lucide-react';
 import { formatCents, toCents } from '@/lib/currency-utils';
 import { InstallmentCondition } from '@/hooks/usePaymentSimulation';
 import { Calculator, QrCode, CreditCard } from 'lucide-react';
@@ -70,9 +73,13 @@ interface SimulatorModalProps {
   initialAmount?: number; // em centavos
   /** Chamado ao "Continuar" no sem juros. Sem ele, navega para /new-charge com os dados. */
   onSemJurosContinue?: (dados: SemJurosPrefill) => void;
+  /** Chamado ao "Continuar com juros" (desconto < 20%). Sem ele, navega para /new-charge com os dados. */
+  onComJurosContinue?: (dados: ComJurosPrefill) => void;
+  /** Usuário habilitado ao sem juros precisa simular antes de criar a cobrança: abre na aba sem juros com aviso. */
+  obrigatorio?: boolean;
 }
 
-export function SimulatorModal({ open, onOpenChange, initialAmount, onSemJurosContinue }: SimulatorModalProps) {
+export function SimulatorModal({ open, onOpenChange, initialAmount, onSemJurosContinue, onComJurosContinue, obrigatorio = false }: SimulatorModalProps) {
   const navigate = useNavigate();
   const [pixInput, setPixInput] = useState('1.000,00');
   const [cardInput, setCardInput] = useState(
@@ -81,10 +88,10 @@ export function SimulatorModal({ open, onOpenChange, initialAmount, onSemJurosCo
       : '1.000,00'
   );
   const [selectedCondition, setSelectedCondition] = useState<InstallmentCondition | null>(null);
-  const { isAdmin } = useAuth();
-  const [tab, setTab] = useState<'sem_juros' | 'com_juros'>('com_juros');
-  // Aba "Sem juros" restrita a administradores por enquanto
-  const activeTab = isAdmin ? tab : 'com_juros';
+  const { semJurosHabilitado } = useAuth();
+  const [tab, setTab] = useState<'sem_juros' | 'com_juros'>(obrigatorio ? 'sem_juros' : 'com_juros');
+  // Aba "Sem juros" só para usuários habilitados (interruptor geral + parâmetro do usuário)
+  const activeTab = semJurosHabilitado ? tab : 'com_juros';
 
   const handleSemJurosContinue = useCallback<NonNullable<Parameters<typeof SemJurosSimulator>[0]['onSelect']>>(
     (resultado, opcao) => {
@@ -94,6 +101,23 @@ export function SimulatorModal({ open, onOpenChange, initialAmount, onSemJurosCo
       else navigate('/new-charge', { state: { semJuros: dados } });
     },
     [navigate, onOpenChange, onSemJurosContinue],
+  );
+
+  const handleComJurosContinue = useCallback<NonNullable<Parameters<typeof SemJurosSimulator>[0]['onSelectComJuros']>>(
+    (resultado, parcelas) => {
+      const dados: ComJurosPrefill = {
+        dividaCents: resultado.dividaCents,
+        aVistaCents: resultado.aVistaCents,
+        descontoPct: resultado.descontoPct,
+        pixCents: resultado.pixCents,
+        cartaoCents: Math.max(0, resultado.dividaCents - resultado.pixCents),
+        parcelasSelecionadas: parcelas,
+      };
+      onOpenChange(false);
+      if (onComJurosContinue) onComJurosContinue(dados);
+      else navigate('/new-charge', { state: { comJuros: dados } });
+    },
+    [navigate, onOpenChange, onComJurosContinue],
   );
 
   const pixCents = toCents(pixInput);
@@ -135,7 +159,17 @@ export function SimulatorModal({ open, onOpenChange, initialAmount, onSemJurosCo
           </DialogDescription>
         </DialogHeader>
 
-        {isAdmin && (
+        {obrigatorio && semJurosHabilitado && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              Para o seu usuário, a cobrança com cartão começa pela simulação: informe a dívida e o valor à vista
+              e clique em Continuar. A cobrança será preenchida com os valores simulados.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {semJurosHabilitado && !obrigatorio && (
           <Tabs value={activeTab} onValueChange={(v) => setTab(v as 'sem_juros' | 'com_juros')} className="mt-2">
             <TabsList className="w-full">
               <TabsTrigger value="com_juros" className="flex-1">Com juros (Quita+)</TabsTrigger>
@@ -144,7 +178,9 @@ export function SimulatorModal({ open, onOpenChange, initialAmount, onSemJurosCo
           </Tabs>
         )}
 
-        {activeTab === 'sem_juros' && <SemJurosSimulator compact onSelect={handleSemJurosContinue} />}
+        {activeTab === 'sem_juros' && (
+          <SemJurosSimulator compact onSelect={handleSemJurosContinue} onSelectComJuros={handleComJurosContinue} />
+        )}
 
         {activeTab === 'com_juros' && (
         <div className="space-y-5 mt-2">

@@ -64,11 +64,11 @@ function CurrencyInput({
 
 export default function Simulator() {
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { semJurosHabilitado } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('total');
-  // Aba "Sem juros" restrita a administradores por enquanto (a página é pública)
-  const activeMode: Mode = mode === 'sem_juros' && !isAdmin ? 'total' : mode;
+  // Aba "Sem juros" só para usuários habilitados (a página é pública)
+  const activeMode: Mode = mode === 'sem_juros' && !semJurosHabilitado ? 'total' : mode;
   const [copied, setCopied] = useState(false);
 
   // Modo Total
@@ -186,7 +186,7 @@ export default function Simulator() {
           {/* ── Seletor de modo ── */}
           <Tabs value={activeMode} onValueChange={handleModeChange}>
             <TabsList className="w-full">
-              {isAdmin && (
+              {semJurosHabilitado && (
                 <TabsTrigger value="sem_juros" className="flex-1">
                   Sem juros
                 </TabsTrigger>
@@ -203,6 +203,18 @@ export default function Simulator() {
           {activeMode === 'sem_juros' ? (
             <SemJurosSimulator
               onSelect={(resultado, opcao) => navigate('/new-charge', { state: { semJuros: montarPrefill(resultado, opcao) } })}
+              onSelectComJuros={(resultado, parcelas) => navigate('/new-charge', {
+                state: {
+                  comJuros: {
+                    dividaCents: resultado.dividaCents,
+                    aVistaCents: resultado.aVistaCents,
+                    descontoPct: resultado.descontoPct,
+                    pixCents: resultado.pixCents,
+                    cartaoCents: Math.max(0, resultado.dividaCents - resultado.pixCents),
+                    parcelasSelecionadas: parcelas,
+                  },
+                },
+              })}
             />
           ) : (
             <>
