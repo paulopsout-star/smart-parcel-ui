@@ -175,3 +175,16 @@ verify_jwt = false
 
 [functions.update-charge]
 verify_jwt = false
+
+# Modalidade sem juros (funções isoladas; o fluxo atual não as chama)
+[functions.quitaplus-sj-simulation]
+verify_jwt = false
+
+[functions.quitaplus-sj-prepayment]
+verify_jwt = false
+
+[functions.quitaplus-sj-link-boleto]
+verify_jwt = false
+
+[functions.quitaplus-sj-status]
+verify_jwt = false
