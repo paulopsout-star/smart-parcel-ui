@@ -142,18 +142,17 @@ const HeroSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
   ];
   return (
     <section className="relative overflow-hidden">
-      <div className={`${CONTAINER} pt-6 pb-10 md:pt-10 md:pb-16 lg:pt-12 grid lg:grid-cols-[1.05fr_1fr] gap-10 lg:gap-6 items-center`}>
-        <div className="space-y-6 max-w-[600px]">
+      <div className={`${CONTAINER} pt-4 pb-6 md:pt-8 md:pb-10 lg:pt-10 grid lg:grid-cols-[1.15fr_0.95fr] gap-8 lg:gap-4 items-center`}>
+        <div className="space-y-5 max-w-[660px]">
           <Eyebrow>Pagamentos mais flexíveis</Eyebrow>
-          <h1 className="text-[2.5rem] leading-[1.02] sm:text-[3.25rem] lg:text-[3.9rem] font-extrabold tracking-[-0.02em]">
+          <h1 className="text-[2.35rem] leading-[1.04] sm:text-[3rem] lg:text-[3.35rem] xl:text-[3.6rem] font-extrabold tracking-[-0.02em] [text-wrap:balance]">
             Mais acordos pagos.<br />
-            <span className="text-[#1DB954]">Menos oportunidades</span><br />
-            <span className="text-[#1DB954]">perdidas.</span>
+            <span className="text-[#1DB954]">Menos oportunidades perdidas.</span>
           </h1>
-          <p className="text-lg md:text-[19px] text-[#3B4652] leading-relaxed max-w-[520px]">
+          <p className="text-[17px] md:text-lg text-[#3B4652] leading-relaxed max-w-[540px]">
             A solução de pagamentos que combina Cartão e PIX e transforma negociações em recebimentos realizados.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-1">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 pt-1">
             <Button size="lg" onClick={onOpenLeadModal} className="h-12 rounded-full px-7 text-[15px] font-semibold text-white border-0" style={{ background: `linear-gradient(90deg, ${DARK} 0%, #0B6B4A 100%)` }}>
               Começar agora
               <ArrowRight className="ml-2 h-4.5 w-4.5" />
@@ -163,9 +162,9 @@ const HeroSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
               Falar com um especialista
             </Button>
           </div>
-          <ul className="flex flex-wrap items-center gap-x-0 gap-y-3 pt-3 text-[14px] font-semibold text-[#101820]">
+          <ul className="flex flex-wrap items-center gap-y-3 pt-4 text-[15px] font-semibold text-[#101820]">
             {highlights.map(({ icon: Icon, label }, i) => (
-              <li key={i} className={`flex items-center gap-2.5 pr-6 ${i > 0 ? "sm:pl-6 sm:border-l sm:border-slate-200" : ""}`}>
+              <li key={i} className={`flex items-center gap-2.5 pr-5 lg:pr-7 ${i > 0 ? "sm:pl-5 lg:pl-7 sm:border-l sm:border-slate-200" : ""}`}>
                 <Icon className="h-6 w-6 shrink-0 text-[#0E8A5F]" strokeWidth={1.8} aria-hidden />
                 <span className="leading-tight">{label}</span>
               </li>
@@ -181,24 +180,24 @@ const HeroSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
 
 /** Smartphone ilustrativo com a tela de checkout da Combinaí. Só demonstração visual; não é o checkout real. */
 const PhoneShowcase = () => (
-  <div className="relative mx-auto w-full max-w-[520px] h-[500px] sm:h-[600px] lg:h-[640px] flex items-center justify-center" aria-hidden>
+  <div className="relative mx-auto w-full max-w-[480px] h-[460px] sm:h-[560px] lg:h-[600px] flex items-center justify-center lg:justify-end lg:pr-4" aria-hidden>
     {/* curva verde de fundo */}
-    <div className="absolute right-[-10%] top-[6%] h-[88%] w-[80%] rounded-[46%_54%_40%_60%/55%_45%_55%_45%] bg-gradient-to-br from-[#1DB954] via-[#0E9A55] to-[#004D36] opacity-95" />
-    <div className="absolute left-[4%] top-[14%] h-[150px] w-[150px] sm:h-[190px] sm:w-[190px] rounded-[42%_58%_50%_50%/50%_40%_60%_50%] bg-gradient-to-br from-[#25D366] to-[#0E8A5F] opacity-90" />
+    <div className="absolute right-[-4%] top-[8%] h-[84%] w-[74%] rounded-[46%_54%_40%_60%/55%_45%_55%_45%] bg-gradient-to-br from-[#1DB954] via-[#0E9A55] to-[#004D36]" />
+    <div className="absolute left-[10%] top-[16%] h-[130px] w-[130px] sm:h-[160px] sm:w-[160px] rounded-[42%_58%_50%_50%/50%_40%_60%_50%] bg-gradient-to-br from-[#25D366] to-[#0E8A5F]" />
 
     {/* tile flutuante esquerdo: cartão */}
-    <div className="absolute z-20 left-[8%] top-[23%] h-16 w-16 sm:h-20 sm:w-20 rounded-[22px] bg-white/15 backdrop-blur-sm border border-white/40 flex items-center justify-center text-white shadow-[0_14px_30px_rgba(0,61,43,0.25)] rotate-[-8deg]">
-      <CreditCard className="h-8 w-8 sm:h-10 sm:w-10" strokeWidth={1.6} />
+    <div className="absolute z-20 left-[12%] top-[24%] h-14 w-14 sm:h-[72px] sm:w-[72px] rounded-[20px] bg-white/15 backdrop-blur-sm border border-white/40 flex items-center justify-center text-white shadow-[0_10px_24px_rgba(0,61,43,0.18)] rotate-[-8deg]">
+      <CreditCard className="h-7 w-7 sm:h-9 sm:w-9" strokeWidth={1.6} />
     </div>
     {/* tile flutuante direito: ícone do app */}
-    <div className="absolute z-20 right-[2%] bottom-[28%] h-16 w-16 sm:h-20 sm:w-20 rounded-[22px] bg-white flex items-center justify-center shadow-[0_18px_40px_rgba(0,61,43,0.25)] rotate-[10deg]">
+    <div className="absolute z-20 right-[4%] bottom-[30%] h-14 w-14 sm:h-[72px] sm:w-[72px] rounded-[20px] bg-white flex items-center justify-center shadow-[0_12px_28px_rgba(0,61,43,0.18)] rotate-[10deg]">
       <div className="grid grid-cols-2 gap-1 rounded-xl bg-gradient-to-br from-[#25D366] to-[#0E8A5F] p-2.5">
         {[0, 1, 2, 3].map((i) => <span key={i} className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-[4px] bg-white/90" />)}
       </div>
     </div>
 
     {/* smartphone */}
-    <div className="relative z-10 w-[248px] sm:w-[290px] lg:w-[300px] rounded-[44px] bg-[#0f1a16] p-[9px] shadow-[0_45px_90px_rgba(0,40,28,0.45)] rotate-[-7deg] translate-x-3 translate-y-2">
+    <div className="relative z-10 w-[240px] sm:w-[280px] lg:w-[290px] rounded-[42px] bg-[#0f1a16] p-[9px] shadow-[0_30px_60px_rgba(0,40,28,0.28)] rotate-[-7deg]">
       <div className="rounded-[36px] bg-white overflow-hidden">
         <div className="relative h-9 flex items-center justify-between px-6 text-[11px] font-semibold">
           <span>9:41</span>
@@ -246,7 +245,7 @@ const PhoneShowcase = () => (
 // ==================== PROBLEMA E RESPOSTA ====================
 const ProblemSection = () => (
   <section className="relative">
-    <div className={`${CONTAINER} py-10 md:py-16 grid md:grid-cols-[300px_1fr] lg:grid-cols-[320px_1.1fr_1fr] gap-8 lg:gap-10 items-center`}>
+    <div className={`${CONTAINER} py-8 md:py-12 grid md:grid-cols-[280px_1fr] lg:grid-cols-[300px_1fr_1fr] gap-7 lg:gap-8 items-center`}>
       {/* foto contextual com recorte orgânico — asset PROVISÓRIO (ver cabeçalho do arquivo) */}
       <figure className="relative mx-auto md:mx-0 w-[280px] sm:w-[300px] md:w-full max-w-[320px]">
         <div className="absolute -inset-2 rounded-[40px_120px_40px_120px/60px_60px_60px_60px] bg-gradient-to-br from-[#1DB954] to-[#0E8A5F] opacity-90" />
@@ -259,15 +258,15 @@ const ProblemSection = () => (
           loading="lazy"
         />
       </figure>
-      <div className="space-y-3 lg:pr-8">
-        <h2 className="text-[1.75rem] md:text-[2rem] font-extrabold tracking-tight leading-tight">Nem todo acordo<br className="hidden lg:block" /> fechado vira pagamento.</h2>
-        <p className="text-[#3B4652] leading-relaxed max-w-[460px]">
+      <div className="space-y-3 lg:pr-6">
+        <h2 className="text-[1.7rem] md:text-[1.9rem] font-extrabold tracking-tight leading-tight [text-wrap:balance]">Nem todo acordo fechado vira pagamento.</h2>
+        <p className="text-[15.5px] text-[#3B4652] leading-[1.65] max-w-[440px]">
           Muitas negociações não se concretizam porque o cliente não encontra uma forma de pagamento que se encaixe na sua realidade.
         </p>
       </div>
-      <div className="space-y-3 lg:border-l lg:border-slate-200 lg:pl-10 md:col-span-2 lg:col-span-1">
-        <h2 className="text-[1.75rem] md:text-[2rem] font-extrabold tracking-tight leading-tight text-[#0E8A5F]">A Combinaí resolve<br className="hidden lg:block" /> esse desafio.</h2>
-        <p className="text-[#3B4652] leading-relaxed max-w-[420px]">
+      <div className="space-y-3 lg:border-l lg:border-slate-200 lg:pl-8 md:col-span-2 lg:col-span-1">
+        <h2 className="text-[1.7rem] md:text-[1.9rem] font-extrabold tracking-tight leading-tight text-[#0E8A5F] [text-wrap:balance]">A Combinaí resolve esse desafio.</h2>
+        <p className="text-[15.5px] text-[#3B4652] leading-[1.65] max-w-[400px]">
           Mais flexibilidade para o cliente pagar e mais segurança para a sua empresa receber.
         </p>
       </div>
@@ -283,26 +282,26 @@ const HowItWorksSection = () => {
     { icon: CheckCircle2, title: "Receba com segurança", text: "Acompanhe a confirmação e o recebimento em tempo real." },
   ];
   return (
-    <section id="como-funciona" className={`${CONTAINER} py-10 md:py-16 scroll-mt-24`}>
+    <section id="como-funciona" className={`${CONTAINER} py-8 md:py-14 scroll-mt-24`}>
       <div className="text-center space-y-2">
         <Eyebrow>Como funciona</Eyebrow>
         <h2 className="text-3xl md:text-[2.4rem] font-extrabold tracking-tight">Simples, rápido e eficiente.</h2>
       </div>
-      <ol className="mt-10 grid md:grid-cols-[1fr_auto_1fr_auto_1fr] gap-6 md:gap-4 items-center">
+      <ol className="mt-9 grid md:grid-cols-[1fr_28px_1fr_28px_1fr] gap-6 md:gap-3 items-center">
         {steps.map(({ icon: Icon, title, text }, i) => (
           <li key={title} className="contents">
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 md:px-1">
               <div className="relative shrink-0">
-                <span className="h-[72px] w-[72px] rounded-[22px] bg-[#E9F8F0] text-[#0E8A5F] flex items-center justify-center"><Icon className="h-8 w-8" strokeWidth={1.7} /></span>
-                <span className="absolute -right-1.5 -top-1.5 h-6 w-6 rounded-full bg-[#0E8A5F] text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white">{i + 1}</span>
+                <span className="h-[76px] w-[76px] rounded-[22px] bg-[#E9F8F0] text-[#0E8A5F] flex items-center justify-center"><Icon className="h-8 w-8" strokeWidth={1.7} /></span>
+                <span className="absolute -right-2 -top-2 h-7 w-7 rounded-full bg-[#0E8A5F] text-white text-[12px] font-bold flex items-center justify-center ring-[3px] ring-white">{i + 1}</span>
               </div>
-              <div className="pt-1">
+              <div className="pt-1.5">
                 <h3 className="text-[17px] font-bold leading-snug">{title}</h3>
-                <p className="text-[14px] text-[#3B4652] leading-relaxed mt-1">{text}</p>
+                <p className="text-[15px] text-[#3B4652] leading-[1.6] mt-1.5">{text}</p>
               </div>
             </div>
             {i < steps.length - 1 && (
-              <ArrowRight className="hidden md:block h-6 w-6 text-[#0E8A5F] mx-2 justify-self-center" aria-hidden />
+              <ArrowRight className="hidden md:block h-6 w-6 text-[#0E8A5F] justify-self-center self-center" aria-hidden />
             )}
           </li>
         ))}
@@ -314,22 +313,22 @@ const HowItWorksSection = () => {
 // ==================== SOLUÇÕES (seção escura) ====================
 const SolutionsSection = () => {
   const cards = [
-    { icon: Car, title: <>Recuperação<br />de crédito</>, featured: true },
-    { icon: Layers, title: <>Cobrança<br />e negociação</> },
-    { icon: Landmark, title: <>Financeiras<br />e credores</> },
-    { icon: GraduationCap, title: <>Educação<br />e serviços</> },
-    { icon: Store, title: <>Outros<br />segmentos</> },
+    { icon: Car, title: "Recuperação de crédito", featured: true },
+    { icon: Layers, title: "Cobrança e negociação" },
+    { icon: Landmark, title: "Financeiras e credores" },
+    { icon: GraduationCap, title: "Educação e serviços" },
+    { icon: Store, title: "Outros segmentos" },
   ];
   return (
     <section id="solucoes" className="relative overflow-hidden scroll-mt-24" style={{ background: `linear-gradient(100deg, ${DARK} 0%, #0B5A3F 60%, #0E6B46 100%)` }}>
       {/* textura desfocada de apoio, sem comprometer a leitura */}
       <div className="pointer-events-none absolute inset-y-0 right-0 w-1/2 opacity-30 bg-[radial-gradient(ellipse_at_80%_40%,rgba(255,255,255,0.35),transparent_60%)]" />
       <div className="pointer-events-none absolute -top-10 left-0 right-0 h-10 bg-white rounded-b-[100%]" />
-      <div id="para-quem-e" className={`${CONTAINER} relative py-14 md:py-20 grid lg:grid-cols-[0.9fr_1.6fr] gap-10 items-center scroll-mt-24`}>
+      <div id="para-quem-e" className={`${CONTAINER} relative py-12 md:py-16 grid lg:grid-cols-[0.7fr_1.9fr] gap-8 lg:gap-10 items-center scroll-mt-24`}>
         <div className="space-y-4 text-white">
           <Eyebrow light>Soluções para a sua operação</Eyebrow>
-          <h2 className="text-3xl md:text-[2.5rem] font-extrabold tracking-tight leading-tight">
-            Mais conversão em<br /><span className="text-[#7CF2B8]">diferentes cenários.</span>
+          <h2 className="text-3xl md:text-[2.3rem] font-extrabold tracking-tight leading-tight [text-wrap:balance]">
+            Mais conversão em <span className="text-[#7CF2B8]">diferentes cenários.</span>
           </h2>
           <span className="block h-1 w-16 rounded-full bg-[#1DB954]" aria-hidden />
         </div>
@@ -337,13 +336,13 @@ const SolutionsSection = () => {
           {cards.map(({ icon: Icon, title, featured }, i) => (
             <div
               key={i}
-              className={`rounded-[22px] p-4 min-h-[150px] flex flex-col justify-between text-white ${
+              className={`rounded-[22px] p-5 min-h-[176px] flex flex-col justify-between gap-4 text-white ${
                 featured ? "bg-gradient-to-b from-[#25D366] to-[#1DB954] shadow-[0_18px_40px_rgba(29,185,84,0.35)]" : "bg-white/[0.07] border border-white/10"
               }`}
             >
-              <Icon className="h-7 w-7" strokeWidth={1.7} aria-hidden />
+              <Icon className="h-7 w-7 shrink-0" strokeWidth={1.7} aria-hidden />
               <div className="space-y-3">
-                <p className="text-[14px] font-bold leading-snug">{title}</p>
+                <p className="text-[15px] font-bold leading-snug [text-wrap:balance]">{title}</p>
                 {/* seta decorativa: estes cards não têm destino no app */}
                 <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full ${featured ? "bg-white text-[#0E8A5F]" : "bg-white text-[#003D2B]"}`} aria-hidden>
                   <ArrowRight className="h-3.5 w-3.5" />
@@ -367,7 +366,7 @@ const BenefitsSection = () => {
     { icon: Headset, label: <>Suporte<br />especializado</> },
   ];
   return (
-    <section className={`${CONTAINER} py-12 md:py-16 grid lg:grid-cols-[0.8fr_1.6fr] gap-8 lg:gap-12 items-center`}>
+    <section className={`${CONTAINER} py-10 md:py-14 grid lg:grid-cols-[0.8fr_1.6fr] gap-8 lg:gap-12 items-center`}>
       <div className="space-y-2">
         <Eyebrow>Por que escolher a Combinaí</Eyebrow>
         <h2 className="text-3xl md:text-[2.3rem] font-extrabold tracking-tight leading-tight">Mais resultados<br />para a sua operação.</h2>
@@ -376,7 +375,7 @@ const BenefitsSection = () => {
         {benefits.map(({ icon: Icon, label }, i) => (
           <li key={i} className={`flex flex-col items-center text-center gap-3 px-3 ${i > 0 ? "lg:border-l lg:border-slate-200" : ""}`}>
             <Icon className="h-9 w-9 text-[#0E8A5F]" strokeWidth={1.6} aria-hidden />
-            <span className="text-[14px] font-medium text-[#101820] leading-snug">{label}</span>
+            <span className="text-[15px] font-medium text-[#101820] leading-snug">{label}</span>
           </li>
         ))}
       </ul>
@@ -394,11 +393,11 @@ const AboutSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
   return (
     <section id="sobre" className="relative overflow-hidden scroll-mt-24">
       <div className="pointer-events-none absolute -right-40 -bottom-56 h-[420px] w-[560px] rounded-[50%] bg-gradient-to-br from-[#1DB954]/25 to-transparent" />
-      <div className={`${CONTAINER} relative py-10 md:py-16 grid lg:grid-cols-[0.95fr_1.3fr] gap-10 lg:gap-14 items-center`}>
+      <div className={`${CONTAINER} relative py-6 md:py-10 grid lg:grid-cols-[0.95fr_1.3fr] gap-10 lg:gap-14 items-center`}>
         <div className="space-y-5 max-w-[480px]">
           <Eyebrow>Sobre a Combinaí</Eyebrow>
           <h2 className="text-3xl md:text-[2.3rem] font-extrabold tracking-tight leading-tight">Tecnologia, flexibilidade<br />e propósito.</h2>
-          <p className="text-[#3B4652] leading-relaxed">
+          <p className="text-[16px] text-[#3B4652] leading-[1.65]">
             A Combinaí é uma empresa de tecnologia em pagamentos que conecta pessoas e empresas por meio de soluções simples, seguras e inteligentes.
           </p>
           {/* Ponto pendente: não há página de história no app; abre o mesmo canal de contato */}
@@ -412,7 +411,7 @@ const AboutSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
             <div key={title} className="rounded-[18px] bg-[#F3FAF6] px-5 py-4 grid sm:grid-cols-[auto_110px_1fr] items-center gap-4">
               <span className="h-11 w-11 rounded-xl bg-white text-[#0E8A5F] flex items-center justify-center"><Icon className="h-5.5 w-5.5" strokeWidth={1.7} aria-hidden /></span>
               <h3 className="text-[17px] font-bold">{title}</h3>
-              <p className="text-[14px] text-[#3B4652] leading-relaxed">{text}</p>
+              <p className="text-[15px] text-[#3B4652] leading-[1.6]">{text}</p>
             </div>
           ))}
         </div>
@@ -423,11 +422,11 @@ const AboutSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
 
 // ==================== CTA FINAL ====================
 const FinalCTASection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => (
-  <section id="contato" className="relative overflow-hidden scroll-mt-24" style={{ background: `linear-gradient(100deg, ${DARK} 0%, #0B5A3F 100%)` }}>
+  <section id="contato" className="relative overflow-hidden scroll-mt-24 mt-6 md:mt-8" style={{ background: `linear-gradient(100deg, ${DARK} 0%, #0B5A3F 100%)` }}>
     <div className="pointer-events-none absolute -top-8 left-0 right-0 h-8 bg-white rounded-b-[100%]" />
     <div className="pointer-events-none absolute -bottom-32 -left-20 h-72 w-[520px] rounded-[50%] bg-gradient-to-r from-[#1DB954] to-transparent opacity-50" />
     <div className="pointer-events-none absolute -bottom-40 right-0 h-80 w-[520px] rounded-[50%] bg-gradient-to-l from-[#25D366] to-transparent opacity-40" />
-    <div className={`${CONTAINER} relative py-14 md:py-20 grid lg:grid-cols-[1.2fr_1fr] gap-8 items-center text-white`}>
+    <div className={`${CONTAINER} relative py-12 md:py-16 grid lg:grid-cols-[1.2fr_1fr] gap-8 items-center text-white`}>
       <div className="space-y-3">
         <h2 className="text-3xl md:text-[2.5rem] font-extrabold tracking-tight">Vamos conversar?</h2>
         <p className="text-white/85 text-[17px] leading-relaxed max-w-[520px]">
