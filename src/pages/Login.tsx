@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Navigate, Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,20 +5,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Shield } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/hooks/use-toast';
+import { useLoginForm } from '@/hooks/useLoginForm';
 
+/** Página de login atual. O comportamento está em useLoginForm, compartilhado com /entrar (LoginV2). */
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  
-  const { signIn, user, loading } = useAuth();
-  const { toast } = useToast();
+  const { email, setEmail, password, setPassword, isLoading, error, handleSubmit, authLoading, isAuthenticated } = useLoginForm();
 
   // Redirect if already logged in
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-ds-bg-body">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -27,39 +20,9 @@ export default function Login() {
     );
   }
 
-  if (user) {
+  if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
   }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setError('Por favor, preencha todos os campos.');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    const { error } = await signIn(email, password);
-    
-    if (error) {
-      if (error.message.includes('Invalid login credentials')) {
-        setError('Email ou senha incorretos.');
-      } else if (error.message.includes('Email not confirmed')) {
-        setError('Por favor, confirme seu email antes de fazer login.');
-      } else {
-        setError('Erro ao fazer login. Tente novamente.');
-      }
-    } else {
-      toast({
-        title: "Login realizado com sucesso!",
-        description: "Bem-vindo ao sistema.",
-      });
-    }
-    
-    setIsLoading(false);
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-ds-bg-body px-4">
@@ -80,7 +43,7 @@ export default function Login() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -93,12 +56,12 @@ export default function Login() {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Senha</Label>
-                <Link 
-                  to="/forgot-password" 
+                <Link
+                  to="/forgot-password"
                   className="text-sm text-primary hover:underline font-medium"
                 >
                   Esqueci minha senha
@@ -114,7 +77,7 @@ export default function Login() {
                 required
               />
             </div>
-            
+
             <Button
               type="submit"
               className="w-full"
@@ -130,7 +93,7 @@ export default function Login() {
               )}
             </Button>
           </form>
-          
+
           <div className="mt-6 text-center">
             <p className="text-sm text-ds-text-muted">
               Não tem uma conta?{' '}

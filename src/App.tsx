@@ -9,6 +9,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 
 import Index from "./pages/Index";
 import Login from "./pages/Login";
+import LoginV2 from "./pages/LoginV2";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -56,6 +57,8 @@ const App = () => {
             <Routes>
                 <Route path="/" element={<Index />} />
                 <Route path="/login" element={<Login />} />
+                {/* Transição: nova página de login em rota temporária, sem links no app. Na troca, /login passa a renderizar LoginV2. */}
+                <Route path="/entrar" element={<LoginV2 />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
