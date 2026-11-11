@@ -841,7 +841,6 @@ export type Database = {
           full_name: string
           id: string
           is_active: boolean
-          is_demo: boolean
           sem_juros_habilitado: boolean
           updated_at: string
         }
@@ -852,7 +851,6 @@ export type Database = {
           full_name: string
           id: string
           is_active?: boolean
-          is_demo?: boolean
           sem_juros_habilitado?: boolean
           updated_at?: string
         }
@@ -863,7 +861,6 @@ export type Database = {
           full_name?: string
           id?: string
           is_active?: boolean
-          is_demo?: boolean
           sem_juros_habilitado?: boolean
           updated_at?: string
         }
@@ -1176,22 +1173,6 @@ export type Database = {
         Returns: boolean
       }
       get_user_company_id: { Args: { _user_id: string }; Returns: string }
-      partially_paid_charge_ids: { Args: Record<PropertyKey, never>; Returns: string[] }
-      is_demo_user: { Args: Record<PropertyKey, never>; Returns: boolean }
-      sem_juros_ativo: { Args: Record<PropertyKey, never>; Returns: boolean }
-      sem_juros_habilitado: { Args: Record<PropertyKey, never>; Returns: boolean }
-      sem_juros_regras: {
-        Args: { p_divida_cents: number; p_a_vista_cents: number }
-        Returns: {
-          elegivel: boolean
-          parcelas_maximas: number
-          desconto_cents: number
-          desconto_pct: number
-          desconto_retido_cents: number
-          total_cliente_cents: number
-          abatimento_cents: number
-        }[]
-      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1207,6 +1188,21 @@ export type Database = {
       is_subscription_allowed: {
         Args: { p_company_id: string; p_now_ts?: string }
         Returns: boolean
+      }
+      partially_paid_charge_ids: { Args: never; Returns: string[] }
+      sem_juros_ativo: { Args: never; Returns: boolean }
+      sem_juros_habilitado: { Args: never; Returns: boolean }
+      sem_juros_regras: {
+        Args: { p_a_vista_cents: number; p_divida_cents: number }
+        Returns: {
+          abatimento_cents: number
+          desconto_cents: number
+          desconto_pct: number
+          desconto_retido_cents: number
+          elegivel: boolean
+          parcelas_maximas: number
+          total_cliente_cents: number
+        }[]
       }
     }
     Enums: {
@@ -1259,12 +1255,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1288,11 +1284,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1313,11 +1309,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1338,11 +1334,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1355,11 +1351,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
