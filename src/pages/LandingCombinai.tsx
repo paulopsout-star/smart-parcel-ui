@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Menu, X, ArrowRight, ChevronDown, Headphones, TrendingUp, Shield, Zap,
-  Link2, Laptop, CheckCircle2, Car, Layers, Landmark, GraduationCap, Store,
-  Coins, ShieldCheck, Headset, Target, Eye, Gem, CreditCard, QrCode, Lock,
+  Menu, X, ArrowRight, ChevronDown, Headphones, TrendingUp, ShieldCheck, Activity, Zap,
+  Link2, CreditCard, CheckCircle2, RefreshCcw, FileCheck2, Landmark, GraduationCap, Building2,
+  ChartNoAxesCombined, WalletCards, Headset, Target, Eye, Gem, QrCode, Lock, BellRing,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LeadCaptureModal } from "@/components/LeadCaptureModal";
@@ -85,7 +85,7 @@ const Navbar = ({
 }: { mobileMenuOpen: boolean; setMobileMenuOpen: (open: boolean) => void; onOpenLeadModal: () => void }) => (
   <header id="topo" className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm">
     <div className={`${CONTAINER} h-[72px] flex items-center justify-between gap-6`}>
-      <a href="#topo" className="shrink-0" aria-label="Combinaí - início"><Logo className="h-8 sm:h-9" /></a>
+      <a href="#topo" className="shrink-0 flex items-center" aria-label="Combinaí - início"><Logo className="h-10 sm:h-11 lg:h-12" /></a>
 
       <nav className="hidden lg:flex items-center gap-7" aria-label="Principal">
         {NAV_LINKS.map((link) => (
@@ -137,8 +137,8 @@ const Navbar = ({
 const HeroSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
   const highlights = [
     { icon: TrendingUp, label: <>Mais conversão<br className="hidden sm:block" /> nos acordos</> },
-    { icon: Shield, label: <>Pagamento<br className="hidden sm:block" /> seguro</> },
-    { icon: Zap, label: <>Gestão<br className="hidden sm:block" /> em tempo real</> },
+    { icon: ShieldCheck, label: <>Pagamento<br className="hidden sm:block" /> seguro</> },
+    { icon: Activity, label: <>Gestão<br className="hidden sm:block" /> em tempo real</> },
   ];
   return (
     <section className="relative overflow-hidden">
@@ -165,7 +165,7 @@ const HeroSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
           <ul className="flex flex-wrap items-center gap-y-3 pt-4 text-[15px] font-semibold text-[#101820]">
             {highlights.map(({ icon: Icon, label }, i) => (
               <li key={i} className={`flex items-center gap-2.5 pr-5 lg:pr-7 ${i > 0 ? "sm:pl-5 lg:pl-7 sm:border-l sm:border-slate-200" : ""}`}>
-                <Icon className="h-6 w-6 shrink-0 text-[#0E8A5F]" strokeWidth={1.8} aria-hidden />
+                <Icon className="h-6 w-6 shrink-0 text-[#0E8A5F]" strokeWidth={1.6} aria-hidden />
                 <span className="leading-tight">{label}</span>
               </li>
             ))}
@@ -180,62 +180,65 @@ const HeroSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
 
 /** Smartphone ilustrativo com a tela de checkout da Combinaí. Só demonstração visual; não é o checkout real. */
 const PhoneShowcase = () => (
-  <div className="relative mx-auto w-full max-w-[480px] h-[460px] sm:h-[560px] lg:h-[600px] flex items-center justify-center lg:justify-end lg:pr-4" aria-hidden>
-    {/* curva verde de fundo */}
-    <div className="absolute right-[-4%] top-[8%] h-[84%] w-[74%] rounded-[46%_54%_40%_60%/55%_45%_55%_45%] bg-gradient-to-br from-[#1DB954] via-[#0E9A55] to-[#004D36]" />
-    <div className="absolute left-[10%] top-[16%] h-[130px] w-[130px] sm:h-[160px] sm:w-[160px] rounded-[42%_58%_50%_50%/50%_40%_60%_50%] bg-gradient-to-br from-[#25D366] to-[#0E8A5F]" />
+  <div className="relative mx-auto w-full max-w-[440px] h-[440px] sm:h-[520px] lg:h-[560px] flex items-center justify-center" aria-hidden>
+    {/* fundo verde discreto, sempre dentro da coluna */}
+    <div className="absolute inset-x-[10%] inset-y-[8%] rounded-[44%_56%_42%_58%/56%_44%_56%_44%] bg-gradient-to-br from-[#1DB954] via-[#15A75A] to-[#0B5A3F] opacity-90" />
 
-    {/* tile flutuante esquerdo: cartão */}
-    <div className="absolute z-20 left-[12%] top-[24%] h-14 w-14 sm:h-[72px] sm:w-[72px] rounded-[20px] bg-white/15 backdrop-blur-sm border border-white/40 flex items-center justify-center text-white shadow-[0_10px_24px_rgba(0,61,43,0.18)] rotate-[-8deg]">
-      <CreditCard className="h-7 w-7 sm:h-9 sm:w-9" strokeWidth={1.6} />
-    </div>
-    {/* tile flutuante direito: ícone do app */}
-    <div className="absolute z-20 right-[4%] bottom-[30%] h-14 w-14 sm:h-[72px] sm:w-[72px] rounded-[20px] bg-white flex items-center justify-center shadow-[0_12px_28px_rgba(0,61,43,0.18)] rotate-[10deg]">
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-gradient-to-br from-[#25D366] to-[#0E8A5F] p-2.5">
-        {[0, 1, 2, 3].map((i) => <span key={i} className="h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-[4px] bg-white/90" />)}
+    {/* elemento flutuante: notificação de PIX confirmado (interface real, discreta) */}
+    <div className="absolute z-20 left-[2%] sm:left-[4%] top-[12%] w-[150px] sm:w-[168px] rounded-xl bg-white/95 border border-slate-200 shadow-[0_8px_24px_rgba(16,24,32,0.10)] p-3 flex items-center gap-2.5">
+      <span className="h-8 w-8 shrink-0 rounded-lg bg-[#E9F8F0] text-[#0E8A5F] flex items-center justify-center"><BellRing className="h-4 w-4" strokeWidth={1.6} /></span>
+      <div className="min-w-0">
+        <p className="text-[10px] text-[#64748B] leading-tight">PIX confirmado</p>
+        <p className="text-[12px] font-bold leading-tight">R$ 320,00</p>
       </div>
+    </div>
+    {/* elemento flutuante: resumo do parcelamento */}
+    <div className="absolute z-20 right-[2%] sm:right-[3%] bottom-[14%] w-[150px] sm:w-[168px] rounded-xl bg-white/95 border border-slate-200 shadow-[0_8px_24px_rgba(16,24,32,0.10)] p-3">
+      <div className="flex items-center justify-between text-[10px] text-[#64748B]"><span>Cartão · 12x</span><CreditCard className="h-3.5 w-3.5 text-[#0E8A5F]" strokeWidth={1.6} /></div>
+      <p className="mt-1 text-[12px] font-bold leading-tight">12x de R$ 80,00</p>
+      <div className="mt-2 h-1 w-full rounded-full bg-slate-100"><div className="h-1 w-3/4 rounded-full bg-[#1DB954]" /></div>
     </div>
 
     {/* smartphone */}
-    <div className="relative z-10 w-[240px] sm:w-[280px] lg:w-[290px] rounded-[42px] bg-[#0f1a16] p-[9px] shadow-[0_30px_60px_rgba(0,40,28,0.28)] rotate-[-7deg]">
-      <div className="rounded-[36px] bg-white overflow-hidden">
-        <div className="relative h-9 flex items-center justify-between px-6 text-[11px] font-semibold">
+    <div className="relative z-10 w-[208px] sm:w-[236px] lg:w-[244px] rounded-[38px] bg-[#0f1a16] p-[8px] shadow-[0_24px_48px_rgba(16,24,32,0.22)] rotate-[-6deg]">
+      <div className="rounded-[32px] bg-white overflow-hidden">
+        <div className="relative h-8 flex items-center justify-between px-5 text-[10px] font-semibold">
           <span>9:41</span>
-          <span className="absolute left-1/2 -translate-x-1/2 top-2 h-5 w-20 rounded-full bg-[#0f1a16]" />
-          <span className="flex gap-1 items-end" aria-hidden>
-            <span className="h-2 w-[3px] bg-[#101820] rounded-sm" /><span className="h-2.5 w-[3px] bg-[#101820] rounded-sm" /><span className="h-3 w-[3px] bg-[#101820] rounded-sm" />
+          <span className="absolute left-1/2 -translate-x-1/2 top-2 h-4 w-16 rounded-full bg-[#0f1a16]" />
+          <span className="flex gap-[3px] items-end" aria-hidden>
+            <span className="h-1.5 w-[3px] bg-[#101820] rounded-sm" /><span className="h-2 w-[3px] bg-[#101820] rounded-sm" /><span className="h-2.5 w-[3px] bg-[#101820] rounded-sm" />
           </span>
         </div>
-        <div className="px-5 pb-6 pt-2 space-y-4">
-          <div className="flex justify-center"><Logo className="h-6" /></div>
-          <p className="text-center text-[19px] font-extrabold tracking-tight">Pague do seu jeito</p>
+        <div className="px-4 pb-5 pt-1.5 space-y-3.5">
+          <div className="flex justify-center"><Logo className="h-5" /></div>
+          <p className="text-center text-[17px] font-extrabold tracking-tight">Pague do seu jeito</p>
           <div className="text-center">
-            <p className="text-[11px] text-[#64748B]">Valor do acordo</p>
-            <p className="text-[22px] font-extrabold tracking-tight">R$ 1.280,00</p>
+            <p className="text-[10px] text-[#64748B]">Valor do acordo</p>
+            <p className="text-[20px] font-extrabold tracking-tight">R$ 1.280,00</p>
           </div>
-          <div className="rounded-2xl border-[1.5px] border-[#1DB954] bg-[#F1FBF6] p-3 flex items-center gap-3">
-            <span className="h-4.5 w-4.5 rounded-full border-[5px] border-[#1DB954] bg-white shrink-0" />
-            <CreditCard className="h-6 w-6 text-[#0E8A5F] shrink-0" strokeWidth={1.7} />
+          <div className="rounded-xl border-[1.5px] border-[#1DB954] bg-[#F1FBF6] p-2.5 flex items-center gap-2.5">
+            <span className="h-4 w-4 rounded-full border-[4px] border-[#1DB954] bg-white shrink-0" />
+            <CreditCard className="h-5 w-5 text-[#0E8A5F] shrink-0" strokeWidth={1.6} />
             <div>
-              <p className="text-[13px] font-bold leading-tight">Cartão de crédito</p>
-              <p className="text-[10px] text-[#64748B]">Pague à vista ou em até 12x</p>
+              <p className="text-[12px] font-bold leading-tight">Cartão de crédito</p>
+              <p className="text-[9.5px] text-[#64748B]">Pague à vista ou em até 12x</p>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 p-3 flex items-center gap-3">
-            <span className="h-4.5 w-4.5 rounded-full border-2 border-slate-300 shrink-0" />
+          <div className="rounded-xl border border-slate-200 p-2.5 flex items-center gap-2.5">
+            <span className="h-4 w-4 rounded-full border-2 border-slate-300 shrink-0" />
             <span className="relative shrink-0">
-              <CreditCard className="h-6 w-6 text-[#0E8A5F]" strokeWidth={1.7} />
-              <QrCode className="absolute -right-2 -bottom-1.5 h-3.5 w-3.5 text-[#1DB954] bg-white rounded-sm" />
+              <CreditCard className="h-5 w-5 text-[#0E8A5F]" strokeWidth={1.6} />
+              <QrCode className="absolute -right-1.5 -bottom-1 h-3 w-3 text-[#1DB954] bg-white rounded-sm" strokeWidth={1.8} />
             </span>
             <div>
-              <p className="text-[13px] font-bold leading-tight">Cartão + PIX</p>
-              <p className="text-[10px] text-[#64748B]">Divida o pagamento entre cartão e PIX</p>
+              <p className="text-[12px] font-bold leading-tight">Cartão + PIX</p>
+              <p className="text-[9.5px] text-[#64748B]">Divida o pagamento entre cartão e PIX</p>
             </div>
           </div>
-          <div className="h-11 rounded-full text-white text-[13px] font-semibold flex items-center justify-center gap-2" style={{ background: `linear-gradient(90deg, #1DB954 0%, #0E8A5F 100%)` }}>
-            Continuar pagamento <ArrowRight className="h-4 w-4" />
+          <div className="h-10 rounded-full text-white text-[12px] font-semibold flex items-center justify-center gap-1.5" style={{ background: `linear-gradient(90deg, #1DB954 0%, #0E8A5F 100%)` }}>
+            Continuar pagamento <ArrowRight className="h-3.5 w-3.5" />
           </div>
-          <p className="flex items-center justify-center gap-1.5 text-[10px] text-[#64748B]"><Lock className="h-3 w-3" /> Pagamento seguro e criptografado</p>
+          <p className="flex items-center justify-center gap-1 text-[9.5px] text-[#64748B]"><Lock className="h-3 w-3" strokeWidth={1.6} /> Pagamento seguro e criptografado</p>
         </div>
       </div>
     </div>
@@ -278,7 +281,7 @@ const ProblemSection = () => (
 const HowItWorksSection = () => {
   const steps = [
     { icon: Link2, title: "Gere o link", text: "Informe o valor e as condições do acordo." },
-    { icon: Laptop, title: "Cliente escolhe como pagar", text: "Cartão, à vista, parcelado ou cartão + PIX." },
+    { icon: CreditCard, title: "Cliente escolhe como pagar", text: "Cartão, à vista, parcelado ou cartão + PIX." },
     { icon: CheckCircle2, title: "Receba com segurança", text: "Acompanhe a confirmação e o recebimento em tempo real." },
   ];
   return (
@@ -292,7 +295,7 @@ const HowItWorksSection = () => {
           <li key={title} className="contents">
             <div className="flex items-start gap-4 md:px-1">
               <div className="relative shrink-0">
-                <span className="h-[76px] w-[76px] rounded-[22px] bg-[#E9F8F0] text-[#0E8A5F] flex items-center justify-center"><Icon className="h-8 w-8" strokeWidth={1.7} /></span>
+                <span className="h-[76px] w-[76px] rounded-[22px] bg-[#E9F8F0] text-[#0E8A5F] flex items-center justify-center"><Icon className="h-7 w-7" strokeWidth={1.6} /></span>
                 <span className="absolute -right-2 -top-2 h-7 w-7 rounded-full bg-[#0E8A5F] text-white text-[12px] font-bold flex items-center justify-center ring-[3px] ring-white">{i + 1}</span>
               </div>
               <div className="pt-1.5">
@@ -313,11 +316,11 @@ const HowItWorksSection = () => {
 // ==================== SOLUÇÕES (seção escura) ====================
 const SolutionsSection = () => {
   const cards = [
-    { icon: Car, title: "Recuperação de crédito", featured: true },
-    { icon: Layers, title: "Cobrança e negociação" },
+    { icon: RefreshCcw, title: "Recuperação de crédito", featured: true },
+    { icon: FileCheck2, title: "Cobrança e negociação" },
     { icon: Landmark, title: "Financeiras e credores" },
     { icon: GraduationCap, title: "Educação e serviços" },
-    { icon: Store, title: "Outros segmentos" },
+    { icon: Building2, title: "Outros segmentos" },
   ];
   return (
     <section id="solucoes" className="relative overflow-hidden scroll-mt-24" style={{ background: `linear-gradient(100deg, ${DARK} 0%, #0B5A3F 60%, #0E6B46 100%)` }}>
@@ -340,7 +343,7 @@ const SolutionsSection = () => {
                 featured ? "bg-gradient-to-b from-[#25D366] to-[#1DB954] shadow-[0_18px_40px_rgba(29,185,84,0.35)]" : "bg-white/[0.07] border border-white/10"
               }`}
             >
-              <Icon className="h-7 w-7 shrink-0" strokeWidth={1.7} aria-hidden />
+              <Icon className="h-6 w-6 shrink-0" strokeWidth={1.6} aria-hidden />
               <div className="space-y-3">
                 <p className="text-[15px] font-bold leading-snug [text-wrap:balance]">{title}</p>
                 {/* seta decorativa: estes cards não têm destino no app */}
@@ -359,8 +362,8 @@ const SolutionsSection = () => {
 // ==================== BENEFÍCIOS ====================
 const BenefitsSection = () => {
   const benefits = [
-    { icon: TrendingUp, label: <>Maior taxa<br />de conversão</> },
-    { icon: Coins, label: <>Mais opções<br />de pagamento</> },
+    { icon: ChartNoAxesCombined, label: <>Maior taxa<br />de conversão</> },
+    { icon: WalletCards, label: <>Mais opções<br />de pagamento</> },
     { icon: ShieldCheck, label: <>Segurança e<br />confiabilidade</> },
     { icon: Zap, label: <>Implantação<br />rápida</> },
     { icon: Headset, label: <>Suporte<br />especializado</> },
@@ -374,7 +377,7 @@ const BenefitsSection = () => {
       <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-y-6">
         {benefits.map(({ icon: Icon, label }, i) => (
           <li key={i} className={`flex flex-col items-center text-center gap-3 px-3 ${i > 0 ? "lg:border-l lg:border-slate-200" : ""}`}>
-            <Icon className="h-9 w-9 text-[#0E8A5F]" strokeWidth={1.6} aria-hidden />
+            <Icon className="h-7 w-7 text-[#0E8A5F]" strokeWidth={1.5} aria-hidden />
             <span className="text-[15px] font-medium text-[#101820] leading-snug">{label}</span>
           </li>
         ))}
@@ -409,7 +412,7 @@ const AboutSection = ({ onOpenLeadModal }: { onOpenLeadModal: () => void }) => {
         <div className="space-y-3 lg:border-l lg:border-slate-200 lg:pl-10">
           {pillars.map(({ icon: Icon, title, text }) => (
             <div key={title} className="rounded-[18px] bg-[#F3FAF6] px-5 py-4 grid sm:grid-cols-[auto_110px_1fr] items-center gap-4">
-              <span className="h-11 w-11 rounded-xl bg-white text-[#0E8A5F] flex items-center justify-center"><Icon className="h-5.5 w-5.5" strokeWidth={1.7} aria-hidden /></span>
+              <span className="h-11 w-11 rounded-xl bg-white text-[#0E8A5F] flex items-center justify-center"><Icon className="h-5 w-5" strokeWidth={1.6} aria-hidden /></span>
               <h3 className="text-[17px] font-bold">{title}</h3>
               <p className="text-[15px] text-[#3B4652] leading-[1.6]">{text}</p>
             </div>
@@ -462,25 +465,26 @@ const Footer = () => {
     ],
   };
   return (
-    <footer className="bg-[#101820] py-12">
+    <footer className="bg-[#F3FAF6] border-t border-[#0E8A5F]/10 py-12">
       <div className={`${CONTAINER} grid md:grid-cols-3 gap-8`}>
         <div>
-          <div className="inline-flex rounded-xl bg-white px-4 py-2.5"><Logo className="h-7" /></div>
-          <p className="text-white/50 text-sm mt-4">© {new Date().getFullYear()} Combinaí. Todos os direitos reservados.</p>
+          {/* logotipo oficial com canal alpha, direto sobre o fundo (sem caixa) */}
+          <Logo className="h-auto w-[132px] sm:w-[144px]" />
+          <p className="text-[#3B4652]/80 text-sm mt-4">© {new Date().getFullYear()} Combinaí. Todos os direitos reservados.</p>
         </div>
         <div>
-          <p className="text-white font-semibold mb-4">Produto</p>
+          <p className="text-[#101820] font-semibold mb-4">Produto</p>
           <div className="space-y-2">
             {links.produto.map((link) => (
-              <a key={link.label} href={link.href} className="block text-white/70 hover:text-white text-sm transition-colors">{link.label}</a>
+              <a key={link.label} href={link.href} className="block text-[#3B4652] hover:text-[#0E8A5F] text-sm transition-colors">{link.label}</a>
             ))}
           </div>
         </div>
         <div>
-          <p className="text-white font-semibold mb-4">Legal</p>
+          <p className="text-[#101820] font-semibold mb-4">Legal</p>
           <div className="space-y-2">
             {links.legal.map((link) => (
-              <a key={link.label} href={link.href} className="block text-white/70 hover:text-white text-sm transition-colors">{link.label}</a>
+              <a key={link.label} href={link.href} className="block text-[#3B4652] hover:text-[#0E8A5F] text-sm transition-colors">{link.label}</a>
             ))}
           </div>
         </div>
