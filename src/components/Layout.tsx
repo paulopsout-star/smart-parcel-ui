@@ -25,7 +25,8 @@ import {
   BarChart3,
   Settings,
   Wrench,
-  Building2
+  Building2,
+  FlaskConical
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
@@ -36,7 +37,7 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   useSessionTimeout(); // Ativar timeout de inatividade
   
-  const { user, profile, signOut, isAdmin } = useAuth();
+  const { user, profile, signOut, isAdmin, isDemo } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -64,7 +65,7 @@ export function Layout({ children }: LayoutProps) {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Nova Cobrança', href: '/new-charge', icon: Plus },
+    ...(isDemo ? [] : [{ name: 'Nova Cobrança', href: '/new-charge', icon: Plus }]),
     { name: 'Histórico', href: '/charges', icon: History },
     ...(isAdmin ? [
       { name: 'Usuários', href: '/admin/users', icon: Users },
@@ -147,6 +148,17 @@ export function Layout({ children }: LayoutProps) {
           </div>
         </div>
       </header>
+
+      {isDemo && (
+        <div className="border-b border-amber-200 bg-amber-50 text-amber-900">
+          <div className="w-full max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-2 text-sm">
+            <FlaskConical className="w-4 h-4 flex-shrink-0" />
+            <span>
+              <strong>Ambiente de demonstração.</strong> Os dados são fictícios e as ações de criação e edição estão desabilitadas.
+            </span>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1">
         {children}
