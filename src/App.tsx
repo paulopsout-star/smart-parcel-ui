@@ -10,6 +10,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import LoginV2 from "./pages/LoginV2";
+import LandingCombinai from "./pages/LandingCombinai";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -56,6 +57,8 @@ const App = () => {
           <BrowserRouter>
             <Routes>
                 <Route path="/" element={<Index />} />
+                {/* Transição: nova landing Combinaí em rota secundária, sem links no app. Na troca, "/" passa a renderizar LandingCombinai. */}
+                <Route path="/combinai" element={<LandingCombinai />} />
                 <Route path="/login" element={<Login />} />
                 {/* Transição: nova página de login em rota temporária, sem links no app. Na troca, /login passa a renderizar LoginV2. */}
                 <Route path="/entrar" element={<LoginV2 />} />
