@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select('role')
           .eq('user_id', userId)
           .maybeSingle(),
-        (supabase.rpc as any)('is_demo_user'),
+        supabase.rpc('is_demo_user' as any),
         supabase.rpc('sem_juros_habilitado'),
       ]);
 
