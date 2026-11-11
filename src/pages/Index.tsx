@@ -50,16 +50,6 @@ function Logo({ className = "h-9" }: { className?: string }) {
   return <img src={LOGO} alt="Combinaí" className={`${className} w-auto select-none`} draggable={false} />;
 }
 
-/** Marca em texto para fundo escuro (o arquivo do logotipo tem fundo branco). */
-function LogoText({ className = "" }: { className?: string }) {
-  return (
-    <span className={`inline-flex items-end font-extrabold tracking-tight ${className}`} aria-label="Combinaí">
-      <span>Combin</span>
-      <span className="text-[#00C853]">aí</span>
-    </span>
-  );
-}
-
 // ==================== NAVBAR ====================
 const NAV_LINKS = [
   { label: "Soluções", href: "#solucoes" },
@@ -183,7 +173,7 @@ const PhoneShowcase = () => (
       <div className="rounded-[30px] bg-white overflow-hidden">
         <div className="h-7 flex items-center justify-center"><span className="h-1.5 w-16 rounded-full bg-[#101820]/15" /></div>
         <div className="px-5 pb-6 space-y-4">
-          <LogoText className="text-xl" />
+          <Logo className="h-6" />
           <div>
             <p className="text-[11px] text-[#64748B]">Total do acordo</p>
             <p className="text-2xl font-extrabold">R$ 1.240,00</p>
@@ -415,7 +405,7 @@ const Footer = () => {
     <footer className="bg-[#101820] py-12">
       <div className={`${CONTAINER} grid md:grid-cols-3 gap-8`}>
         <div>
-          <LogoText className="text-2xl text-white" />
+          <div className="inline-flex rounded-xl bg-white px-4 py-2.5"><Logo className="h-8" /></div>
           <p className="text-white/50 text-sm mt-4">© {new Date().getFullYear()} Combinaí. Todos os direitos reservados.</p>
         </div>
         <div>
