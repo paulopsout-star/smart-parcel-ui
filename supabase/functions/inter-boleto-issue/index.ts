@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 import {
-  interConfig, emitirCobranca, waitUntilIssued, cancelarCobranca, enderecoPadrao, vencimentoPadrao,
-  type InterPagador,
+  interConfig, emitirCobranca, waitUntilIssued, cancelarCobranca, enderecoPadrao, vencimentoPadrao, recuperarCobranca,
+  type InterPagador, type InterCobranca,
 } from '../_shared/inter.ts';
 
 const corsHeaders = {
@@ -89,6 +89,26 @@ Deno.serve(async (req) => {
       return fail('ja_emitido', 'Já existe boleto do Inter vinculado a este pré-pagamento', { inter_cobranca: existing });
     }
 
+    // ---- RETOMADA: emissão anterior ainda sem vínculo (o Inter leva minutos para emitir e a chamada
+    // anterior expirou). Nunca emitir outro boleto enquanto o anterior estiver vivo. (12/11/2026: três
+    // boletos foram emitidos para a mesma cobrança por falta disto.)
+    let resume: { codigoSolicitacao: string; issued: InterCobranca } | null = null;
+    if (existing && existing.pre_payment_key === charge.pre_payment_key && existing.codigoSolicitacao && !existing.linked_at && !existing.cancelled_after_link_error) {
+      const codigoPrev = String(existing.codigoSolicitacao);
+      let cob: InterCobranca | null = null;
+      try { cob = await recuperarCobranca(cfg, codigoPrev); } catch (e) { console.warn('[inter-boleto-issue] retomada: consulta falhou', String(e)); }
+      const situacaoPrev = cob?.cobranca?.situacao ?? null;
+      const linhaPrev = cob?.boleto?.linhaDigitavel?.replace(/\D/g, '') || null;
+      if (cob && situacaoPrev !== 'CANCELADO' && situacaoPrev !== 'EXPIRADO') {
+        if (!linhaPrev) {
+          console.log('[inter-boleto-issue] retomada: ainda em processamento', { codigoPrev, situacaoPrev });
+          return fail('inter_em_processamento', 'O Inter ainda está emitindo o boleto desta cobrança. Aguarde alguns minutos e clique de novo: o mesmo boleto será vinculado, sem emitir outro.', { codigoSolicitacao: codigoPrev, situacao: situacaoPrev });
+        }
+        resume = { codigoSolicitacao: codigoPrev, issued: cob };
+        console.log('[inter-boleto-issue] retomada: boleto emitido, vinculando', { codigoPrev, situacaoPrev });
+      }
+    }
+
     // ---- status do pré-pagamento no Quita+ (precisa estar Received = 1 e sem boleto)
     const statusRes = await fetch(`${supabaseUrl}/functions/v1/quitaplus-prepayment-status`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -137,10 +157,33 @@ Deno.serve(async (req) => {
         linha2: 'Pagamento do cartao (PIX + Cartao)',
       },
     };
-    console.log('[inter-boleto-issue] emitindo', { seuNumero, valorNominal: emitReq.valorNominal, dataVencimento, env: cfg.env });
+    let codigoSolicitacao: string;
+    if (resume) {
+      codigoSolicitacao = resume.codigoSolicitacao;
+    } else {
+      console.log('[inter-boleto-issue] emitindo', { seuNumero, valorNominal: emitReq.valorNominal, dataVencimento, env: cfg.env });
+      codigoSolicitacao = await emitirCobranca(cfg, emitReq);
+      // Guardar o código ANTES de esperar: se a emissão demorar, a próxima chamada retoma este boleto
+      await supabase.from('charges').update({
+        metadata: {
+          ...meta,
+          inter_cobranca: {
+            codigoSolicitacao, seuNumero, valorCents: amountCents, dataVencimento, situacao: 'EM_PROCESSAMENTO', env: cfg.env,
+            issued_at: new Date().toISOString(), issued_by: actor, source, pre_payment_key: charge.pre_payment_key,
+            linhaDigitavel: null, linked_at: null, link_error: null,
+          },
+          inter_cobrancas_history: existing ? [...(Array.isArray(meta.inter_cobrancas_history) ? meta.inter_cobrancas_history : []), existing] : (meta.inter_cobrancas_history ?? []),
+        },
+      }).eq('id', charge.id);
+    }
 
-    const codigoSolicitacao = await emitirCobranca(cfg, emitReq);
-    const issued = await waitUntilIssued(cfg, codigoSolicitacao);
+    let issued: InterCobranca;
+    try {
+      issued = resume ? resume.issued : await waitUntilIssued(cfg, codigoSolicitacao, 20_000);
+    } catch (e) {
+      console.warn('[inter-boleto-issue] emissão ainda em processamento após a espera', { codigoSolicitacao, erro: String(e) });
+      return fail('inter_em_processamento', 'O boleto foi registrado no Inter, mas a emissão ainda está em processamento. Aguarde alguns minutos e clique de novo: o mesmo boleto será vinculado, sem emitir outro.', { codigoSolicitacao });
+    }
     const linha = issued.boleto?.linhaDigitavel?.replace(/\D/g, '');
     if (!linha) {
       return fail('inter_sem_linha', `Cobrança ${codigoSolicitacao} sem linha digitável (situação ${issued.cobranca?.situacao})`, { codigoSolicitacao });

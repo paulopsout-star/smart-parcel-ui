@@ -1231,6 +1231,14 @@ export default function ChargeHistory() {
         toast({ title: 'Erro ao emitir no Inter', description: error.message || 'Erro desconhecido', variant: 'destructive' });
         return;
       }
+      if (data?.success === false && data.error === 'inter_em_processamento') {
+        toast({
+          title: 'Boleto em emissão no Inter',
+          description: data.message || 'O Inter ainda está emitindo o boleto. Aguarde alguns minutos e clique de novo: o mesmo boleto será vinculado, sem emitir outro.',
+        });
+        await invalidateCharges();
+        return;
+      }
       if (data?.success === false) {
         toast({
           title: data.error === 'inter_nao_configurado' ? 'Integração Inter não configurada'

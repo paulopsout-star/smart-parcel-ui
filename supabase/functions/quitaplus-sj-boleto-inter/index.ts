@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
-import { cancelarCobranca, emitirCobranca, enderecoPadrao, interConfig, vencimentoPadrao, waitUntilIssued } from "../_shared/inter.ts";
-import type { InterPagador } from "../_shared/inter.ts";
+import { cancelarCobranca, emitirCobranca, enderecoPadrao, interConfig, recuperarCobranca, vencimentoPadrao, waitUntilIssued } from "../_shared/inter.ts";
+import type { InterCobranca, InterPagador } from "../_shared/inter.ts";
 import { corsHeaders, json, loadSjCharge, quitaHeaders, sjAttachBankslip, sjCardAmount, sjCtx, sjToken } from "../_shared/quitaplus-sj.ts";
 
 /**
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     const ctx = sjCtx();
     if ("error" in ctx) return fail("sem_juros_config", ctx.error);
 
-    let cfg;
+    let cfg: ReturnType<typeof interConfig>;
     try { cfg = interConfig(); } catch (e) { return fail("inter_nao_configurado", String(e)); }
 
     const { data: cardSplit } = await supabase
@@ -71,6 +71,23 @@ Deno.serve(async (req) => {
     const existing = meta.inter_cobranca as Record<string, unknown> | undefined;
     if (existing && existing.pre_payment_key === charge.pre_payment_key && existing.linhaDigitavel && existing.linked_at) {
       return fail("ja_emitido", "Já existe boleto do Inter vinculado a este pré-pagamento", { inter_cobranca: existing });
+    }
+
+    // RETOMADA: emissão anterior ainda sem vínculo (o Inter leva minutos para emitir). Nunca emitir outro boleto
+    // enquanto o anterior estiver vivo.
+    let resume: { codigoSolicitacao: string; issued: InterCobranca } | null = null;
+    if (existing && existing.pre_payment_key === charge.pre_payment_key && existing.codigoSolicitacao && !existing.linked_at && !existing.cancelled_after_link_error) {
+      const codigoPrev = String(existing.codigoSolicitacao);
+      let cob: InterCobranca | null = null;
+      try { cob = await recuperarCobranca(cfg, codigoPrev); } catch (e) { console.warn("[quitaplus-sj-boleto-inter] retomada: consulta falhou", String(e)); }
+      const situacaoPrev = cob?.cobranca?.situacao ?? null;
+      const linhaPrev = cob?.boleto?.linhaDigitavel?.replace(/\D/g, "") || null;
+      if (cob && situacaoPrev !== "CANCELADO" && situacaoPrev !== "EXPIRADO") {
+        if (!linhaPrev) {
+          return fail("inter_em_processamento", "O Inter ainda está emitindo o boleto desta cobrança. Aguarde alguns minutos e clique de novo: o mesmo boleto será vinculado, sem emitir outro.", { codigoSolicitacao: codigoPrev, situacao: situacaoPrev });
+        }
+        resume = { codigoSolicitacao: codigoPrev, issued: cob };
+      }
     }
 
     // Pré-autorização precisa estar Received (1) — consulta com a credencial sem juros
@@ -104,16 +121,40 @@ Deno.serve(async (req) => {
       || charge.id.replace(/-/g, "").slice(0, 15);
     const dataVencimento = vencimentoPadrao();
 
-    console.log("[quitaplus-sj-boleto-inter] emitindo", { chargeId: charge.id, valorNominal: amountCents / 100, dataVencimento, env: cfg.env });
-    const codigoSolicitacao = await emitirCobranca(cfg, {
-      seuNumero,
-      valorNominal: Math.round(amountCents) / 100,
-      dataVencimento,
-      numDiasAgenda: 0,
-      pagador,
-      mensagem: { linha1: (companyName ? `${companyName} - ` : "") + `cobranca ${charge.id.slice(0, 8)}`, linha2: "Pagamento do cartao sem juros" },
-    });
-    const issued = await waitUntilIssued(cfg, codigoSolicitacao);
+    let codigoSolicitacao: string;
+    if (resume) {
+      codigoSolicitacao = resume.codigoSolicitacao;
+    } else {
+      console.log("[quitaplus-sj-boleto-inter] emitindo", { chargeId: charge.id, valorNominal: amountCents / 100, dataVencimento, env: cfg.env });
+      codigoSolicitacao = await emitirCobranca(cfg, {
+        seuNumero,
+        valorNominal: Math.round(amountCents) / 100,
+        dataVencimento,
+        numDiasAgenda: 0,
+        pagador,
+        mensagem: { linha1: (companyName ? `${companyName} - ` : "") + `cobranca ${charge.id.slice(0, 8)}`, linha2: "Pagamento do cartao sem juros" },
+      });
+      // Guardar o código ANTES de esperar: se a emissão demorar, a próxima chamada retoma este boleto
+      await supabase.from("charges").update({
+        metadata: {
+          ...meta,
+          inter_cobranca: {
+            codigoSolicitacao, seuNumero, valorCents: amountCents, dataVencimento, situacao: "EM_PROCESSAMENTO", env: cfg.env,
+            issued_at: new Date().toISOString(), issued_by: actor, source, modalidade: "sem_juros", pre_payment_key: charge.pre_payment_key,
+            linhaDigitavel: null, linked_at: null, link_error: null,
+          },
+          inter_cobrancas_history: existing ? [...(Array.isArray(meta.inter_cobrancas_history) ? meta.inter_cobrancas_history : []), existing] : (meta.inter_cobrancas_history ?? []),
+        },
+      }).eq("id", charge.id);
+    }
+
+    let issued: InterCobranca;
+    try {
+      issued = resume ? resume.issued : await waitUntilIssued(cfg, codigoSolicitacao, 20_000);
+    } catch (e) {
+      console.warn("[quitaplus-sj-boleto-inter] emissão ainda em processamento após a espera", { codigoSolicitacao, erro: String(e) });
+      return fail("inter_em_processamento", "O boleto foi registrado no Inter, mas a emissão ainda está em processamento. Aguarde alguns minutos e clique de novo: o mesmo boleto será vinculado, sem emitir outro.", { codigoSolicitacao });
+    }
     const linha = issued.boleto?.linhaDigitavel?.replace(/\D/g, "");
     if (!linha) return fail("inter_sem_linha", `Cobrança ${codigoSolicitacao} sem linha digitável (situação ${issued.cobranca?.situacao})`, { codigoSolicitacao });
 
